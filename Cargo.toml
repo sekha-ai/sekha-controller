@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [package]
 name = "sekha-controller"
 version = "0.1.0"
@@ -29,3 +30,6 @@ tower = "0.4"
 
 [dev-dependencies]
 tower-test = "0.4"
+=======
+
+>>>>>>> 21b581ec1538491c1fa5d717883e6537ba7aec21

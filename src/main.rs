@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 mod config;
 mod auth;
 mod api;
@@ -61,3 +62,6 @@ async fn main() -> anyhow::Result<()> {
     
     Ok(())
 }
+=======
+
+>>>>>>> 21b581ec1538491c1fa5d717883e6537ba7aec21
