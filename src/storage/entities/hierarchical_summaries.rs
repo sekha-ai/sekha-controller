@@ -3,22 +3,23 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
-#[sea_orm(table_name = "messages")]
+#[sea_orm(table_name = "hierarchical_summaries")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub conversation_id: String,
     #[sea_orm(column_type = "Text")]
-    pub role: String,
+    pub level: String,
     #[sea_orm(column_type = "Text")]
-    pub content: String,
+    pub summary_text: String,
     #[sea_orm(column_type = "Text")]
-    pub timestamp: String,
+    pub timestamp_range: String,
+    #[sea_orm(column_type = "Text")]
+    pub generated_at: String,
     #[sea_orm(column_type = "Text", nullable)]
-    pub embedding_id: Option<String>,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub metadata: Option<String>,
+    pub model_used: Option<String>,
+    pub token_count: Option<i64>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

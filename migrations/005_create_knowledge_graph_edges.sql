@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS knowledge_graph_edges (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_edges_subject ON knowledge_graph_edges(subject_id);
-CREATE INDEX idx_edges_object ON knowledge_graph_edges(object_id);
+CREATE INDEX IF NOT EXISTS idx_edges_subject ON knowledge_graph_edges(subject_id);
+CREATE INDEX IF NOT EXISTS idx_edges_object ON knowledge_graph_edges(object_id);

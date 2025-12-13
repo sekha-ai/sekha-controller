@@ -26,7 +26,7 @@ impl Config {
             .set_default("server_port", 8080)?
             .set_default("max_connections", 10)?
             .set_default("log_level", "info")?
-            .set_default("database_url", "sqlite:/home/jefft/sekha/sekha-controller/sekha.db")?
+            .set_default("database_url", "sqlite:///home/jefft/sekha/sekha-controller/sekha.db")?
             .set_default("ollama_url", "http://localhost:11434")?
             .set_default("summarization_enabled", true)?
             .set_default("pruning_enabled", true)?

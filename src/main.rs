@@ -1,20 +1,15 @@
-<<<<<<< HEAD
-mod config;
-mod auth;
-mod api;
-mod storage;
-mod services;
-mod models;
-
+use sekha_controller::{api, auth, config, models, services, storage};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use axum::Router;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tokio::net::TcpListener;
 use std::net::SocketAddr;
+use dotenv;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    dotenv::dotenv().ok();
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -62,6 +57,3 @@ async fn main() -> anyhow::Result<()> {
     
     Ok(())
 }
-=======
-
->>>>>>> 21b581ec1538491c1fa5d717883e6537ba7aec21

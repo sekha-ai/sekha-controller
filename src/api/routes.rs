@@ -8,6 +8,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use serde_json::Value;
 
 use crate::{
     api::dto::*,
@@ -228,6 +229,40 @@ async fn count_conversations(
     Json(serde_json::json!({ "count": count, "label": label }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/query",
+    request_body = QueryRequest,
+    responses(
+        (status = 200, description = "Semantic search results", body = Value)
+    )
+)]
+async fn semantic_query(
+    State(_state): State<AppState>,
+    Json(req): Json<QueryRequest>,
+) -> Json<Value> {
+    let mock_results = vec![
+        serde_json::json!({
+            "conversation_id": Uuid::new_v4(),
+            "message_id": Uuid::new_v4(),
+            "score": 0.85,
+            "content": format!("Mock result for: {}", req.query),
+            "metadata": {
+                "label": "Project:AI-Memory",
+                "timestamp": "2025-12-11T21:00:00Z"
+            }
+        })
+    ];
+
+    Json(serde_json::json!({
+        "query": req.query,
+        "results": mock_results,
+        "total": 1,
+        "limit": req.limit,
+        "filters": req.filters
+    }))
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/conversations", post(create_conversation))
@@ -236,6 +271,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/conversations/:id/label", put(update_conversation_label))
         .route("/api/v1/conversations/:id", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
+        .route("/api/v1/query", post(semantic_query))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)

@@ -11,5 +11,5 @@ CREATE TABLE IF NOT EXISTS hierarchical_summaries (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_summaries_conversation ON hierarchical_summaries(conversation_id);
-CREATE INDEX idx_summaries_level ON hierarchical_summaries(level);
+CREATE INDEX IF NOT EXISTS idx_summaries_conversation ON hierarchical_summaries(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_summaries_level ON hierarchical_summaries(level);

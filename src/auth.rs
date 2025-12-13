@@ -8,19 +8,20 @@ use axum::{
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::config::Config;
+
+use crate::{api::routes::AppState, config::Config};
 
 pub struct McpAuth;
 
 #[async_trait]
-impl<S> FromRequestParts<S> for McpAuth
-where
-    S: Send + Sync,
-{
+impl FromRequestParts<AppState> for McpAuth {
     type Rejection = Response;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Get auth header
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        // Extract authorization header manually (Axum 0.7 doesn't have TypedHeader)
         let auth_header = parts
             .headers
             .get("authorization")
@@ -32,7 +33,6 @@ where
                 (StatusCode::UNAUTHORIZED, body).into_response()
             })?;
 
-        // Extract Bearer token
         let token = auth_header
             .strip_prefix("Bearer ")
             .ok_or_else(|| {
@@ -42,18 +42,7 @@ where
                 (StatusCode::BAD_REQUEST, body).into_response()
             })?;
 
-        // Get config from extensions
-        let config = parts
-            .extensions
-            .get::<Arc<RwLock<Config>>>()
-            .ok_or_else(|| {
-                let body = Json(json!({
-                    "error": "Config not found"
-                }));
-                (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
-            })?;
-
-        let expected_key = config.read().await.mcp_api_key.clone();
+        let expected_key = state.config.read().await.mcp_api_key.clone();
         
         if token == expected_key && token.len() >= 32 {
             Ok(McpAuth)

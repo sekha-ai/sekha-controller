@@ -1,8 +1,15 @@
-<<<<<<< HEAD
 [package]
 name = "sekha-controller"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "sekha_controller"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sekha-controller"
+path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
@@ -10,7 +17,6 @@ axum = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 config = "0.14"
-sea-orm = { version = "=0.12.10", features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
 notify = "6.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -27,9 +33,20 @@ validator = { version = "0.16", features = ["derive"] }
 once_cell = "1.19"
 futures = "0.3"
 tower = "0.4"
+dotenv = "0.15.0"
+sea-orm = { version = "=2.0.0-rc.20", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = "=2.0.0-rc.20"
+sqlx = { version = "0.8.6", default-features = false, features = ["sqlite"] }
 
 [dev-dependencies]
+tempfile = "3.23.0"
+toml = "0.9.8"
 tower-test = "0.4"
-=======
 
->>>>>>> 21b581ec1538491c1fa5d717883e6537ba7aec21
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
+
+[[test]]
+name = "api_test"
+path = "tests/api_test.rs"

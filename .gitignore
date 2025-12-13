@@ -1,2 +1,16 @@
 /target
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Environment files (user-specific)
 .env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+server.log
