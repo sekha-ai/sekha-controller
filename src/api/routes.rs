@@ -309,10 +309,10 @@ async fn semantic_query(
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/conversations", post(create_conversation))
-        .route("/api/v1/conversations/:id", get(get_conversation))
+        .route("/api/v1/conversations/{id}", get(get_conversation))
         .route("/api/v1/conversations", get(list_conversations))
-        .route("/api/v1/conversations/:id/label", put(update_conversation_label))
-        .route("/api/v1/conversations/:id", delete(delete_conversation))
+        .route("/api/v1/conversations/{id}/label", put(update_conversation_label))
+        .route("/api/v1/conversations/{id}", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
         .route("/api/v1/query", post(semantic_query))
         .route("/health", get(health))

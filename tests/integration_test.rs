@@ -1,5 +1,6 @@
 use sekha_controller::{
-    storage::{init_db, SeaOrmConversationRepository, ConversationRepository},
+    storage::{init_db, SeaOrmConversationRepository, ConversationRepository, chroma_client::ChromaClient},
+    services::embedding_service::EmbeddingService,
     models::internal::Conversation,
     api::routes::{create_router, AppState},
     config::Config,
@@ -13,23 +14,37 @@ use uuid::Uuid;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+// Helper to create test services
+fn create_test_services() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    let embedding_service = Arc::new(EmbeddingService::new(
+        "http://localhost:11434".to_string(),
+        "http://localhost:8000".to_string(),
+    ));
+    (chroma_client, embedding_service)
+}
+
 async fn create_test_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
         database_url: "sqlite::memory:".to_string(),
         ollama_url: "http://localhost:11434".to_string(),
+        chroma_url: "http://localhost:8000".to_string(),
         max_connections: 10,
         log_level: "info".to_string(),
         summarization_enabled: true,
         pruning_enabled: true,
+        embedding_model: "nomic-embed-text:latest".to_string(),
+        summarization_model: "llama3.1:8b".to_string(),
     }))
 }
 
 #[tokio::test]
 async fn test_repository_create_and_retrieve() {
     let db = init_db("sqlite::memory:").await.unwrap();
-    let repo = SeaOrmConversationRepository::new(db);
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db, chroma_client, embedding_service);
     
     let conv = Conversation {
         id: Uuid::new_v4(),
@@ -55,7 +70,8 @@ async fn test_repository_create_and_retrieve() {
 #[tokio::test]
 async fn test_repository_update_label() {
     let db = init_db("sqlite::memory:").await.unwrap();
-    let repo = SeaOrmConversationRepository::new(db);
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db, chroma_client, embedding_service);
     
     let conv = Conversation {
         id: Uuid::new_v4(),
@@ -80,7 +96,8 @@ async fn test_repository_update_label() {
 #[tokio::test]
 async fn test_api_create_conversation() {
     let db = init_db("sqlite::memory:").await.unwrap();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db));
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
     
     let state = AppState {
         config: create_test_config().await,
@@ -111,7 +128,8 @@ async fn test_api_create_conversation() {
 #[tokio::test]
 async fn test_api_query_endpoint() {
     let db = init_db("sqlite::memory:").await.unwrap();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db));
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
     
     let state = AppState {
         config: create_test_config().await,

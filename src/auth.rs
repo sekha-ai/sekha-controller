@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use serde_json::json;
+use std::future::Future;
 
 use crate::api::routes::AppState;
 
@@ -16,7 +17,7 @@ impl FromRequestParts<AppState> for McpAuth {
     fn from_request_parts<'a, 'b>(
         parts: &'a mut Parts,
         state: &'b AppState,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send + 'a {
+    ) -> impl Future<Output = Result<Self, <Self as FromRequestParts<AppState>>::Rejection>> + Send + 'a {
         // Clone BEFORE async block to avoid borrowing state
         let config = state.config.clone();
         

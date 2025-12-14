@@ -83,6 +83,7 @@ ndarray = "0.17.1"
 tempfile = "3.23.0"
 toml = "0.9.8"
 tower-test = "0.4"
+wiremock = "0.6.5"
 sea-orm-cli = "=2.0.0-rc.20"
 
 [[test]]

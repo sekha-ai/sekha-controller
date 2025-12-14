@@ -9,7 +9,7 @@ use axum::Router;  // Add this missing import
 use sekha_controller::{
     config::Config,
     api::{routes, mcp},
-    storage::{self, db, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
+    storage::{self, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
     services::embedding_service::EmbeddingService,
 };
 
