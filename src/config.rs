@@ -1,4 +1,7 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use thiserror::Error;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, Clone)]
@@ -11,12 +14,15 @@ pub struct Config {
     
     pub database_url: String,
     pub ollama_url: String,
+    pub chroma_url: String,
+    pub embedding_model: String,
     
     #[validate(range(min = 1, max = 100))]
     pub max_connections: u32,
     
     pub log_level: String,
     pub summarization_enabled: bool,
+    pub summarization_model: String,
     pub pruning_enabled: bool,
 }
 
@@ -26,8 +32,11 @@ impl Config {
             .set_default("server_port", 8080)?
             .set_default("max_connections", 10)?
             .set_default("log_level", "info")?
-            .set_default("database_url", "sqlite:///home/jefft/sekha/sekha-controller/sekha.db")?
+            .set_default("database_url", "sqlite://sekha.db")?
             .set_default("ollama_url", "http://localhost:11434")?
+            .set_default("chroma_url", "http://localhost:8000")?
+            .set_default("embedding_model", "nomic-embed-text:latest")?
+            .set_default("summarization_model", "llama3.1:8b")?
             .set_default("summarization_enabled", true)?
             .set_default("pruning_enabled", true)?
             .add_source(config::File::with_name("config").required(false))

@@ -81,6 +81,15 @@ Error Response (404 Not Found):
   "error": "Conversation not found"
 }
 
+## Missing, not implemented yet
+PUT    /api/v1/conversations/{id}/label   # Update label/folder
+GET    /api/v1/labels                     # All unique labels
+GET    /api/v1/folders                    # Folder tree structure
+POST   /api/v1/summarize                  # Trigger manual summary
+POST   /api/v1/prune/dry-run              # Preview pruning suggestions
+POST   /api/v1/prune/execute              # Execute approved pruning
+
+
 ### POST /api/v1/query
 
 Semantic search across all conversations (mock implementation until Module 5).
@@ -267,6 +276,14 @@ Error Response (404 Not Found):
   "error": "Conversation not found"
 }
 
+## Missing MCP tools, not implemented yet
+memory_create_label:
+  - Create new folder/label structure
+  
+memory_prune_suggest:
+  - Get AI-driven pruning suggestions (user approves)
+
+
 ## Configuration
 
 Configuration is loaded in this priority order:
@@ -294,6 +311,23 @@ Default: sqlite://sekha.db
 Variable: SEKHA_OLLAMA_URL
 Description: Ollama endpoint for embeddings
 Default: http://localhost:11434
+
+## Chroma Vector Store Integration
+
+The semantic search functionality is powered by Chroma vector database with embeddings generated via Ollama.
+
+### Requirements
+- Chroma server running (default: http://localhost:8000)
+- Ollama server running with embedding model (default: nomic-embed-text:latest)
+
+### Setup
+```bash
+# Start Chroma
+docker run -d -p 8000:8000 chromadb/chroma
+
+# Start Ollama and pull embedding model
+ollama serve &
+ollama pull nomic-embed-text:latest
 
 ## Testing
 

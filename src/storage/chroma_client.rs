@@ -1,71 +1,323 @@
 use async_trait::async_trait;
-use serde_json::Value;
+use reqwest::{Client, StatusCode};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum ChromaError {
-    #[error("Chroma client error: {0}")]
-    ClientError(String),
-    #[error("Embedding error: {0}")]
-    EmbeddingError(String),
+    #[error("HTTP error: {0}")]
+    HttpError(#[from] reqwest::Error),
+    #[error("Chroma API error {status}: {message}")]
+    ApiError { status: u16, message: String },
+    #[error("Collection not found: {0}")]
+    CollectionNotFound(String),
+    #[error("Embedding dimension mismatch: expected {expected}, got {actual}")]
+    DimensionMismatch { expected: usize, actual: usize },
 }
 
-#[async_trait]
-pub trait VectorStore {
-    async fn upsert(
-        &self,
-        collection: &str,
-        id: &str,
-        _embedding: Vec<f32>,
-        _metadata: Value,
-    ) -> Result<(), ChromaError>;
-    
-    async fn query(
-        &self,
-        collection: &str,
-        _embedding: Vec<f32>,
-        limit: u32,
-    ) -> Result<Vec<ScoredResult>, ChromaError>;
-}
-
+#[derive(Debug, Clone)]
 pub struct ScoredResult {
     pub id: String,
     pub score: f32,
     pub metadata: Value,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ChromaCollection {
+    name: String,
+    metadata: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChromaUpsertRequest {
+    ids: Vec<String>,
+    embeddings: Vec<Vec<f32>>,
+    metadatas: Option<Vec<Value>>,
+    documents: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChromaQueryRequest {
+    query_embeddings: Vec<Vec<f32>>,
+    n_results: u32,
+    where_clause: Option<Value>,
+    include: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChromaQueryResponse {
+    ids: Vec<Vec<String>>,
+    distances: Vec<Vec<f32>>,
+    metadatas: Option<Vec<Vec<Value>>>,
+    documents: Option<Vec<Vec<String>>>,
+}
+
+/// Rust-native ChromaDB client using HTTP API
 pub struct ChromaClient {
-    url: String,
+    base_url: String,
+    client: Client,
 }
 
 impl ChromaClient {
-    pub fn new(url: String) -> Self {
-        Self { url }
+    pub fn new(base_url: String) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            client: Client::new(),
+        }
     }
-}
 
-#[async_trait]
-impl VectorStore for ChromaClient {
-    async fn upsert(
+    /// Ensure collection exists, create if not
+    pub async fn ensure_collection(
+        &self,
+        name: &str,
+        dimension: i32,
+    ) -> Result<(), ChromaError> {
+        let url = format!("{}/api/v1/collections", self.base_url);
+        
+        // Check if collection exists
+        let collections: Vec<Value> = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        
+        let exists = collections
+            .iter()
+            .any(|c| c["name"] == name);
+        
+        if !exists {
+            tracing::info!("Creating Chroma collection: {}", name);
+            self.create_collection(name, dimension).await?;
+        } else {
+            tracing::debug!("Collection {} already exists", name);
+        }
+        
+        Ok(())
+    }
+
+    /// Create a new collection with specified dimension
+    async fn create_collection(&self, name: &str, dimension: i32) -> Result<(), ChromaError> {
+        let url = format!("{}/api/v1/collections", self.base_url);
+        
+        let body = json!({
+            "name": name,
+            "metadata": {
+                "hnsw:space": "cosine",
+                "dimension": dimension
+            }
+        });
+        
+        let response = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await?;
+        
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => {
+                tracing::info!("Created collection {} with dimension {}", name, dimension);
+                Ok(())
+            }
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError { status: status.as_u16(), message })
+            }
+        }
+    }
+
+    /// Store or update a vector with metadata
+    pub async fn upsert(
         &self,
         collection: &str,
         id: &str,
         embedding: Vec<f32>,
         metadata: Value,
+        document: Option<String>,
     ) -> Result<(), ChromaError> {
-        // TODO: Implement HTTP client for Chroma in Module 5
-        tracing::info!("Stub: Upsert to {} collection for id {}", collection, id);
-        Ok(())
+        let collection_id = self.get_collection_id(collection).await?;
+        let url = format!(
+            "{}/api/v1/collections/{}/upsert",
+            self.base_url, collection_id
+        );
+
+        let request = ChromaUpsertRequest {
+            ids: vec![id.to_string()],
+            embeddings: vec![embedding],
+            metadatas: Some(vec![metadata]),
+            documents: document.map(|d| vec![d]),
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                tracing::trace!("Successfully upserted vector: {}", id);
+                Ok(())
+            }
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError { status: status.as_u16(), message })
+            }
+        }
     }
-    
-    async fn query(
+
+    /// Query similar vectors
+    pub async fn query(
         &self,
         collection: &str,
         embedding: Vec<f32>,
         limit: u32,
+        filters: Option<Value>,
     ) -> Result<Vec<ScoredResult>, ChromaError> {
-        // TODO: Implement vector search in Module 5
-        tracing::info!("Stub: Query {} collection with {} embeddings", collection, limit);
-        Ok(vec![])
+        let collection_id = self.get_collection_id(collection).await?;
+        let url = format!(
+            "{}/api/v1/collections/{}/query",
+            self.base_url, collection_id
+        );
+
+        let request = ChromaQueryRequest {
+            query_embeddings: vec![embedding],
+            n_results: limit,
+            where_clause: filters,
+            include: vec!["distances".to_string(), "metadatas".to_string()],
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let query_response: ChromaQueryResponse = response.json().await?;
+                Ok(self.parse_query_results(query_response)?)
+            }
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError { status: status.as_u16(), message })
+            }
+        }
+    }
+
+    /// Delete vectors from collection
+    pub async fn delete(&self, collection: &str, ids: Vec<String>) -> Result<(), ChromaError> {
+        let collection_id = self.get_collection_id(collection).await?;
+        let url = format!(
+            "{}/api/v1/collections/{}/delete",
+            self.base_url, collection_id
+        );
+
+        let body = json!({ "ids": ids });
+
+        let response = self.client.post(&url).json(&body).send().await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                tracing::info!("Deleted {} vectors from {}", ids.len(), collection);
+                Ok(())
+            }
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError { status: status.as_u16(), message })
+            }
+        }
+    }
+
+    /// Get collection ID by name
+    async fn get_collection_id(&self, name: &str) -> Result<String, ChromaError> {
+        let url = format!("{}/api/v1/collections/{}", self.base_url, name);
+        
+        let response = self.client.get(&url).send().await?;
+        
+        match response.status() {
+            StatusCode::OK => {
+                let collection: Value = response.json().await?;
+                collection["id"]
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| ChromaError::CollectionNotFound(name.to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(ChromaError::CollectionNotFound(name.to_string())),
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError { status: status.as_u16(), message })
+            }
+        }
+    }
+
+    /// Parse query results into ScoredResult structs
+    fn parse_query_results(&self, response: ChromaQueryResponse) -> Result<Vec<ScoredResult>, ChromaError> {
+        let mut results = Vec::new();
+
+        if let Some(ids) = response.ids.first() {
+            let distances = response.distances.first().ok_or_else(|| {
+                ChromaError::ApiError {
+                    status: 500,
+                    message: "No distances returned from Chroma".to_string(),
+                }
+            })?;
+
+            let metadatas = response.metadatas.as_ref();
+
+            for (idx, id) in ids.iter().enumerate() {
+                let score = distances.get(idx).copied().unwrap_or(0.0);
+                let metadata = metadatas
+                    .and_then(|m| m.first())
+                    .and_then(|m| m.get(idx))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+
+                results.push(ScoredResult {
+                    id: id.clone(),
+                    score,
+                    metadata,
+                });
+            }
+        }
+
+        Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+
+    #[tokio::test]
+    async fn test_ensure_collection_creates_if_not_exists() {
+        let mock_server = MockServer::start().await;
+        let client = ChromaClient::new(mock_server.uri());
+
+        // Mock GET collections (empty)
+        Mock::given(method("GET"))
+            .and(path("/api/v1/collections"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(vec![] as Vec<Value>))
+            .mount(&mock_server)
+            .await;
+
+        // Mock POST collection creation
+        Mock::given(method("POST"))
+            .and(path("/api/v1/collections"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "test-id" })))
+            .mount(&mock_server)
+            .await;
+
+        let result = client.ensure_collection("test_collection", 384).await;
+        assert!(result.is_ok());
     }
 }

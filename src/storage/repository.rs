@@ -1,8 +1,14 @@
+use serde_json::json;
 use async_trait::async_trait;
 use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
 use uuid::Uuid;
-use crate::models::internal::{Conversation, Message};
+use std::sync::Arc;
+use serde_json::Value;
+
+use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
 use crate::storage::entities::{conversations, messages};
+use crate::storage::chroma_client::ChromaClient;
+use crate::services::embedding_service::EmbeddingService;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryError {
@@ -10,11 +16,16 @@ pub enum RepositoryError {
     DbError(#[from] sea_orm::DbErr),
     #[error("Entity not found: {0}")]
     NotFound(String),
+    #[error("Chroma error: {0}")]
+    ChromaError(String),
+    #[error("Embedding error: {0}")]
+    EmbeddingError(String),
 }
 
 #[async_trait]
 pub trait ConversationRepository {
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError>;
+    async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
     async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Conversation>, RepositoryError>;
@@ -30,15 +41,161 @@ pub trait ConversationRepository {
         new_label: &str,
         new_folder: &str,
     ) -> Result<(), RepositoryError>;
+    async fn semantic_search(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: Option<Value>,
+    ) -> Result<Vec<SearchResult>, RepositoryError>;
 }
 
 pub struct SeaOrmConversationRepository {
     db: DatabaseConnection,
+    chroma: Arc<ChromaClient>,
+    embedding_service: Arc<EmbeddingService>,
 }
 
 impl SeaOrmConversationRepository {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+    pub fn new(
+        db: DatabaseConnection,
+        chroma: Arc<ChromaClient>,
+        embedding_service: Arc<EmbeddingService>,
+    ) -> Self {
+        Self {
+            db,
+            chroma,
+            embedding_service,
+        }
+    }
+
+    /// Store conversation and messages with embeddings
+    pub async fn create_with_messages(
+        &self,
+        new_conv: NewConversation,) -> Result<Uuid, RepositoryError> {
+        let conv_id = new_conv.id.unwrap_or_else(Uuid::new_v4);
+        let now = chrono::Utc::now().naive_utc();
+        
+        let word_count: i64 = new_conv.messages.iter()
+            .map(|m| m.content.len() as i64)
+            .sum();
+
+        // Store conversation in SQLite
+        let conversation = conversations::ActiveModel {
+            id: Set(conv_id.to_string()),
+            label: Set(new_conv.label.clone()),
+            folder: Set(new_conv.folder.clone()),
+            status: Set("active".to_string()),
+            importance_score: Set(5i64),  // Use i64 directly
+            word_count: Set(word_count),
+            session_count: Set(new_conv.session_count.unwrap_or(1) as i64),
+            created_at: Set(now.to_string()),
+            updated_at: Set(now.to_string()),
+        };
+
+        conversation.insert(&self.db).await?;
+        tracing::info!("Created conversation: {}", conv_id);
+
+        // Store messages with embeddings
+        for msg in new_conv.messages {
+            self.create_message(conv_id, msg).await?;
+        }
+
+        Ok(conv_id)
+    }    
+
+    /// Store individual message with embedding in Chroma
+    async fn create_message(
+        &self,
+        conversation_id: Uuid,
+        new_msg: NewMessage,) -> Result<Uuid, RepositoryError> {
+        let msg_id = Uuid::new_v4();
+        let now = chrono::Utc::now().naive_utc();
+        
+        // Generate embedding metadata
+        let embedding_metadata = json!({
+            "role": new_msg.role.clone(),
+            "conversation_id": conversation_id.to_string(),
+            "timestamp": now.to_string(),
+        });
+
+        // First generate and store embedding in Chroma
+        let embedding_id = self.embedding_service
+            .process_message(
+                msg_id,
+                &new_msg.content,
+                conversation_id,
+                embedding_metadata,
+            )
+            .await
+            .map_err(|e| RepositoryError::EmbeddingError(e.to_string()))?;
+
+        // Store message in SQLite (with embedding_id reference)
+        let message = messages::ActiveModel {
+            id: Set(msg_id.to_string()),
+            conversation_id: Set(conversation_id.to_string()),
+            role: Set(new_msg.role),
+            content: Set(new_msg.content),
+            timestamp: Set(now.to_string()),
+            embedding_id: Set(Some(embedding_id)),
+            metadata: Set(Some(new_msg.metadata.to_string())),  // Convert Value to String
+        };
+
+        message.insert(&self.db).await?;
+        tracing::debug!("Stored message with embedding: {}", msg_id);
+
+        Ok(msg_id)
+    }
+
+    /// Perform semantic search across messages
+    pub async fn semantic_search(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: Option<Value>,
+    ) -> Result<Vec<SearchResult>, RepositoryError> {
+        let chroma_results = self.embedding_service
+            .search_messages(query, limit, filters)
+            .await
+            .map_err(|e| RepositoryError::ChromaError(e.to_string()))?;
+
+        let mut results = Vec::new();
+        
+        for scored in chroma_results {
+            if let Ok(msg_id) = Uuid::parse_str(&scored.id) {
+                // Fetch message and conversation data from SQLite
+                if let Some(message) = messages::Entity::find_by_id(msg_id.to_string())
+                    .one(&self.db)
+                    .await? {
+                    
+                    if let Some(conversation) = conversations::Entity::find_by_id(message.conversation_id.clone())
+                        .one(&self.db)
+                        .await? {
+                        
+                        results.push(SearchResult {
+                            conversation_id: Uuid::parse_str(&conversation.id).unwrap(),
+                            message_id: msg_id,
+                            score: scored.score,
+                            content: message.content,
+                            metadata: scored.metadata,
+                            label: conversation.label,
+                            folder: conversation.folder,
+                            timestamp: chrono::NaiveDateTime::parse_from_str(
+                                &message.timestamp,
+                                "%Y-%m-%d %H:%M:%S%.f",
+                            ).unwrap(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+}
+
+impl From<crate::storage::chroma_client::ChromaError> for RepositoryError {
+    fn from(err: crate::storage::chroma_client::ChromaError) -> Self {
+        RepositoryError::ChromaError(err.to_string())
     }
 }
 
@@ -50,24 +207,46 @@ impl ConversationRepository for SeaOrmConversationRepository {
             label: Set(conv.label),
             folder: Set(conv.folder),
             status: Set(conv.status),
-            importance_score: Set(conv.importance_score.into()),
-            word_count: Set(conv.word_count.into()),
-            session_count: Set(conv.session_count.into()),
+            importance_score: Set(conv.importance_score as i64),  // Cast to i64
+            word_count: Set(conv.word_count as i64),              // Cast to i64
+            session_count: Set(conv.session_count as i64),        // Cast to i64
             created_at: Set(conv.created_at.to_string()),
             updated_at: Set(conv.updated_at.to_string()),
         };
 
         let result = active_model.insert(&self.db).await?;
-        Ok(Uuid::parse_str(&result.id).unwrap()) // FIXED: Removed .unwrap() on Option
+        Ok(Uuid::parse_str(&result.id).unwrap())
+    }
+
+    async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
+        self.create_with_messages(conv).await
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        // Also delete from Chroma
+        if let Ok(Some(_conv)) = self.find_by_id(id).await {
+            // Find and delete all message embeddings
+            let messages = messages::Entity::find()
+                .filter(messages::Column::ConversationId.eq(id.to_string()))
+                .all(&self.db)
+                .await?;
+
+            let embedding_ids: Vec<String> = messages
+                .into_iter()
+                .filter_map(|m| m.embedding_id)
+                .collect();
+
+            if !embedding_ids.is_empty() {
+                self.chroma.delete("messages", embedding_ids).await?;
+            }
+        }
+
         conversations::Entity::delete_by_id(id.to_string())
             .exec(&self.db)
             .await?;
         Ok(())
     }
-    
+
     async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError> {
         let count = conversations::Entity::find()
             .filter(conversations::Column::Label.eq(label))
@@ -107,24 +286,47 @@ impl ConversationRepository for SeaOrmConversationRepository {
         new_label: &str,
         new_folder: &str,
     ) -> Result<(), RepositoryError> {
-        let mut model = conversations::ActiveModel {
-            id: Set(id.to_string()),
-            ..Default::default()
-        };
-        model.label = Set(new_label.to_string());
-        model.folder = Set(new_folder.to_string());
-        model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Conversation not found".to_string()))?;
 
-        model.update(&self.db).await?;
+        let mut active_model: conversations::ActiveModel = model.into();
+        active_model.label = Set(new_label.to_string());
+        active_model.folder = Set(new_folder.to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+
+        active_model.update(&self.db).await?;
         Ok(())
+    }
+
+    async fn semantic_search(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: Option<Value>,
+    ) -> Result<Vec<SearchResult>, RepositoryError> {
+        self.semantic_search(query, limit, filters).await
     }
 }
 
-// Implement From trait for entity conversion
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub conversation_id: Uuid,
+    pub message_id: Uuid,
+    pub score: f32,
+    pub content: String,
+    pub metadata: Value,
+    pub label: String,
+    pub folder: String,
+    pub timestamp: chrono::NaiveDateTime,
+}
+
+// Entity conversion implementations (keep existing)
 impl From<conversations::Model> for Conversation {
     fn from(model: conversations::Model) -> Self {
         Self {
-            id: Uuid::parse_str(&model.id).unwrap(), // FIXED: Removed .unwrap() on Option
+            id: Uuid::parse_str(&model.id).unwrap(),
             label: model.label,
             folder: model.folder,
             status: model.status,
@@ -138,7 +340,7 @@ impl From<conversations::Model> for Conversation {
             .unwrap(),
             updated_at: chrono::NaiveDateTime::parse_from_str(
                 &model.updated_at,
-                "%Y-%m-%d %H:%M:%S%.f",
+                "%Y-%M-%d %H:%M:%S%.f",
             )
             .unwrap(),
         }
@@ -148,7 +350,7 @@ impl From<conversations::Model> for Conversation {
 impl From<messages::Model> for Message {
     fn from(model: messages::Model) -> Self {
         Self {
-            id: Uuid::parse_str(&model.id).unwrap(), // FIXED: Removed .unwrap() on Option
+            id: Uuid::parse_str(&model.id).unwrap(),
             conversation_id: Uuid::parse_str(&model.conversation_id).unwrap(),
             role: model.role,
             content: model.content,
@@ -162,3 +364,6 @@ impl From<messages::Model> for Message {
         }
     }
 }
+
+// Re-export entities for convenience
+pub use crate::storage::entities::*;

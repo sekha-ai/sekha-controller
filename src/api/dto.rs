@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+// ==================== REQUEST DTOs ====================
+
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateConversationRequest {
     pub label: String,
@@ -13,16 +15,6 @@ pub struct CreateConversationRequest {
 pub struct MessageDto {
     pub role: String,
     pub content: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConversationResponse {
-    pub id: Uuid,
-    pub label: String,
-    pub folder: String,
-    pub status: String,
-    pub message_count: usize,
-    pub created_at: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -39,12 +31,36 @@ pub struct QueryRequest {
     pub offset: Option<u32>,
 }
 
+// ==================== RESPONSE DTOs ====================
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ConversationResponse {
+    pub id: Uuid,
+    pub label: String,
+    pub folder: String,
+    pub status: String,
+    pub message_count: usize,
+    pub created_at: String,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct QueryResponse {
-    pub results: Vec<ConversationResponse>,
-    pub total: i64,
+    pub results: Vec<SearchResultDto>,
+    pub total: u32,
     pub page: u32,
     pub page_size: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SearchResultDto {
+    pub conversation_id: Uuid,
+    pub message_id: Uuid,
+    pub score: f32,
+    pub content: String,
+    pub metadata: serde_json::Value,
+    pub label: String,
+    pub folder: String,
+    pub timestamp: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -58,4 +74,34 @@ pub struct HealthResponse {
 pub struct ErrorResponse {
     pub error: String,
     pub code: u32,
+}
+
+// ==================== MCP DTOs ====================
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MemoryStoreRequest {
+    pub label: String,
+    pub folder: String,
+    pub messages: Vec<MessageDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MemoryStoreResponse {
+    pub success: bool,
+    pub data: serde_json::Value,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct MemoryQueryRequest {
+    pub query: String,
+    pub filters: Option<serde_json::Value>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MemoryQueryResponse {
+    pub success: bool,
+    pub data: QueryResponse,
+    pub error: Option<String>,
 }

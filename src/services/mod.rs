@@ -1,3 +1,6 @@
 pub mod embedding_queue;
+pub mod embedding_service;
 
-pub use embedding_queue::{EmbeddingQueue, EmbeddingJob};
+// Re-export for convenience
+pub use embedding_service::EmbeddingService;
+pub use embedding_queue::EmbeddingJob;

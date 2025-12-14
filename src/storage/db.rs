@@ -1,5 +1,4 @@
 use sea_orm::{Database, DatabaseConnection, DbErr, ConnectionTrait};
-use tracing::info;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 use tokio::sync::Mutex;

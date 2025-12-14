@@ -2,3 +2,8 @@ mcp_api_key = "test_key_12345678901234567890123456789012"
 
 [database]
 url = "sqlite://sekha.db"
+
+chroma_url = "http://localhost:8000"
+
+embedding_model = "nomic-embed-text:latest"
+summarization_model = "llama3.1:8b"

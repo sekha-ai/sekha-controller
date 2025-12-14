@@ -8,11 +8,13 @@ pub mod services;
 pub mod storage;
 
 // Re-export main types for convenience
-pub use storage::{init_db, SeaOrmConversationRepository, ConversationRepository};
-pub use models::internal::{Conversation, Message};
-pub use config::Config;
-pub use api::routes::{create_router, AppState};
-pub use api::dto::*;
+pub use crate::storage::db::init_db;
+pub use crate::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+pub use crate::storage::chroma_client::ChromaClient;
+pub use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
+pub use crate::config::Config;
+pub use crate::api::routes::{create_router, AppState};
+pub use crate::api::dto::*;
 
 #[cfg(test)]
 mod tests {

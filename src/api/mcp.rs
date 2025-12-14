@@ -14,7 +14,6 @@ use crate::{
     api::dto::*,
     auth::McpAuth,
     models::internal::Conversation,
-    storage::ConversationRepository,
 };
 
 #[derive(Debug, Serialize, Deserialize)]

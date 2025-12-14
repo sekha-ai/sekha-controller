@@ -8,13 +8,11 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use serde_json::Value;
 
 use crate::{
     api::dto::*,
     config::Config,
-    models::internal::Conversation,
-    storage::ConversationRepository,
+    storage::repository::ConversationRepository,
 };
 
 #[derive(Clone)]
@@ -38,26 +36,43 @@ pub struct PaginationParams {
         (status = 400, description = "Invalid request", body = ErrorResponse)
     )
 )]
+
 async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
 ) -> Result<(StatusCode, Json<ConversationResponse>), (StatusCode, Json<ErrorResponse>)> {
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
+    
+    let word_count: i32 = req.messages.iter()
+        .map(|m| m.content.len() as i32)
+        .sum();
 
-    let conv = Conversation {
-        id,
+    // Map MessageDto to NewMessage
+    let new_messages: Vec<crate::models::internal::NewMessage> = req.messages.into_iter()
+        .map(|m| crate::models::internal::NewMessage {
+            role: m.role,
+            content: m.content,
+            metadata: serde_json::json!({}),
+        })
+        .collect();
+
+    let message_count = new_messages.len();
+
+    let new_conv = crate::models::internal::NewConversation {
+        id: Some(id),
         label: req.label.clone(),
         folder: req.folder.clone(),
         status: "active".to_string(),
-        importance_score: 5,
-        word_count: req.messages.iter().map(|m| m.content.len() as i32).sum(),
-        session_count: 1,
+        importance_score: Some(5),
+        word_count,
+        session_count: Some(1),
         created_at: now,
         updated_at: now,
+        messages: new_messages,
     };
 
-    state.repo.create(conv).await.map_err(|e| {
+    state.repo.create_with_messages(new_conv).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -74,7 +89,7 @@ async fn create_conversation(
             label: req.label,
             folder: req.folder,
             status: "active".to_string(),
-            message_count: req.messages.len(),
+            message_count,
             created_at: now.to_string(),
         }),
     ))
@@ -234,32 +249,60 @@ async fn count_conversations(
     path = "/api/v1/query",
     request_body = QueryRequest,
     responses(
-        (status = 200, description = "Semantic search results", body = Value)
+        (status = 200, description = "Semantic search results", body = QueryResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 500, description = "Search error", body = ErrorResponse)
     )
 )]
-async fn semantic_query(
-    State(_state): State<AppState>,
-    Json(req): Json<QueryRequest>,
-) -> Json<Value> {
-    let mock_results = vec![
-        serde_json::json!({
-            "conversation_id": Uuid::new_v4(),
-            "message_id": Uuid::new_v4(),
-            "score": 0.85,
-            "content": format!("Mock result for: {}", req.query),
-            "metadata": {
-                "label": "Project:AI-Memory",
-                "timestamp": "2025-12-11T21:00:00Z"
-            }
-        })
-    ];
 
-    Json(serde_json::json!({
-        "query": req.query,
-        "results": mock_results,
-        "total": 1,
-        "limit": req.limit,
-        "filters": req.filters
+async fn semantic_query(
+    State(state): State<AppState>,
+    Json(req): Json<QueryRequest>,
+) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    tracing::info!("Semantic query: {}", req.query);
+
+    let limit = req.limit.unwrap_or(10) as usize;
+    let offset = req.offset.unwrap_or(0);
+    
+    // Calculate page number
+    let page = if limit > 0 {
+        (offset as f64 / limit as f64).ceil() as u32
+    } else {
+        1
+    };
+    
+    // Use repository's semantic search (now powered by Chroma)
+    let results = state.repo.semantic_search(&req.query, limit, req.filters)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Semantic search failed: {}", e),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    let api_results: Vec<SearchResultDto> = results
+        .iter()
+        .map(|r| SearchResultDto {
+            conversation_id: r.conversation_id,
+            message_id: r.message_id,
+            score: r.score,
+            content: r.content.clone(),
+            metadata: r.metadata.clone(),
+            label: r.label.clone(),
+            folder: r.folder.clone(),
+            timestamp: r.timestamp.to_string(),
+        })
+        .collect();
+
+    Ok(Json(QueryResponse {
+        results: api_results,
+        total: results.len() as u32,
+        page,
+        page_size: limit as u32,
     }))
 }
 

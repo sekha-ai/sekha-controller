@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
@@ -23,4 +24,26 @@ pub struct Message {
     pub timestamp: NaiveDateTime,
     pub embedding_id: Option<Uuid>,
     pub metadata: Option<String>,
+}
+
+// NEW: For creating conversations with messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewConversation {
+    pub id: Option<Uuid>,
+    pub label: String,
+    pub folder: String,
+    pub status: String,
+    pub importance_score: Option<i32>,
+    pub word_count: i32,
+    pub session_count: Option<i32>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+    pub messages: Vec<NewMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewMessage {
+    pub role: String,
+    pub content: String,
+    pub metadata: serde_json::Value,
 }
