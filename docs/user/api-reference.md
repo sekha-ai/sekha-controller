@@ -312,9 +312,54 @@ Variable: SEKHA_OLLAMA_URL
 Description: Ollama endpoint for embeddings
 Default: http://localhost:11434
 
+## Vector Storage Architecture
+
+### Data Flow
+
+When you store a conversation:
+
+1. **SQLite**: Conversation metadata, message content, and relationships stored in relational tables
+2. **Chroma**: Vector embeddings generated via Ollama and stored in `messages` collection
+3. **Linking**: `embedding_id` field in `messages` table references Chroma vector ID
+
+This dual-storage approach enables:
+- **Fast metadata queries** via SQLite indexes
+- **Semantic similarity** via Chroma vector search
+- **Independent scaling** (SQLite for structure, Chroma for vectors)
+
+### Embedding Generation Process
+
+```rust
+// Triggered automatically on POST /api/v1/conversations
+1. Receive message text
+2. Call Ollama: POST /api/embeddings
+   - Model: nomic-embed-text:latest
+   - Input: message content
+   - Output: 768-dim vector (f64)
+3. Convert to f32 for Chroma compatibility
+4. Store in Chroma collection 'messages' with metadata:
+   - conversation_id
+   - message_id
+   - content_preview (first 100 chars)
+   - role (user/assistant)
+5. Update SQLite messages.embedding_id reference
+
 ## Chroma Vector Store Integration
 
 The semantic search functionality is powered by Chroma vector database with embeddings generated via Ollama.
+
+// POST /api/v1/query
+1. Receive query string
+2. Generate query embedding (same Ollama call)
+3. Query Chroma: POST /api/v1/collections/{id}/query
+   - n_results: limit
+   - where: optional filters (label, folder, date range)
+4. Receive scored results with distances
+5. Fetch full message data from SQLite by message_id
+6. Return enriched results with:
+   - conversation metadata
+   - message content
+   - similarity score (1.0 - normalized distance)
 
 ### Requirements
 - Chroma server running (default: http://localhost:8000)
