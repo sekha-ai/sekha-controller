@@ -81,13 +81,20 @@ jobs:
           - 8000:8000
         options: --health-cmd="curl -f http://localhost:8000/api/v1/heartbeat" --health-interval=10s --health-timeout=5s --health-retries=3
       
-      # Ollama service (start without models, pull them in steps)
+      # Ollama service
       ollama:
         image: ollama/ollama:latest
         ports:
           - 11434:11434
         options: --health-cmd="curl -f http://localhost:11434/api/tags || exit 0" --health-interval=30s --health-timeout=10s --health-retries=3
-    
+      
+      # Redis service (for future async jobs)
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
     steps:
       - uses: actions/checkout@v4
       
@@ -99,7 +106,25 @@ jobs:
         with:
           key: test-v1
       
-      # Wait for Chroma to be healthy
+      # Setup Python for LLM Bridge
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Python dependencies
+        run: |
+          cd llm-bridge
+          pip install -r requirements.txt
+      
+      # Start LLM Bridge in background
+      - name: Start LLM Bridge
+        run: |
+          cd llm-bridge
+          python main.py &
+          echo "LLM_BRIDGE_PID=$!" >> $GITHUB_ENV
+      
+      # Wait for services to be healthy
       - name: Wait for Chroma
         run: |
           until curl -f http://localhost:8000/api/v1/heartbeat; do
@@ -107,7 +132,6 @@ jobs:
             sleep 2
           done
       
-      # Wait for Ollama to be healthy
       - name: Wait for Ollama
         run: |
           until curl -f http://localhost:11434/api/tags; do
@@ -115,26 +139,34 @@ jobs:
             sleep 5
           done
       
-      # Pull embedding model
+      - name: Wait for LLM Bridge
+        run: |
+          until curl -f http://localhost:5001/health; do
+            echo "Waiting for LLM Bridge..."
+            sleep 2
+          done
+      
       - name: Pull embedding model
         run: |
           curl -X POST http://localhost:11434/api/pull \
             -H "Content-Type: application/json" \
             -d '{"name": "nomic-embed-text:latest"}'
-          # Wait for model to be ready
-          sleep 60
+          sleep 30
       
-      # Run unit tests
+      # Run tests
       - name: Run unit tests
         run: cargo test --lib --all-features
       
-      # Run integration tests
       - name: Run integration tests
         run: cargo test --test integration_test --all-features
       
-      # Run API tests
       - name: Run API tests
         run: cargo test --test api_test --all-features
+      
+      # Cleanup: Stop LLM Bridge
+      - name: Cleanup
+        if: always()
+        run: kill $LLM_BRIDGE_PID || true
 
   # =========================================
   # Build & Test (Release mode)
