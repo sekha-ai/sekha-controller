@@ -152,3 +152,23 @@ async fn test_api_query_endpoint() {
     
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_memory_orchestrator_integration() {
+    // Setup
+    let repo = setup_test_repo().await;
+    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
+    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
+    
+    // Test context assembly
+    let context = orchestrator.assemble_context("test", vec![], 1000).await.unwrap();
+    assert!(!context.is_empty());
+    
+    // Test importance scoring
+    let score = orchestrator.score_message_importance(context[0].id).await.unwrap();
+    assert!(score >= 1.0 && score <= 10.0);
+    
+    // Test summarization
+    let summary = orchestrator.generate_daily_summary(context[0].conversation_id).await.unwrap();
+    assert!(!summary.is_empty());
+}

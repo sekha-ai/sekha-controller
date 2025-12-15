@@ -1,3 +1,4 @@
+use crate::orchestrator::MemoryOrchestrator;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -20,6 +21,7 @@ use crate::{
 pub struct AppState {
     pub config: Arc<RwLock<Config>>,
     pub repo: Arc<dyn ConversationRepository + Send + Sync>,
+    pub orchestrator: Arc<MemoryOrchestrator>,
 }
 
 #[derive(Deserialize)]

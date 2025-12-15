@@ -6,6 +6,10 @@ pub mod config;
 pub mod models;
 pub mod services;
 pub mod storage;
+pub mod orchestrator;
+
+// Re-export for convenience
+pub use services::llm_bridge_client::LlmBridgeClient;
 
 // Re-export main types for convenience
 pub use crate::storage::db::init_db;
@@ -19,4 +23,4 @@ pub use crate::api::dto::*;
 #[cfg(test)]
 mod tests {
     // Unit tests can go here if needed
-}pub mod orchestrator;
+}

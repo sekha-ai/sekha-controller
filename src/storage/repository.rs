@@ -51,6 +51,10 @@ pub trait ConversationRepository {
     async fn check_dependencies(&self) -> Result<Value, RepositoryError>;
     async fn find_message_by_id(&self, id: Uuid) -> Result<Option<crate::models::internal::Message>, RepositoryError>;
     fn get_db(&self) -> &DatabaseConnection;
+    async fn count_messages_in_conversation(&self, conv_id: Uuid) -> Result<u64, RepositoryError>;
+    async fn find_recent_messages(&self, conv_id: Uuid, limit: u64) -> Result<Vec<Message>, RepositoryError>;
+    async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError>;
+    async fn get_conversation_messages(&self, conv_id: Uuid) -> Result<Vec<Message>, RepositoryError>;
 }
 
 pub struct SeaOrmConversationRepository {
@@ -114,9 +118,11 @@ impl SeaOrmConversationRepository {
         new_msg: NewMessage,
     ) -> Result<Uuid, RepositoryError> {
         let msg_id = Uuid::new_v4();
-        let now = chrono::Utc::now().naive_utc();
+                
+        // Use provided timestamp or generate one
+        let timestamp = new_msg.timestamp;
         
-        // Try to generate embedding with retry logic
+        // Try to generate embedding
         let embedding_id = match self.embedding_service
             .process_message_with_retry(
                 msg_id,
@@ -125,26 +131,26 @@ impl SeaOrmConversationRepository {
                 json!({
                     "role": new_msg.role.clone(),
                     "conversation_id": conversation_id.to_string(),
-                    "timestamp": now.to_string(),
+                    "timestamp": timestamp.to_string(),
                 }),
             ).await
         {
             Ok(id) => Some(id),
             Err(e) => {
                 tracing::warn!("Embedding generation failed after retries: {}", e);
-                None  // Continue without embedding
+                None
             }
         };
 
-        let has_embedding = embedding_id.is_some();  // Check BEFORE moving
+        let has_embedding = embedding_id.is_some();
 
-        // Store message in SQLite (with or without embedding_id)
+        // Fix: Convert timestamp to string format that SQLite expects
         let message = messages::ActiveModel {
             id: Set(msg_id.to_string()),
             conversation_id: Set(conversation_id.to_string()),
             role: Set(new_msg.role),
             content: Set(new_msg.content),
-            timestamp: Set(now.to_string()),
+            timestamp: Set(timestamp.format("%Y-%m-%d %H:%M:%S%.f").to_string()), // FIXED: Proper format
             embedding_id: Set(embedding_id),
             metadata: Set(Some(new_msg.metadata.to_string())),
         };
@@ -347,7 +353,77 @@ impl ConversationRepository for SeaOrmConversationRepository {
             metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
         }))
     }
-    
+
+    async fn count_messages_in_conversation(&self, conv_id: Uuid) -> Result<u64, RepositoryError> {
+        use crate::storage::entities::messages as message_entity;
+        
+        let count = message_entity::Entity::find()
+            .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
+            .count(self.get_db())
+            .await
+            .map_err(RepositoryError::DbError)?;
+        
+        Ok(count)
+    }
+
+    async fn find_recent_messages(&self, conv_id: Uuid, limit: u64) -> Result<Vec<Message>, RepositoryError> {
+        use crate::storage::entities::messages as message_entity;
+        
+        let models = message_entity::Entity::find()
+            .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
+            .order_by_desc(message_entity::Column::Timestamp)
+            .limit(limit)
+            .all(self.get_db())
+            .await
+            .map_err(RepositoryError::DbError)?;
+        
+        Ok(models.into_iter().map(|m| Message {
+            id: Uuid::parse_str(&m.id).unwrap(),
+            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            role: m.role,
+            content: m.content,
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
+            metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
+        }).collect())
+    }
+
+    async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError> {
+        use crate::storage::entities::conversations;
+        use sea_orm::{ColumnTrait, QuerySelect};
+        
+        let labels = conversations::Entity::find()
+            .select_only()
+            .column(conversations::Column::Label)
+            .distinct()
+            .into_tuple()
+            .all(self.get_db())
+            .await
+            .map_err(RepositoryError::DbError)?;
+        
+        Ok(labels)
+    }
+
+    async fn get_conversation_messages(&self, conv_id: Uuid) -> Result<Vec<Message>, RepositoryError> {
+        use crate::storage::entities::messages as message_entity;
+        
+        let models = message_entity::Entity::find()
+            .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
+            .all(self.get_db())
+            .await
+            .map_err(RepositoryError::DbError)?;
+        
+        Ok(models.into_iter().map(|m| Message {
+            id: Uuid::parse_str(&m.id).unwrap(),
+            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            role: m.role,
+            content: m.content,
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
+            metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
+        }).collect())
+    }    
+
     fn get_db(&self) -> &DatabaseConnection {
         &self.db
     }    

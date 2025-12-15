@@ -3,14 +3,15 @@ use std::net::SocketAddr;
 use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use dotenv;
-use axum::Router;  // Add this missing import
+use axum::Router;
 
 // Import our modules
 use sekha_controller::{
     config::Config,
     api::{routes, mcp},
     storage::{self, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
-    services::embedding_service::EmbeddingService,
+    services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
+    orchestrator::MemoryOrchestrator,
 };
 
 #[tokio::main]
@@ -35,7 +36,6 @@ async fn main() -> anyhow::Result<()> {
     
     // Create Chroma client for vector storage
     let chroma_url = config.read().await.chroma_url.clone();
-    // Use value if not empty, otherwise default
     let chroma_url = if chroma_url.is_empty() { 
         "http://localhost:8000".to_string() 
     } else { 
@@ -62,10 +62,31 @@ async fn main() -> anyhow::Result<()> {
         embedding_service,
     ));
 
+    // Initialize LLM Bridge client (MODULE 6 integration)
+    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
+    
+    // Verify LLM Bridge health on startup
+    match llm_bridge.health_check().await {
+        Ok(true) => {
+            tracing::info!("✅ LLM Bridge connected successfully");
+            
+            // List available models
+            if let Ok(models) = llm_bridge.list_models().await {
+                tracing::info!("📊 LLM Bridge models: {}", models.join(", "));
+            }
+        },
+        Ok(false) => tracing::warn!("⚠️ LLM Bridge health check returned false"),
+        Err(e) => tracing::warn!("⚠️ LLM Bridge not available: {}. Intelligence features will be limited.", e),
+    }
+
+    // Create Memory Orchestrator with LLM Bridge (MODULE 5 + 6 integration)
+    let orchestrator = Arc::new(MemoryOrchestrator::new(repository.clone(), llm_bridge));
+
     // Create application state
     let state = routes::AppState {
         config: config.clone(),
         repo: repository.clone(),
+        orchestrator,
     };
 
     // Build router with both REST and MCP endpoints
@@ -80,6 +101,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("🚀 Server listening on {}", addr);
     tracing::info!("📊 Chroma URL: {}", chroma_url);
     tracing::info!("🤖 Ollama URL: {}", ollama_url);
+    tracing::info!("🧠 LLM Bridge URL: http://localhost:5001");
+    tracing::info!("🤖 Smart Query: POST /api/v1/query/smart");
 
     axum::serve(listener, app).await?;
     

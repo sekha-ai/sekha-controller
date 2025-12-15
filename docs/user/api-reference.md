@@ -158,18 +158,23 @@ Error Response (404 Not Found):
 
 ### POST /api/v1/query/smart
 
-**Intelligent Context Assembly**  
-Intelligent context assembly using 4-phase algorithm. Uses the MemoryOrchestrator to perform 4-phase context assembly: Recall, Ranking, Assembly, and Enhancement.
-## Smart Query Endpoint
+Intelligent context assembly using the MemoryOrchestrator.
 
-**Request Schema:**
+**Features:**
+- 4-phase algorithm (Recall → Rank → Assemble → Enhance)
+- Recency decay (exponential half-life: 7 days)
+- Label boosting (preferred labels get +5 score)
+- Token budgeting (85% fill rate)
+- Automatic citation injection
+
+**Request:**
 ```json
 {
   "query": "string (required)",
-  "limit": "integer (optional, default: 1000)",
   "filters": {
     "label": "string (optional)"
-  }
+  },
+  "limit": "integer (optional, default: 1000)"
 }
 
 Response (200 OK):
@@ -177,7 +182,7 @@ Response (200 OK):
   "results": [
     {
       "conversation_id": "uuid",
-      "message_id": "uuid", 
+      "message_id": "uuid",
       "score": "float",
       "content": "string",
       "metadata": {
@@ -209,6 +214,45 @@ Ranking: Composite score = 50% importance + 30% recency + 20% label match
 Assembly: Fill 85% of token budget, stop at limit
 Enhancement: Inject citation metadata
 Performance: <500ms for 10K message corpus
+
+
+### GET /api/v1/conversations/{id}/summary
+Generate a summary for a conversation.
+
+Query Parameters:
+level: enum ["daily", "weekly", "monthly"] (default: "daily")
+
+Example:
+curl http://localhost:8080/api/v1/conversations/uuid-123/summary?level=daily
+
+
+### GET /api/v1/prune/suggestions
+Get intelligent pruning suggestions.
+
+Query Parameters:
+threshold_days: integer (default: 90)
+importance_threshold: float (default: 3.0)
+
+Example:
+curl "http://localhost:8080/api/v1/prune/suggestions?threshold_days=90"
+
+
+### POST /api/v1/conversations/{id}/suggest-labels
+Get label suggestions for a conversation.
+
+Example:
+curl -X POST http://localhost:8080/api/v1/conversations/uuid-123/suggest-labels
+
+Response (200 OK):
+[
+  {
+    "label": "Project:AI",
+    "confidence": 0.9,
+    "is_existing": true,
+    "reason": "Suggested based on conversation content"
+  }
+]
+
 
 ### GET /health
 

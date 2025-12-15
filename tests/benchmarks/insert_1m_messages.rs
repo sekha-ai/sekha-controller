@@ -52,6 +52,15 @@ async fn main() {
         repo.create_with_messages(conv).await.unwrap();
     }
     
+    let new_messages: Vec<crate::models::internal::NewMessage> = (0..100).map(|msg_idx| {
+        NewMessage {
+            role: "user".to_string(),
+            content: format!("Benchmark message {} in conversation {}", msg_idx, conv_idx),
+            metadata: serde_json::json!({}),
+            timestamp: now, // ADD THIS
+        }
+    }).collect();
+
     let elapsed = start.elapsed();
     println!("✅ Complete: {} messages in {:.2?}", total_messages, elapsed);
     println!("📊 Throughput: {:.2} messages/sec", 
