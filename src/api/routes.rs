@@ -8,6 +8,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use serde_json::{json, Value};
 
 use crate::{
     api::dto::*,
@@ -54,6 +55,7 @@ async fn create_conversation(
             role: m.role,
             content: m.content,
             metadata: serde_json::json!({}),
+            timestamp: now,
         })
         .collect();
 
@@ -306,6 +308,64 @@ async fn semantic_query(
     }))
 }
 
+/// Enhanced health check with dependency verification
+async fn health(State(state): State<AppState>) -> Json<Value> {
+    let mut checks = json!({});
+    let mut all_healthy = true;
+
+    // Check SQLite
+    let db_healthy = state.repo.ping().await.is_ok();
+    checks["database"] = json!({
+        "status": if db_healthy { "healthy" } else { "unhealthy" }
+    });
+    all_healthy &= db_healthy;
+
+    // Check external dependencies through repository trait method
+    match state.repo.check_dependencies().await {
+        Ok(deps) => {
+            if let Some(chroma_check) = deps.get("chroma") {
+                checks["chroma"] = chroma_check.clone();
+                if let Some(status) = chroma_check.get("status").and_then(|s| s.as_str()) {
+                    all_healthy &= status == "healthy";
+                }
+            }
+        }
+        Err(e) => {
+            checks["chroma"] = json!({
+                "status": "unhealthy",
+                "error": e.to_string()
+            });
+            all_healthy = false;
+        }
+    }
+
+    // Check Ollama (optional, soft failure)
+    let ollama_url = state.config.read().await.ollama_url.clone();
+    let ollama_healthy = check_ollama(&ollama_url).await;
+    checks["ollama"] = json!({
+        "status": if ollama_healthy { "healthy" } else { "unavailable" },
+        "optional": true
+    });
+
+    let status = if all_healthy { "healthy" } else { "unhealthy" };
+    
+    Json(json!({
+        "status": status,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "checks": checks
+    }))
+}
+
+/// Helper to check Ollama health (soft check, doesn't fail health endpoint)
+async fn check_ollama(url: &str) -> bool {
+    let client = reqwest::Client::new();
+    client.get(format!("{}/api/tags", url))
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/conversations", post(create_conversation))
@@ -318,10 +378,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)
-}
-
-async fn health() -> &'static str {
-    "OK"
 }
 
 async fn metrics() -> &'static str {

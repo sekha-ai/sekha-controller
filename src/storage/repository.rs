@@ -47,6 +47,8 @@ pub trait ConversationRepository {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError>;
+    async fn ping(&self) -> Result<(), RepositoryError>;
+    async fn check_dependencies(&self) -> Result<Value, RepositoryError>;
 }
 
 pub struct SeaOrmConversationRepository {
@@ -112,9 +114,9 @@ impl SeaOrmConversationRepository {
         let msg_id = Uuid::new_v4();
         let now = chrono::Utc::now().naive_utc();
         
-        // Try to generate embedding, but don't fail if Ollama/Chroma unavailable
+        // Try to generate embedding with retry logic
         let embedding_id = match self.embedding_service
-            .process_message(
+            .process_message_with_retry(
                 msg_id,
                 &new_msg.content,
                 conversation_id,
@@ -127,8 +129,8 @@ impl SeaOrmConversationRepository {
         {
             Ok(id) => Some(id),
             Err(e) => {
-                tracing::warn!("Embedding generation failed (ok in tests): {}", e);
-                None  // Continue without embedding in test environment
+                tracing::warn!("Embedding generation failed after retries: {}", e);
+                None  // Continue without embedding
             }
         };
 
@@ -227,7 +229,8 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
-        self.create_with_messages(conv).await
+        // Call the inherent method, not recursively
+        SeaOrmConversationRepository::create_with_messages(self, conv).await
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
@@ -245,7 +248,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 .collect();
 
             if !embedding_ids.is_empty() {
-                self.chroma.delete("messages", embedding_ids).await?;
+                self.chroma.delete("conversations", embedding_ids).await?; // Fixed: was "messages"
             }
         }
 
@@ -314,7 +317,23 @@ impl ConversationRepository for SeaOrmConversationRepository {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError> {
-        self.semantic_search(query, limit, filters).await
+        // Call the inherent method, not recursively
+        SeaOrmConversationRepository::semantic_search(self, query, limit, filters).await
+    }
+
+    async fn ping(&self) -> Result<(), RepositoryError> {
+        // Fix: Call the database execution, not recursively
+        self.db.execute_unprepared("SELECT 1").await?;
+        Ok(())
+    }
+
+    async fn check_dependencies(&self) -> Result<Value, RepositoryError> {
+        let chroma_healthy = self.chroma.ping().await.is_ok();
+        Ok(json!({
+            "chroma": {
+                "status": if chroma_healthy { "healthy" } else { "unhealthy" }
+            }
+        }))
     }
 }
 

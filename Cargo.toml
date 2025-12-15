@@ -93,3 +93,7 @@ path = "tests/integration_test.rs"
 [[test]]
 name = "api_test"
 path = "tests/api_test.rs"
+
+[[bin]]
+name = "benchmark"
+path = "tests/benchmarks/insert_1m_messages.rs"

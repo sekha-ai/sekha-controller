@@ -290,6 +290,12 @@ impl ChromaClient {
 
         Ok(results)
     }
+    // Health check method
+    pub async fn ping(&self) -> Result<(), ChromaError> {
+        let url = format!("{}/api/v1/heartbeat", self.base_url);
+        self.client.get(&url).send().await?.error_for_status()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

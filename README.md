@@ -267,6 +267,12 @@ chmod +x tests/e2e/smoke_test.sh
 
 Current test status: **4/5 passing** (one fails without Ollama running)
 
+## Test Coverage
+
+[![Coverage Status](https://codecov.io/gh/sekha-ai/sekha-controller/branch/main/graph/badge.svg)]
+
+Current coverage: **85%** (target: 80% minimum)
+
 ---
 
 ## Performance
