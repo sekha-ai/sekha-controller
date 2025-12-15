@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+httpx==0.27.2
+pydantic==2.9.2
+pydantic-settings==2.6.1
+litellm==1.52.0
+redis==5.2.0
+celery==5.4.0
+python-dotenv==1.0.1
+prometheus-client==0.21.0
