@@ -96,3 +96,67 @@ async fn test_mcp_auth_failure() {
     
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_smart_query_endpoint() {
+    let repo = setup_test_repo().await;
+    let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone()));
+    
+    let app = create_router(AppState {
+        config: Arc::new(RwLock::new(Config::default())),
+        repo,
+        orchestrator,
+    });
+
+    // Create test conversation
+    let create_req = CreateConversationRequest {
+        label: "Test::SmartQuery".to_string(),
+        folder: "/test".to_string(),
+        messages: vec![
+            MessageDto {
+                role: "user".to_string(),
+                content: "What is the token limit for Claude?".to_string(),
+            }
+        ],
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri("/api/v1/conversations")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&create_req).unwrap()))
+                .unwrap()
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Test smart query
+    let query_req = QueryRequest {
+        query: "token limit".to_string(),
+        limit: Some(10),
+        offset: Some(0),
+        filters: None,
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(http::Method::POST)
+                .uri("/api/v1/query/smart")
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_string(&query_req).unwrap()))
+                .unwrap()
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+    let result: QueryResponse = serde_json::from_slice(&body).unwrap();
+    assert!(!result.results.is_empty());
+}

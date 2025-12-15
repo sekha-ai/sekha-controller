@@ -49,6 +49,8 @@ pub trait ConversationRepository {
     ) -> Result<Vec<SearchResult>, RepositoryError>;
     async fn ping(&self) -> Result<(), RepositoryError>;
     async fn check_dependencies(&self) -> Result<Value, RepositoryError>;
+    async fn find_message_by_id(&self, id: Uuid) -> Result<Option<crate::models::internal::Message>, RepositoryError>;
+    fn get_db(&self) -> &DatabaseConnection;
 }
 
 pub struct SeaOrmConversationRepository {
@@ -327,6 +329,28 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(())
     }
 
+    async fn find_message_by_id(&self, id: Uuid) -> Result<Option<crate::models::internal::Message>, RepositoryError> {
+        use crate::storage::entities::messages as message_entity;
+        
+        let model = message_entity::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await
+            .map_err(RepositoryError::DbError)?;
+            
+        Ok(model.map(|m| crate::models::internal::Message {
+            id: Uuid::parse_str(&m.id).unwrap(),
+            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            role: m.role,
+            content: m.content,
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
+            metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
+        }))
+    }
+    
+    fn get_db(&self) -> &DatabaseConnection {
+        &self.db
+    }    
     async fn check_dependencies(&self) -> Result<Value, RepositoryError> {
         let chroma_healthy = self.chroma.ping().await.is_ok();
         Ok(json!({

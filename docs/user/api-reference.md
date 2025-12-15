@@ -156,6 +156,60 @@ Error Response (404 Not Found):
   "error": "Conversation not found"
 }
 
+### POST /api/v1/query/smart
+
+**Intelligent Context Assembly**  
+Intelligent context assembly using 4-phase algorithm. Uses the MemoryOrchestrator to perform 4-phase context assembly: Recall, Ranking, Assembly, and Enhancement.
+## Smart Query Endpoint
+
+**Request Schema:**
+```json
+{
+  "query": "string (required)",
+  "limit": "integer (optional, default: 1000)",
+  "filters": {
+    "label": "string (optional)"
+  }
+}
+
+Response (200 OK):
+{
+  "results": [
+    {
+      "conversation_id": "uuid",
+      "message_id": "uuid", 
+      "score": "float",
+      "content": "string",
+      "metadata": {
+        "citation": {
+          "label": "string",
+          "folder": "string",
+          "timestamp": "datetime"
+        }
+      },
+      "label": "string",
+      "folder": "string",
+      "timestamp": "datetime"
+    }
+  ],
+  "total": "integer",
+  "page": "integer",
+  "page_size": "integer"
+}
+
+Features:
+Recency decay: Exponential half-life of 7 days
+Label boosting: Preferred labels get +5 score
+Token budgeting: Reserves 15% of budget for system prompts
+Citation injection: Adds source metadata automatically
+
+Algorithm:
+Recall: Semantic search (200 results) + pinned + recent
+Ranking: Composite score = 50% importance + 30% recency + 20% label match
+Assembly: Fill 85% of token budget, stop at limit
+Enhancement: Inject citation metadata
+Performance: <500ms for 10K message corpus
+
 ### GET /health
 
 Health check endpoint.
