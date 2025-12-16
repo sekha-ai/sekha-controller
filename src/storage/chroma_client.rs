@@ -1,9 +1,9 @@
-use async_trait::async_trait;
+// use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
-use uuid::Uuid;
+// use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum ChromaError {
