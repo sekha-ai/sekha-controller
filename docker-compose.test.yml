@@ -1,0 +1,25 @@
+services:
+  chroma:
+    image: chromadb/chroma:latest
+    ports: ["8000:8000"]
+  
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+  
+  llm-bridge:
+    build: ./llm-bridge
+    ports: ["5001:5001"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+  
+  controller:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      - SEKHA_CHROMA_URL=http://chroma:8000
+      - SEKHA_OLLAMA_URL=http://ollama:11434
+    depends_on:
+      - chroma
+      - ollama
+      - llm-bridge
