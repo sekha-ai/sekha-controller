@@ -170,14 +170,14 @@ impl EmbeddingService {
         // Extract the first (and only) embedding
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(EmbeddingError::NoEmbeddings),
-            1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
+            1 => response.embeddings[0].iter().map(|&v| v).collect(),
             _ => response
                 .embeddings
                 .into_iter()
                 .next()
                 .unwrap()
                 .into_iter()
-                .map(|v| v as f32)
+                .map(|v| v)
                 .collect(),
         };
 
