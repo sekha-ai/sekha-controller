@@ -14,19 +14,18 @@ pub struct McpAuth;
 impl FromRequestParts<AppState> for McpAuth {
     type Rejection = Response;
 
-    fn from_request_parts<'a>(
-        parts: &'a mut Parts,
-        state: &'a AppState,
-    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'a {
-        // Clone the config Arc BEFORE the async block (no lifetime issues)
-        let config = state.config.clone();
-
-        // Extract auth header as owned String
+    fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        // Clone what we need BEFORE async block
         let auth_header = parts
             .headers
             .get("authorization")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
+
+        let config = state.config.clone();
 
         async move {
             let auth_header = auth_header.ok_or_else(|| {
