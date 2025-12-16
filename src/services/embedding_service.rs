@@ -167,23 +167,24 @@ impl EmbeddingService {
             return Err(EmbeddingError::NoEmbeddings);
         }
 
+        // Extract the first (and only) embedding
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(EmbeddingError::NoEmbeddings),
-            1 => response.embeddings[0].iter().copied().map(|v| {}).collect(),
+            1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
             _ => response
                 .embeddings
                 .into_iter()
                 .next()
                 .unwrap()
                 .into_iter()
-                .map(|v| {})
+                .map(|v| v as f32)
                 .collect(),
         };
 
         Ok(embedding)
     }
 
-    /// Semantic search across conversations (fixed collection name)
+    /// Semantic search across messages
     pub async fn search_messages(
         &self,
         query: &str,
@@ -193,7 +194,7 @@ impl EmbeddingService {
         // Generate query embedding
         let query_embedding = self.generate_embedding(query).await?;
 
-        // Search in Chroma - FIXED: Collection name to "conversations"
+        // Search in Chroma
         let results = self
             .chroma
             .query("conversations", query_embedding, limit as u32, filters)
