@@ -48,3 +48,9 @@ impl EmbeddingQueue {
         Ok(())
     }
 }
+
+impl Default for EmbeddingQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}

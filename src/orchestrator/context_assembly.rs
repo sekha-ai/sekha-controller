@@ -169,25 +169,25 @@ impl ContextAssembler {
     }
 
     /// Helper: Fetch a single message by ID
-    async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
-        use crate::storage::entities::messages as message_entity;
+    //async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
+    //    use crate::storage::entities::messages as message_entity;
 
-        let model = message_entity::Entity::find_by_id(id.to_string())
-            .one(self.repo.get_db()) // Need to access db directly
-            .await
-            .map_err(RepositoryError::DbError)?;
+    //    let model = message_entity::Entity::find_by_id(id.to_string())
+    //        .one(self.repo.get_db()) // Need to access db directly
+    //        .await
+    //        .map_err(RepositoryError::DbError)?;
 
-        Ok(model.map(|m| Message {
-            id: Uuid::parse_str(&m.id).unwrap(),
-            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
-            role: m.role,
-            content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
-                .unwrap(),
-            embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
-            metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
-        }))
-    }
+    //    Ok(model.map(|m| Message {
+    //        id: Uuid::parse_str(&m.id).unwrap(),
+    //        conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+    //        role: m.role,
+    //        content: m.content,
+    //        timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+    //            .unwrap(),
+    //        embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
+    //        metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
+    //    }))
+    //}
 
     /// Helper: Get pinned messages (always included)
     async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
@@ -210,10 +210,12 @@ impl ContextAssembler {
 #[derive(Debug, Clone)]
 struct CandidateMessage {
     message_id: Uuid,
+    #[allow(dead_code)] // Used in Phase 3
     conversation_id: Uuid,
     score: f32,
     timestamp: chrono::NaiveDateTime,
     label: String,
+    #[allow(dead_code)] // Will be used when pinned messages implemented
     is_pinned: bool,
     importance: f32,
 }

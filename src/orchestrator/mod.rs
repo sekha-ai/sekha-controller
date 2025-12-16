@@ -11,6 +11,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MemoryOrchestrator {
+    #[allow(dead_code)] // Used in future methods
     repo: Arc<dyn ConversationRepository + Send + Sync>,
     pub context_assembler: context_assembly::ContextAssembler,
     pub importance_engine: importance_engine::ImportanceEngine,

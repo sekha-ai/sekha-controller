@@ -165,6 +165,7 @@ struct EmbedRequest {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct EmbedResponse {
     embedding: Vec<f32>,
     model: String,
@@ -180,6 +181,7 @@ struct SummarizeRequest {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct SummarizeResponse {
     summary: String,
     level: String,
@@ -195,6 +197,7 @@ struct ScoreImportanceRequest {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct ScoreImportanceResponse {
     score: f32,
     reasoning: Option<String>,

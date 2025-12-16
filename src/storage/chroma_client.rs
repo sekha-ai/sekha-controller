@@ -25,12 +25,6 @@ pub struct ScoredResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct ChromaCollection {
-    name: String,
-    metadata: Option<Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 struct ChromaUpsertRequest {
     ids: Vec<String>,
     embeddings: Vec<Vec<f32>>,
@@ -47,6 +41,7 @@ struct ChromaQueryRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ChromaQueryResponse {
     ids: Vec<Vec<String>>,
     distances: Vec<Vec<f32>>,

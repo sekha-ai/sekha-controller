@@ -51,7 +51,10 @@ pub async fn memory_store(
 #[derive(Debug, Deserialize)]
 pub struct MemoryQueryArgs {
     query: String,
+    // Remove unused fields or mark as explicitly allowed for future use
+    #[allow(dead_code)]
     filters: Option<Value>,
+    #[allow(dead_code)]
     limit: Option<u32>,
 }
 
