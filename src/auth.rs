@@ -14,26 +14,27 @@ pub struct McpAuth;
 impl FromRequestParts<AppState> for McpAuth {
     type Rejection = Response;
 
-    #[allow(refining_impl_trait)]
-    async fn from_request_parts(
+    fn from_request_parts<'a>(
         parts: &'a mut Parts,
-        state: &AppState,
+        state: &'a AppState,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'a {
-        // Clone BEFORE async block to avoid borrowing state
+        // Clone the config Arc BEFORE the async block (no lifetime issues)
         let config = state.config.clone();
 
+        // Extract auth header as owned String
+        let auth_header = parts
+            .headers
+            .get("authorization")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
+
         async move {
-            // Extract authorization header manually
-            let auth_header = parts
-                .headers
-                .get("authorization")
-                .and_then(|h| h.to_str().ok())
-                .ok_or_else(|| {
-                    let body = Json(json!({
-                        "error": "Missing authorization header"
-                    }));
-                    (StatusCode::UNAUTHORIZED, body).into_response()
-                })?;
+            let auth_header = auth_header.ok_or_else(|| {
+                let body = Json(json!({
+                    "error": "Missing authorization header"
+                }));
+                (StatusCode::UNAUTHORIZED, body).into_response()
+            })?;
 
             let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
                 let body = Json(json!({
