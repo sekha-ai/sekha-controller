@@ -1,8 +1,7 @@
-use crate::models::internal::{Conversation, Message};
-use crate::storage::entities::messages;
+use crate::models::internal::Message;
 use crate::storage::repository::{ConversationRepository, RepositoryError};
 use chrono::NaiveDateTime;
-use sea_orm::{ColumnTrait, EntityTrait};
+use sea_orm::EntityTrait;
 use std::sync::Arc;
 use uuid::Uuid;
 
