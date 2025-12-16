@@ -5,6 +5,7 @@ WORKDIR /app
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     libpq-dev \
+    curl \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
@@ -14,6 +15,7 @@ COPY Cargo.toml Cargo.lock ./
 # Copy source code
 COPY src ./src
 COPY migration ./migration
+COPY migrations ./migrations
 
 # Build release binary
 RUN cargo build --release --bin sekha-controller

@@ -21,6 +21,7 @@ async fn main() {
     let start = Instant::now();
     let mut total_messages = 0;
 
+    // FIX: Use a proper iterator with variable in scope
     for conv_idx in 0..10_000 {
         if conv_idx % 100 == 0 {
             println!(
@@ -30,46 +31,40 @@ async fn main() {
             );
         }
 
+        // FIX: now must be inside the loop body
         let now = Utc::now().naive_utc();
+
+        // FIX: Collect messages first to calculate word_count
+        let messages: Vec<NewMessage> = (0..100)
+            .map(|msg_idx| {
+                total_messages += 1;
+                NewMessage {
+                    role: "user".to_string(),
+                    content: format!("Benchmark message {} in conversation {}", msg_idx, conv_idx),
+                    metadata: serde_json::json!({}),
+                    timestamp: now,
+                }
+            })
+            .collect();
+
+        // Calculate word count
+        let word_count: i32 = messages.iter().map(|m| m.content.len() as i32).sum();
+
         let conv = NewConversation {
             id: None,
             label: format!("Bench-{}", conv_idx),
             folder: "/benchmark".to_string(),
             status: "active".to_string(),
             importance_score: Some(5),
-            word_count: 1000, // Estimate
+            word_count,
             session_count: Some(1),
             created_at: now,
             updated_at: now,
-            messages: (0..100)
-                .map(|msg_idx| {
-                    total_messages += 1;
-                    NewMessage {
-                        role: "user".to_string(),
-                        content: format!(
-                            "Benchmark message {} in conversation {}",
-                            msg_idx, conv_idx
-                        ),
-                        metadata: serde_json::json!({}),
-                        timestamp: now,
-                    }
-                })
-                .collect(),
+            messages,
         };
 
         repo.create_with_messages(conv).await.unwrap();
     }
-
-    let new_messages: Vec<crate::models::internal::NewMessage> = (0..100)
-        .map(|msg_idx| {
-            NewMessage {
-                role: "user".to_string(),
-                content: format!("Benchmark message {} in conversation {}", msg_idx, conv_idx),
-                metadata: serde_json::json!({}),
-                timestamp: now, // ADD THIS
-            }
-        })
-        .collect();
 
     let elapsed = start.elapsed();
     println!(
