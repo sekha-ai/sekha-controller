@@ -5,7 +5,7 @@
 > Your conversations are your intellectual property. Memory should be sovereign, not rented. Simplicity is a feature, not a compromise.
 
 [![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![API Docs](https://img.shields.io/badge/API-Reference-blue)](https://sekha-ai.github.io/sekha-controller)
 [![GitHub Actions](https://github.com/sekha-ai/sekha-controller/workflows/CI/badge.svg)](https://github.com/sekha-ai/sekha-controller/actions)
 
@@ -335,7 +335,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+AGPL-3.0 License - see [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -347,7 +347,7 @@ Built with:
 - [ChromaDB](https://www.trychroma.com/) - Vector database
 - [Ollama](https://ollama.ai/) - Local LLM runtime
 - [Utoipa](https://github.com/juhaku/utoipa) - OpenAPI documentation
-
+- Patience
 ---
 
 **Current Version**: 0.1.0-alpha  

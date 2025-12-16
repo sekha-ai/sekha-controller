@@ -357,6 +357,28 @@ class SekhaClient:
         
         return None
     
+    # ============== Pin, Archive, Export ==================
+    async def pin(self, conversation_id: str) -> None:
+        """Pin a conversation (status = 'pinned')"""
+        await self._update_status(conversation_id, "pinned")
+
+    async def archive(self, conversation_id: str) -> None:
+        """Archive a conversation (status = 'archived')"""
+        await self._update_status(conversation_id, "archived")
+
+    async def export(
+        self,
+        label: Optional[str] = None,
+        format: str = "markdown"
+    ) -> str:
+        """Export conversations to specified format"""
+        # Call export endpoint and return content
+
+    async def _update_status(self, conversation_id: str, status: str) -> None:
+        """Internal method to update conversation status"""
+        # Implementation here
+    
+    
     # ============== MCP Integration (future) ==============
     
     async def get_mcp_tools(self) -> List[Dict[str, Any]]:

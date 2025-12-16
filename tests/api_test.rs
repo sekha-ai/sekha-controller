@@ -166,3 +166,141 @@ async fn test_smart_query_endpoint() {
     let result: QueryResponse = serde_json::from_slice(&body).unwrap();
     assert!(!result.results.is_empty());
 }
+
+#[tokio::test]
+async fn test_update_conversation_status() {
+    let db_conn = storage::init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(storage::SeaOrmConversationRepository::new(
+        db_conn,
+        chroma_client,
+        embedding_service,
+    ));
+    let test_config = create_test_config().await;
+
+    let state = routes::AppState {
+        config: test_config,
+        repo: repo.clone(),
+    };
+
+    let app = routes::create_router(state);
+
+    // First create a conversation
+    let create_response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/v1/conversations")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"label": "Test", "folder": "/", "messages": [{"role": "user", "content": "Hello"}]}"#))
+                .unwrap()
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let conv: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let conversation_id = conv["id"].as_str().unwrap();
+
+    // Test pinning the conversation
+    let pin_response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("PUT")
+                .uri(&format!("/api/v1/conversations/{}/status", conversation_id))
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"status": "pinned"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(pin_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_export_conversations() {
+    let db_conn = storage::init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(storage::SeaOrmConversationRepository::new(
+        db_conn,
+        chroma_client,
+        embedding_service,
+    ));
+    let test_config = create_test_config().await;
+
+    let state = routes::AppState {
+        config: test_config,
+        repo: repo.clone(),
+    };
+
+    let app = routes::create_router(state);
+
+    // Create a test conversation first
+    let _create_response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/v1/conversations")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"label": "TestExport", "folder": "/export", "messages": [{"role": "user", "content": "Export me"}]}"#))
+                .unwrap()
+        )
+        .await
+        .unwrap();
+
+    // Test markdown export
+    let export_response = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/api/v1/export?format=markdown")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(export_response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(export_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let export: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(export["format"], "markdown");
+    assert!(export["content"]
+        .as_str()
+        .unwrap()
+        .contains("# Sekha Conversations Export"));
+    assert_eq!(export["conversation_count"], 1);
+
+    // Test JSON export
+    let export_response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/api/v1/export?format=json")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(export_response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(export_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let export: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    assert_eq!(export["format"], "json");
+    assert!(export["content"].as_str().unwrap().contains("TestExport"));
+}

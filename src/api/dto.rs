@@ -31,6 +31,24 @@ pub struct QueryRequest {
     pub offset: Option<u32>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateStatusRequest {
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ExportRequest {
+    pub label: Option<String>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExportResponse {
+    pub content: String,
+    pub format: String,
+    pub conversation_count: usize,
+}
+
 // ==================== RESPONSE DTOs ====================
 
 #[derive(Debug, Serialize, ToSchema)]

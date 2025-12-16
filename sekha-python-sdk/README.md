@@ -96,6 +96,38 @@ except SekhaError as e:
     print(f"Unexpected error: {e}")
 
 
+### **Pinning and Archiving Conversations**
+
+```python
+from sekha import SekhaClient
+
+async with SekhaClient(config) as client:
+    # Pin an important conversation
+    await client.pin("conversation-uuid-here")
+    
+    # Archive an old conversation
+    await client.archive("conversation-uuid-here")
+    
+    # Pinned conversations get boosted in search results
+    # Archived conversations are excluded from default searches
+
+
+### **Exporting Conversations**
+
+from sekha import SekhaClient
+
+async with SekhaClient(config) as client:
+    # Export all conversations with a specific label as markdown
+    markdown = await client.export(label="Project:AI", format="markdown")
+    with open("backup.md", "w") as f:
+        f.write(markdown)
+    
+    # Export all conversations as JSON
+    json_data = await client.export(format="json")
+    with open("backup.json", "w") as f:
+        f.write(json_data)
+
+
 ## Development
 
 git clone https://github.com/sekha-ai/sekha-controller

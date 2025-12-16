@@ -253,6 +253,9 @@ Response (200 OK):
   }
 ]
 
+### PUT /api/v1/conversations/{id}/status
+
+### GET /api/v1/export
 
 ### GET /health
 

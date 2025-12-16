@@ -22,6 +22,10 @@ pub enum RepositoryError {
     EmbeddingError(String),
 }
 
+pub enum ConversationFilter {
+    Label(String),
+}
+
 #[async_trait]
 pub trait ConversationRepository {
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError>;
@@ -41,6 +45,7 @@ pub trait ConversationRepository {
         new_label: &str,
         new_folder: &str,
     ) -> Result<(), RepositoryError>;
+    async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
     async fn semantic_search(
         &self,
         query: &str,
@@ -65,6 +70,14 @@ pub trait ConversationRepository {
         &self,
         conv_id: Uuid,
     ) -> Result<Vec<Message>, RepositoryError>;
+    async fn find_by_filter(
+        &self,
+        filter: Option<String>,
+    ) -> Result<Vec<Conversation>, RepositoryError>;
+    async fn export_conversations(
+        &self,
+        label_filter: Option<String>,
+    ) -> Result<Vec<Conversation>, RepositoryError>;
 }
 
 pub struct SeaOrmConversationRepository {
@@ -106,7 +119,7 @@ impl SeaOrmConversationRepository {
             label: Set(new_conv.label.clone()),
             folder: Set(new_conv.folder.clone()),
             status: Set("active".to_string()),
-            importance_score: Set(5i64), // Use i64 directly
+            importance_score: Set(5i64),
             word_count: Set(word_count),
             session_count: Set(new_conv.session_count.unwrap_or(1) as i64),
             created_at: Set(now.to_string()),
@@ -131,8 +144,6 @@ impl SeaOrmConversationRepository {
         new_msg: NewMessage,
     ) -> Result<Uuid, RepositoryError> {
         let msg_id = Uuid::new_v4();
-
-        // Use provided timestamp or generate one
         let timestamp = new_msg.timestamp;
 
         // Try to generate embedding
@@ -159,13 +170,13 @@ impl SeaOrmConversationRepository {
 
         let has_embedding = embedding_id.is_some();
 
-        // Fix: Convert timestamp to string format that SQLite expects
+        // Store message in SQLite
         let message = messages::ActiveModel {
             id: Set(msg_id.to_string()),
             conversation_id: Set(conversation_id.to_string()),
             role: Set(new_msg.role),
             content: Set(new_msg.content),
-            timestamp: Set(timestamp.format("%Y-%m-%d %H:%M:%S%.f").to_string()), // FIXED: Proper format
+            timestamp: Set(timestamp.format("%Y-%m-%d %H:%M:%S%.f").to_string()),
             embedding_id: Set(embedding_id),
             metadata: Set(Some(new_msg.metadata.to_string())),
         };
@@ -244,9 +255,9 @@ impl ConversationRepository for SeaOrmConversationRepository {
             label: Set(conv.label),
             folder: Set(conv.folder),
             status: Set(conv.status),
-            importance_score: Set(conv.importance_score as i64), // Cast to i64
-            word_count: Set(conv.word_count as i64),             // Cast to i64
-            session_count: Set(conv.session_count as i64),       // Cast to i64
+            importance_score: Set(conv.importance_score as i64),
+            word_count: Set(conv.word_count as i64),
+            session_count: Set(conv.session_count as i64),
             created_at: Set(conv.created_at.to_string()),
             updated_at: Set(conv.updated_at.to_string()),
         };
@@ -256,14 +267,11 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
-        // Call the inherent method, not recursively
         SeaOrmConversationRepository::create_with_messages(self, conv).await
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
-        // Also delete from Chroma
         if let Ok(Some(_conv)) = self.find_by_id(id).await {
-            // Find and delete all message embeddings
             let messages = messages::Entity::find()
                 .filter(messages::Column::ConversationId.eq(id.to_string()))
                 .all(&self.db)
@@ -275,7 +283,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 .collect();
 
             if !embedding_ids.is_empty() {
-                self.chroma.delete("conversations", embedding_ids).await?; // Fixed: was "messages"
+                self.chroma.delete("conversations", embedding_ids).await?;
             }
         }
 
@@ -338,18 +346,30 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(())
     }
 
+    async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Conversation not found".to_string()))?;
+
+        let mut active_model: conversations::ActiveModel = model.into();
+        active_model.status = Set(status.to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+
+        active_model.update(&self.db).await?;
+        Ok(())
+    }
+
     async fn semantic_search(
         &self,
         query: &str,
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError> {
-        // Call the inherent method, not recursively
         SeaOrmConversationRepository::semantic_search(self, query, limit, filters).await
     }
 
     async fn ping(&self) -> Result<(), RepositoryError> {
-        // Fix: Call the database execution, not recursively
         self.db.execute_unprepared("SELECT 1").await?;
         Ok(())
     }
@@ -471,6 +491,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
     fn get_db(&self) -> &DatabaseConnection {
         &self.db
     }
+
     async fn check_dependencies(&self) -> Result<Value, RepositoryError> {
         let chroma_healthy = self.chroma.ping().await.is_ok();
         Ok(json!({
@@ -478,6 +499,31 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 "status": if chroma_healthy { "healthy" } else { "unhealthy" }
             }
         }))
+    }
+
+    async fn find_by_filter(
+        &self,
+        filter: Option<String>,
+    ) -> Result<Vec<Conversation>, RepositoryError> {
+        let mut query = conversations::Entity::find();
+
+        if let Some(label) = filter {
+            query = query.filter(conversations::Column::Label.eq(label));
+        }
+
+        let models = query
+            .order_by_desc(conversations::Column::CreatedAt)
+            .all(&self.db)
+            .await?;
+
+        Ok(models.into_iter().map(Conversation::from).collect())
+    }
+
+    async fn export_conversations(
+        &self,
+        label_filter: Option<String>,
+    ) -> Result<Vec<Conversation>, RepositoryError> {
+        self.find_by_filter(label_filter).await
     }
 }
 

@@ -207,6 +207,127 @@ async fn update_conversation_label(
 }
 
 #[utoipa::path(
+    put,
+    path = "/api/v1/conversations/{id}/status",
+    request_body = UpdateStatusRequest,
+    responses(
+        (status = 200, description = "Status updated"),
+        (status = 400, description = "Invalid status", body = ErrorResponse),
+        (status = 404, description = "Not found", body = ErrorResponse)
+    ),
+    params(
+        ("id" = String, Path, description = "Conversation UUID")
+    )
+)]
+async fn update_conversation_status(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateStatusRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    // Validate status
+    if !["active", "archived", "pinned"].contains(&req.status.as_str()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid status. Must be 'active', 'archived', or 'pinned'".to_string(),
+                code: 400,
+            }),
+        ));
+    }
+
+    // Update status in database
+    state
+        .repo
+        .update_status(id, &req.status)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 404,
+                }),
+            )
+        })?;
+
+    Ok(StatusCode::OK)
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/export",
+    responses(
+        (status = 200, description = "Export successful", body = ExportResponse)
+    ),
+    params(
+        ("label" = Option<String>, Query, description = "Filter by label"),
+        ("format" = Option<String>, Query, description = "Export format: markdown or json")
+    )
+)]
+async fn export_conversations(
+    State(state): State<AppState>,
+    Query(label): Query<Option<String>>,
+    Query(format): Query<Option<String>>,
+) -> Result<Json<ExportResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let format = format.unwrap_or_else(|| "markdown".to_string());
+
+    // Validate format
+    if !["markdown", "json"].contains(&format.as_str()) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Invalid format. Must be 'markdown' or 'json'".to_string(),
+                code: 400,
+            }),
+        ));
+    }
+
+    // Fetch conversations
+    let conversations = state.repo.export_conversations(label).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    let conversation_count = conversations.len();
+
+    // Format content based on format parameter
+    let content = if format == "json" {
+        serde_json::to_string_pretty(&conversations).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to serialize to JSON: {}", e),
+                    code: 500,
+                }),
+            )
+        })?
+    } else {
+        // Markdown format
+        let mut md = String::new();
+        md.push_str("# Sekha Conversations Export\n\n");
+        for conv in &conversations {
+            md.push_str(&format!("## {}\n", conv.label));
+            md.push_str(&format!("- **ID:** {}\n", conv.id));
+            md.push_str(&format!("- **Folder:** {}\n", conv.folder));
+            md.push_str(&format!("- **Status:** {}\n", conv.status));
+            md.push_str(&format!("- **Created:** {}\n\n", conv.created_at));
+        }
+        md
+    };
+
+    Ok(Json(ExportResponse {
+        content,
+        format: format.clone(),
+        conversation_count,
+    }))
+}
+
+#[utoipa::path(
     delete,
     path = "/api/v1/conversations/{id}",
     responses(
@@ -262,7 +383,6 @@ async fn count_conversations(
         (status = 500, description = "Search error", body = ErrorResponse)
     )
 )]
-
 async fn semantic_query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
@@ -384,9 +504,14 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/conversations/{id}/label",
             put(update_conversation_label),
         )
+        .route(
+            "/api/v1/conversations/{id}/status",
+            put(update_conversation_status),
+        )
         .route("/api/v1/conversations/{id}", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
         .route("/api/v1/query", post(semantic_query))
+        .route("/api/v1/export", get(export_conversations))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)
