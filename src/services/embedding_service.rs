@@ -169,14 +169,14 @@ impl EmbeddingService {
 
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(EmbeddingError::NoEmbeddings),
-            1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
+            1 => response.embeddings[0].iter().map(|&v| v).collect(),
             _ => response
                 .embeddings
                 .into_iter()
                 .next()
                 .unwrap()
                 .into_iter()
-                .map(|v| v as f32)
+                .map(|v| v)
                 .collect(),
         };
 
@@ -224,6 +224,6 @@ mod tests {
     async fn test_retry_logic_eventually_succeeds() {
         // This test would require mocking Ollama/Chroma to simulate failures
         // For now, it's a placeholder for the retry logic
-        assert!(true); // Placeholder
+        // assert!(true); // Placeholder
     }
 }

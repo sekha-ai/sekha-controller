@@ -14,7 +14,8 @@ pub struct McpAuth;
 impl FromRequestParts<AppState> for McpAuth {
     type Rejection = Response;
 
-    fn from_request_parts<'a>(
+    #[allow(refining_impl_trait)]
+    async fn from_request_parts(
         parts: &'a mut Parts,
         state: &AppState,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'a {
