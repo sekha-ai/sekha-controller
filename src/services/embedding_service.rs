@@ -157,8 +157,8 @@ impl EmbeddingService {
     }
 
     /// Generate embedding using Ollama
+    #[allow(clippy::map_clone)] // False positive - type conversion is necessary
     async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
-        // NEW API: EmbeddingsInput::Single for a single string
         let input = EmbeddingsInput::Single(content.to_string());
         let request = GenerateEmbeddingsRequest::new("nomic-embed-text:latest".to_string(), input);
 
@@ -168,17 +168,17 @@ impl EmbeddingService {
             return Err(EmbeddingError::NoEmbeddings);
         }
 
-        // The embeddings might be Vec<Vec<f64>> for batch, or Vec<f64> for single
-        // Try to extract the first embedding if it's nested
+        // Convert f64 to f32 (necessary for Chroma compatibility)
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(EmbeddingError::NoEmbeddings),
-            1 => response.embeddings[0].iter().map(|&v| v).collect(),
+            1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
             _ => response
                 .embeddings
                 .into_iter()
                 .next()
                 .unwrap()
                 .into_iter()
+                .map(|v| v as f32)
                 .collect(),
         };
 
