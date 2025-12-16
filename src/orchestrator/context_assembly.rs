@@ -1,7 +1,7 @@
 use crate::models::internal::Message;
 use crate::storage::repository::{ConversationRepository, RepositoryError};
 use chrono::NaiveDateTime;
-use sea_orm::EntityTrait;
+// use sea_orm::EntityTrait;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -167,27 +167,6 @@ impl ContextAssembler {
         let half_life = 7.0; // 7 day half-life
         (2.0_f32).powf(-(days_old as f32) / half_life).max(0.1) // Minimum 0.1 score
     }
-
-    /// Helper: Fetch a single message by ID
-    //async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
-    //    use crate::storage::entities::messages as message_entity;
-
-    //    let model = message_entity::Entity::find_by_id(id.to_string())
-    //        .one(self.repo.get_db()) // Need to access db directly
-    //        .await
-    //        .map_err(RepositoryError::DbError)?;
-
-    //    Ok(model.map(|m| Message {
-    //        id: Uuid::parse_str(&m.id).unwrap(),
-    //        conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
-    //        role: m.role,
-    //        content: m.content,
-    //        timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
-    //            .unwrap(),
-    //        embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
-    //        metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
-    //    }))
-    //}
 
     /// Helper: Get pinned messages (always included)
     async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
