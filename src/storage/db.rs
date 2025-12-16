@@ -53,7 +53,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     if result.rows_affected() == 0 {
         tracing::info!("Database empty, applying migrations...");
 
-        let migrations = vec![
+        let migrations = [
             include_str!("../../migrations/001_create_conversations.sql"),
             include_str!("../../migrations/002_create_messages.sql"),
             include_str!("../../migrations/003_create_semantic_tags.sql"),

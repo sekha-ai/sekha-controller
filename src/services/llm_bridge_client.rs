@@ -40,7 +40,7 @@ impl LlmBridgeClient {
 
         let response = self
             .client
-            .post(&format!("{}/embed", self.base_url))
+            .post(format!("{}/embed", self.base_url))
             .json(&request)
             .send()
             .await?;
@@ -72,7 +72,7 @@ impl LlmBridgeClient {
 
         let response = self
             .client
-            .post(&format!("{}/summarize", self.base_url))
+            .post(format!("{}/summarize", self.base_url))
             .json(&request)
             .send()
             .await?;
@@ -102,7 +102,7 @@ impl LlmBridgeClient {
 
         let response = self
             .client
-            .post(&format!("{}/score_importance", self.base_url))
+            .post(format!("{}/score_importance", self.base_url))
             .json(&request)
             .send()
             .await?;
@@ -121,7 +121,7 @@ impl LlmBridgeClient {
     pub async fn list_models(&self) -> Result<Vec<String>, LlmBridgeError> {
         let response = self
             .client
-            .get(&format!(
+            .get(format!(
                 "{}/api/tags",
                 self.base_url.replace("5001", "11434")
             ))
@@ -149,7 +149,7 @@ impl LlmBridgeClient {
     pub async fn health_check(&self) -> Result<bool, LlmBridgeError> {
         let response = self
             .client
-            .get(&format!("{}/health", self.base_url))
+            .get(format!("{}/health", self.base_url))
             .send()
             .await?;
 

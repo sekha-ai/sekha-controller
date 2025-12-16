@@ -14,11 +14,10 @@ pub struct McpAuth;
 impl FromRequestParts<AppState> for McpAuth {
     type Rejection = Response;
 
-    fn from_request_parts<'a, 'b>(
+    fn from_request_parts<'a>(
         parts: &'a mut Parts,
-        state: &'b AppState,
-    ) -> impl Future<Output = Result<Self, <Self as FromRequestParts<AppState>>::Rejection>> + Send + 'a
-    {
+        state: &AppState,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send + 'a {
         // Clone BEFORE async block to avoid borrowing state
         let config = state.config.clone();
 

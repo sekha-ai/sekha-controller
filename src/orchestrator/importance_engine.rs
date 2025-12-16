@@ -65,6 +65,6 @@ impl ImportanceEngine {
             }
         }
 
-        score.min(10.0).max(1.0)
+        score.clamp(1.0, 10.0)
     }
 }

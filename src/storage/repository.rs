@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
 use crate::services::embedding_service::EmbeddingService;
 use crate::storage::chroma_client::ChromaClient;
-use crate::storage::entities::{conversations, messages};
+pub(crate) use crate::storage::entities::{conversations, messages};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryError {
@@ -535,6 +535,3 @@ impl From<messages::Model> for Message {
         }
     }
 }
-
-// Re-export entities for convenience
-pub use crate::storage::entities::*;
