@@ -228,7 +228,7 @@ jobs:
       - name: Build and push LLM Bridge
         uses: docker/build-push-action@v5
         with:
-          context: ./llm-bridge
+          context: ./llm-bridge  # This is correct for subdirectory
           file: ./llm-bridge/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}

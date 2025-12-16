@@ -1,12 +1,12 @@
 use crate::storage::chroma_client::ChromaClient;
-use ollama_rs::{Ollama, error::OllamaError};
-use ollama_rs::generation::embeddings::request::{GenerateEmbeddingsRequest, EmbeddingsInput};
+use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
+use ollama_rs::{error::OllamaError, Ollama};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 use tokio::sync::AcquireError;
+use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration};
-use tracing::{error, warn, info, debug};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
@@ -41,10 +41,10 @@ impl EmbeddingService {
     pub fn new(ollama_url: String, chroma_url: String) -> Self {
         let ollama = Ollama::new(ollama_url, 11434);
         let chroma = Arc::new(ChromaClient::new(chroma_url));
-        
+
         // Rate limiting: max 4 concurrent embedding requests (per Module 4 spec)
         let semaphore = Arc::new(Semaphore::new(4));
-        
+
         // Module 4 spec: retry with exponential backoff
         let max_retries = 3;
 
@@ -65,31 +65,50 @@ impl EmbeddingService {
         metadata: Value,
     ) -> Result<String, EmbeddingError> {
         let mut last_error = None;
-        
+
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
                 let delay = Duration::from_millis(100 * 2_u64.pow(attempt - 1));
-                warn!("Embedding attempt {} failed, retrying in {:?}: {}", 
-                    attempt, delay, last_error.as_ref().unwrap());
+                warn!(
+                    "Embedding attempt {} failed, retrying in {:?}: {}",
+                    attempt,
+                    delay,
+                    last_error.as_ref().unwrap()
+                );
                 sleep(delay).await;
             }
-            
-            match self.process_message(message_id, content, conversation_id, metadata.clone()).await {
+
+            match self
+                .process_message(message_id, content, conversation_id, metadata.clone())
+                .await
+            {
                 Ok(result) => {
                     if attempt > 0 {
-                        info!("Retry succeeded for message {} on attempt {}", message_id, attempt + 1);
+                        info!(
+                            "Retry succeeded for message {} on attempt {}",
+                            message_id,
+                            attempt + 1
+                        );
                     }
                     return Ok(result);
-                },
+                }
                 Err(e) => {
                     last_error = Some(e);
-                    debug!("Embedding attempt {} failed for message {}: {}", 
-                        attempt + 1, message_id, last_error.as_ref().unwrap());
+                    debug!(
+                        "Embedding attempt {} failed for message {}: {}",
+                        attempt + 1,
+                        message_id,
+                        last_error.as_ref().unwrap()
+                    );
                 }
             }
         }
-        
-        error!("Max retries exceeded for message {}: {}", message_id, last_error.as_ref().unwrap());
+
+        error!(
+            "Max retries exceeded for message {}: {}",
+            message_id,
+            last_error.as_ref().unwrap()
+        );
         Err(EmbeddingError::MaxRetriesExceeded)
     }
 
@@ -102,12 +121,12 @@ impl EmbeddingService {
         metadata: Value,
     ) -> Result<String, EmbeddingError> {
         let _permit = self.semaphore.acquire().await?;
-        
+
         debug!("Generating embedding for message: {}", message_id);
-        
+
         // Generate embedding via Ollama
         let embedding = self.generate_embedding(content).await?;
-        
+
         // Prepare Chroma metadata
         let chroma_metadata = json!({
             "conversation_id": conversation_id.to_string(),
@@ -115,34 +134,35 @@ impl EmbeddingService {
             "content_preview": &content[..content.len().min(100)],
             "metadata": metadata,
         });
-        
+
         // Store in Chroma - FIXED: Collection name to "conversations" per spec
         let embedding_id = message_id.to_string();
-        self.chroma.ensure_collection("conversations", embedding.len() as i32).await?;
-        
-        self.chroma.upsert(
-            "conversations",
-            &embedding_id,
-            embedding.clone(),
-            chroma_metadata,
-            Some(content.to_string()),
-        ).await?;
-        
+        self.chroma
+            .ensure_collection("conversations", embedding.len() as i32)
+            .await?;
+
+        self.chroma
+            .upsert(
+                "conversations",
+                &embedding_id,
+                embedding.clone(),
+                chroma_metadata,
+                Some(content.to_string()),
+            )
+            .await?;
+
         info!("Successfully stored embedding for message: {}", message_id);
-        
+
         Ok(embedding_id)
     }
 
     /// Generate embedding using Ollama
     async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
         let input = EmbeddingsInput::Single(content.to_string());
-        let request = GenerateEmbeddingsRequest::new(
-            "nomic-embed-text:latest".to_string(),
-            input,
-        );
+        let request = GenerateEmbeddingsRequest::new("nomic-embed-text:latest".to_string(), input);
 
         let response = self.ollama.generate_embeddings(request).await?;
-        
+
         if response.embeddings.is_empty() {
             return Err(EmbeddingError::NoEmbeddings);
         }
@@ -150,9 +170,16 @@ impl EmbeddingService {
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(EmbeddingError::NoEmbeddings),
             1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
-            _ => response.embeddings.into_iter().next().unwrap().into_iter().map(|v| v as f32).collect(),
+            _ => response
+                .embeddings
+                .into_iter()
+                .next()
+                .unwrap()
+                .into_iter()
+                .map(|v| v as f32)
+                .collect(),
         };
-        
+
         Ok(embedding)
     }
 
@@ -165,12 +192,13 @@ impl EmbeddingService {
     ) -> Result<Vec<crate::storage::chroma_client::ScoredResult>, EmbeddingError> {
         // Generate query embedding
         let query_embedding = self.generate_embedding(query).await?;
-        
+
         // Search in Chroma - FIXED: Collection name to "conversations"
-        let results = self.chroma
+        let results = self
+            .chroma
             .query("conversations", query_embedding, limit as u32, filters)
             .await?;
-        
+
         Ok(results)
     }
 }
@@ -186,7 +214,7 @@ mod tests {
             "http://localhost".to_string(),
             "http://localhost:8000".to_string(),
         );
-        
+
         let embedding = service.generate_embedding("test content").await;
         assert!(embedding.is_ok());
         assert_eq!(embedding.unwrap().len(), 768); // nomic-embed-text dimension

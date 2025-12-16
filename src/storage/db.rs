@@ -1,5 +1,5 @@
-use sea_orm::{Database, DatabaseConnection, DbErr, ConnectionTrait};
 use once_cell::sync::Lazy;
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -8,17 +8,18 @@ static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
 
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
-    
+
     // Handle special SQLite URL formats
     let db = if database_url == "sqlite::memory:" {
         // In-memory database - no file operations needed
-        Database::connect(database_url).await
+        Database::connect(database_url)
+            .await
             .map_err(|e| DbErr::Custom(format!("Connection failed: {}", e)))?
     } else if let Some(path_str) = database_url.strip_prefix("sqlite://") {
         // File-based database
         let path_str = path_str.split('?').next().unwrap_or(path_str);
         let path = std::path::Path::new(path_str);
-        
+
         // Create parent directory if needed
         if let Some(parent) = path.parent() {
             if !parent.exists() {
@@ -27,24 +28,27 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
                 tracing::info!("Created database directory: {}", parent.display());
             }
         }
-        
+
         // Create file if it doesn't exist
         if !path.exists() {
             std::fs::File::create(path)
                 .map_err(|e| DbErr::Custom(format!("Failed to create DB file: {}", e)))?;
             tracing::info!("Created database file: {}", path.display());
         }
-        
-        Database::connect(database_url).await
+
+        Database::connect(database_url)
+            .await
             .map_err(|e| DbErr::Custom(format!("Connection failed: {}", e)))?
     } else {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
-    
+
     // Check and apply migrations
-    let result = db.execute_unprepared(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'"
-    ).await?;
+    let result = db
+        .execute_unprepared(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
+        )
+        .await?;
 
     if result.rows_affected() == 0 {
         tracing::info!("Database empty, applying migrations...");
@@ -88,12 +92,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
-        
+
         let db = init_db(&url).await.unwrap();
-        
+
         // Verify file exists
         assert!(db_path.exists());
-        
+
         // Verify we can query
         let result = db.execute_unprepared("SELECT 1").await.unwrap();
         assert_eq!(result.rows_affected(), 1);
@@ -104,14 +108,17 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
-        
+
         let db = init_db(&url).await.unwrap();
-        
+
         // Verify conversations table exists
-        let result = db.execute_unprepared(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'"
-        ).await.unwrap();
-        
+        let result = db
+            .execute_unprepared(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
+            )
+            .await
+            .unwrap();
+
         assert_eq!(result.rows_affected(), 1);
     }
 }

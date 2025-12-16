@@ -1,54 +1,54 @@
-use std::sync::Arc;
+use axum::Router;
+use dotenv;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use dotenv;
-use axum::Router;
 
 // Import our modules
 use sekha_controller::{
+    api::{mcp, routes},
     config::Config,
-    api::{routes, mcp},
-    storage::{self, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
-    services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     orchestrator::MemoryOrchestrator,
+    services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
+    storage::{self, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
 };
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
-    
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sekha_controller=info".into())
+                .unwrap_or_else(|_| "sekha_controller=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     // Load config
     let config = Arc::new(RwLock::new(Config::load()?));
-    
+
     // Initialize database
     let db_url = config.read().await.database_url.clone();
     let db_conn = storage::init_db(&db_url).await?;
-    
+
     // Create Chroma client for vector storage
     let chroma_url = config.read().await.chroma_url.clone();
-    let chroma_url = if chroma_url.is_empty() { 
-        "http://localhost:8000".to_string() 
-    } else { 
-        chroma_url 
+    let chroma_url = if chroma_url.is_empty() {
+        "http://localhost:8000".to_string()
+    } else {
+        chroma_url
     };
     let chroma_client = Arc::new(ChromaClient::new(chroma_url.clone()));
 
     // Create embedding service (Ollama + Chroma)
     let ollama_url = config.read().await.ollama_url.clone();
-    let ollama_url = if ollama_url.is_empty() { 
-        "http://localhost:11434".to_string() 
-    } else { 
-        ollama_url 
+    let ollama_url = if ollama_url.is_empty() {
+        "http://localhost:11434".to_string()
+    } else {
+        ollama_url
     };
     let embedding_service = Arc::new(EmbeddingService::new(
         ollama_url.clone(),
@@ -64,19 +64,22 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize LLM Bridge client (MODULE 6 integration)
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
-    
+
     // Verify LLM Bridge health on startup
     match llm_bridge.health_check().await {
         Ok(true) => {
             tracing::info!("✅ LLM Bridge connected successfully");
-            
+
             // List available models
             if let Ok(models) = llm_bridge.list_models().await {
                 tracing::info!("📊 LLM Bridge models: {}", models.join(", "));
             }
-        },
+        }
         Ok(false) => tracing::warn!("⚠️ LLM Bridge health check returned false"),
-        Err(e) => tracing::warn!("⚠️ LLM Bridge not available: {}. Intelligence features will be limited.", e),
+        Err(e) => tracing::warn!(
+            "⚠️ LLM Bridge not available: {}. Intelligence features will be limited.",
+            e
+        ),
     }
 
     // Create Memory Orchestrator with LLM Bridge (MODULE 5 + 6 integration)
@@ -105,6 +108,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("🤖 Smart Query: POST /api/v1/query/smart");
 
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }

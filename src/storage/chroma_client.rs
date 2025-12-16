@@ -69,13 +69,9 @@ impl ChromaClient {
     }
 
     /// Ensure collection exists, create if not
-    pub async fn ensure_collection(
-        &self,
-        name: &str,
-        dimension: i32,
-    ) -> Result<(), ChromaError> {
+    pub async fn ensure_collection(&self, name: &str, dimension: i32) -> Result<(), ChromaError> {
         let url = format!("{}/api/v1/collections", self.base_url);
-        
+
         // Check if collection exists
         let collections: Vec<Value> = self
             .client
@@ -85,25 +81,23 @@ impl ChromaClient {
             .error_for_status()?
             .json()
             .await?;
-        
-        let exists = collections
-            .iter()
-            .any(|c| c["name"] == name);
-        
+
+        let exists = collections.iter().any(|c| c["name"] == name);
+
         if !exists {
             tracing::info!("Creating Chroma collection: {}", name);
             self.create_collection(name, dimension).await?;
         } else {
             tracing::debug!("Collection {} already exists", name);
         }
-        
+
         Ok(())
     }
 
     /// Create a new collection with specified dimension
     async fn create_collection(&self, name: &str, dimension: i32) -> Result<(), ChromaError> {
         let url = format!("{}/api/v1/collections", self.base_url);
-        
+
         let body = json!({
             "name": name,
             "metadata": {
@@ -111,14 +105,9 @@ impl ChromaClient {
                 "dimension": dimension
             }
         });
-        
-        let response = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await?;
-        
+
+        let response = self.client.post(&url).json(&body).send().await?;
+
         match response.status() {
             StatusCode::OK | StatusCode::CREATED => {
                 tracing::info!("Created collection {} with dimension {}", name, dimension);
@@ -126,7 +115,10 @@ impl ChromaClient {
             }
             status => {
                 let message = response.text().await?;
-                Err(ChromaError::ApiError { status: status.as_u16(), message })
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
             }
         }
     }
@@ -153,12 +145,7 @@ impl ChromaClient {
             documents: document.map(|d| vec![d]),
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&request).send().await?;
 
         match response.status() {
             StatusCode::OK => {
@@ -167,7 +154,10 @@ impl ChromaClient {
             }
             status => {
                 let message = response.text().await?;
-                Err(ChromaError::ApiError { status: status.as_u16(), message })
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
             }
         }
     }
@@ -193,12 +183,7 @@ impl ChromaClient {
             include: vec!["distances".to_string(), "metadatas".to_string()],
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&url).json(&request).send().await?;
 
         match response.status() {
             StatusCode::OK => {
@@ -207,7 +192,10 @@ impl ChromaClient {
             }
             status => {
                 let message = response.text().await?;
-                Err(ChromaError::ApiError { status: status.as_u16(), message })
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
             }
         }
     }
@@ -231,7 +219,10 @@ impl ChromaClient {
             }
             status => {
                 let message = response.text().await?;
-                Err(ChromaError::ApiError { status: status.as_u16(), message })
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
             }
         }
     }
@@ -239,9 +230,9 @@ impl ChromaClient {
     /// Get collection ID by name
     async fn get_collection_id(&self, name: &str) -> Result<String, ChromaError> {
         let url = format!("{}/api/v1/collections/{}", self.base_url, name);
-        
+
         let response = self.client.get(&url).send().await?;
-        
+
         match response.status() {
             StatusCode::OK => {
                 let collection: Value = response.json().await?;
@@ -253,22 +244,29 @@ impl ChromaClient {
             StatusCode::NOT_FOUND => Err(ChromaError::CollectionNotFound(name.to_string())),
             status => {
                 let message = response.text().await?;
-                Err(ChromaError::ApiError { status: status.as_u16(), message })
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
             }
         }
     }
 
     /// Parse query results into ScoredResult structs
-    fn parse_query_results(&self, response: ChromaQueryResponse) -> Result<Vec<ScoredResult>, ChromaError> {
+    fn parse_query_results(
+        &self,
+        response: ChromaQueryResponse,
+    ) -> Result<Vec<ScoredResult>, ChromaError> {
         let mut results = Vec::new();
 
         if let Some(ids) = response.ids.first() {
-            let distances = response.distances.first().ok_or_else(|| {
-                ChromaError::ApiError {
+            let distances = response
+                .distances
+                .first()
+                .ok_or_else(|| ChromaError::ApiError {
                     status: 500,
                     message: "No distances returned from Chroma".to_string(),
-                }
-            })?;
+                })?;
 
             let metadatas = response.metadatas.as_ref();
 
@@ -301,8 +299,8 @@ impl ChromaClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn test_ensure_collection_creates_if_not_exists() {

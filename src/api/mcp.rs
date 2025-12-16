@@ -1,20 +1,10 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Json,
-    Router,
-    routing::post,
-};
+use crate::api::routes::AppState;
+use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
-use crate::api::routes::AppState;
 
-use crate::{
-    api::dto::*,
-    auth::McpAuth,
-    models::internal::Conversation,
-};
+use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpToolResponse {
@@ -44,7 +34,11 @@ pub async fn memory_store(
         updated_at: now,
     };
 
-    state.repo.create(conv).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .repo
+        .create(conv)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(McpToolResponse {
         success: true,
@@ -67,13 +61,11 @@ pub async fn memory_query(
     Json(args): Json<MemoryQueryArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     // Mock results until Module 5
-    let results = vec![
-        serde_json::json!({
-            "conversation_id": Uuid::new_v4(),
-            "relevance_score": 0.85,
-            "summary": "Mock result for: ".to_string() + &args.query,
-        })
-    ];
+    let results = vec![serde_json::json!({
+        "conversation_id": Uuid::new_v4(),
+        "relevance_score": 0.85,
+        "summary": "Mock result for: ".to_string() + &args.query,
+    })];
 
     Ok(Json(McpToolResponse {
         success: true,
@@ -93,7 +85,10 @@ pub async fn memory_get_context(
     State(state): State<AppState>,
     Json(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
-    let conv = state.repo.find_by_id(args.conversation_id).await
+    let conv = state
+        .repo
+        .find_by_id(args.conversation_id)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match conv {

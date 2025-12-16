@@ -5,18 +5,18 @@ use validator::Validate;
 pub struct Config {
     #[validate(range(min = 1024, max = 65535))]
     pub server_port: u16,
-    
+
     #[validate(length(min = 32))]
     pub mcp_api_key: String,
-    
+
     pub database_url: String,
     pub ollama_url: String,
     pub chroma_url: String,
     pub embedding_model: String,
-    
+
     #[validate(range(min = 1, max = 100))]
     pub max_connections: u32,
-    
+
     pub log_level: String,
     pub summarization_enabled: bool,
     pub summarization_model: String,
@@ -39,7 +39,7 @@ impl Config {
             .add_source(config::File::with_name("config").required(false))
             .add_source(config::Environment::with_prefix("SEKHA").separator("__"))
             .build()?;
-        
+
         settings.try_deserialize()
     }
 }

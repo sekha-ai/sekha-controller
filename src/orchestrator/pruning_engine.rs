@@ -1,11 +1,11 @@
+use crate::models::internal::Conversation;
+use crate::services::llm_bridge_client::LlmBridgeClient;
+use crate::storage::repository::{ConversationRepository, RepositoryError};
+use chrono::Duration;
+use chrono::Utc;
 use sea_orm::EntityTrait;
 use std::sync::Arc;
 use uuid::Uuid;
-use chrono::Utc;
-use chrono::Duration;
-use crate::storage::repository::{ConversationRepository, RepositoryError};
-use crate::models::internal::Conversation;
-use crate::services::llm_bridge_client::LlmBridgeClient;
 
 pub struct PruningEngine {
     repo: Arc<dyn ConversationRepository + Send + Sync>,
@@ -26,16 +26,18 @@ impl PruningEngine {
         importance_threshold: f32,
     ) -> Result<Vec<PruningSuggestion>, RepositoryError> {
         let cutoff = Utc::now().naive_utc() - Duration::days(threshold_days);
-        
-        let candidates = self.find_pruning_candidates(cutoff, importance_threshold).await?;
-        
+
+        let candidates = self
+            .find_pruning_candidates(cutoff, importance_threshold)
+            .await?;
+
         let mut suggestions = Vec::new();
-        
+
         for conv in candidates {
             let suggestion = self.generate_suggestion_for_conversation(&conv).await?;
             suggestions.push(suggestion);
         }
-        
+
         Ok(suggestions)
     }
 
@@ -45,15 +47,15 @@ impl PruningEngine {
         _importance_threshold: f32,
     ) -> Result<Vec<Conversation>, RepositoryError> {
         use crate::storage::entities::conversations;
-        use sea_orm::{QueryFilter, ColumnTrait};
-        
+        use sea_orm::{ColumnTrait, QueryFilter};
+
         let models = conversations::Entity::find()
             .filter(conversations::Column::UpdatedAt.lt(cutoff.to_string()))
             .filter(conversations::Column::Status.eq("active"))
             .all(self.repo.get_db())
             .await
             .map_err(RepositoryError::DbError)?;
-        
+
         Ok(models.into_iter().map(Conversation::from).collect())
     }
 
@@ -63,9 +65,9 @@ impl PruningEngine {
     ) -> Result<PruningSuggestion, RepositoryError> {
         let message_count = self.repo.count_messages_in_conversation(conv.id).await?;
         let token_estimate = message_count * 200;
-        
+
         let preview = self.generate_preview(conv).await?;
-        
+
         let suggestion = PruningSuggestion {
             conversation_id: conv.id,
             conversation_label: conv.label.clone(),
@@ -80,17 +82,24 @@ impl PruningEngine {
                 "keep".to_string()
             },
         };
-        
+
         Ok(suggestion)
     }
 
     async fn generate_preview(&self, conv: &Conversation) -> Result<String, RepositoryError> {
         let recent_messages = self.repo.find_recent_messages(conv.id, 5).await?;
-        
-        let messages_text: Vec<String> = recent_messages.iter()
-            .map(|m| format!("{}: {}", m.role, m.content.chars().take(100).collect::<String>()))
+
+        let messages_text: Vec<String> = recent_messages
+            .iter()
+            .map(|m| {
+                format!(
+                    "{}: {}",
+                    m.role,
+                    m.content.chars().take(100).collect::<String>()
+                )
+            })
             .collect();
-        
+
         let prompt = format!(
             "Summarize what would be lost if this conversation were archived. \
             Focus on unique information, decisions, or context that might be needed later.\n\n\
@@ -99,16 +108,13 @@ impl PruningEngine {
             conv.label,
             messages_text.join("\n")
         );
-        
-        let preview = self.llm_bridge.summarize(
-            vec![prompt],
-            "daily",
-            None,
-            Some(50),
-        ).await.map_err(|e| {
-            RepositoryError::EmbeddingError(format!("LLM Bridge error: {}", e))
-        })?;
-        
+
+        let preview = self
+            .llm_bridge
+            .summarize(vec![prompt], "daily", None, Some(50))
+            .await
+            .map_err(|e| RepositoryError::EmbeddingError(format!("LLM Bridge error: {}", e)))?;
+
         Ok(preview)
     }
 }

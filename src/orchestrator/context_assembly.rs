@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use crate::storage::repository::{ConversationRepository, RepositoryError};
-use crate::models::internal::{Message, Conversation};
+use crate::models::internal::{Conversation, Message};
 use crate::storage::entities::messages;
-use sea_orm::{EntityTrait, ColumnTrait};
-use uuid::Uuid;
+use crate::storage::repository::{ConversationRepository, RepositoryError};
 use chrono::NaiveDateTime;
+use sea_orm::{ColumnTrait, EntityTrait};
+use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct ContextAssembler {
     repo: Arc<dyn ConversationRepository + Send + Sync>,
@@ -24,16 +24,18 @@ impl ContextAssembler {
     ) -> Result<Vec<Message>, RepositoryError> {
         // Phase 1: Recall - Get candidate messages
         let candidates = self.recall_candidates(query, &preferred_labels).await?;
-        
+
         // Phase 2: Ranking - Score each candidate
-        let mut ranked = self.rank_candidates(candidates, query, &preferred_labels).await?;
-        
+        let mut ranked = self
+            .rank_candidates(candidates, query, &preferred_labels)
+            .await?;
+
         // Phase 3: Assembly - Build context window within budget
         let context = self.assemble_context(&mut ranked, context_budget).await?;
-        
+
         // Phase 4: Enhancement - Add citations and summaries
         let enhanced_context = self.enhance_context(context).await?;
-        
+
         Ok(enhanced_context)
     }
 
@@ -44,7 +46,7 @@ impl ContextAssembler {
         preferred_labels: &[String],
     ) -> Result<Vec<CandidateMessage>, RepositoryError> {
         let mut candidates = Vec::new();
-        
+
         // 1. Semantic search from Chroma (top 200)
         let semantic_results = self.repo.semantic_search(query, 200, None).await?;
         for result in semantic_results {
@@ -58,15 +60,17 @@ impl ContextAssembler {
                 importance: 5.0, // Default, will be refined
             });
         }
-        
+
         // 2. Add pinned conversations (always included)
         let pinned = self.get_pinned_messages().await?;
         candidates.extend(pinned);
-        
+
         // 3. Add recent messages from preferred labels (last 7 days)
-        let recent = self.get_recent_labeled_messages(preferred_labels, 7).await?;
+        let recent = self
+            .get_recent_labeled_messages(preferred_labels, 7)
+            .await?;
         candidates.extend(recent);
-        
+
         Ok(candidates)
     }
 
@@ -80,21 +84,22 @@ impl ContextAssembler {
         for candidate in &mut candidates {
             // Calculate recency score (exponential decay, 7-day half-life)
             let recency_score = self.calculate_recency_score(&candidate.timestamp);
-            
+
             // Calculate label match score
             let label_score = if preferred_labels.contains(&candidate.label) {
                 5.0
             } else {
                 0.0
             };
-            
+
             // Composite score: 50% importance, 30% recency, 20% label match
-            candidate.score = (candidate.importance * 0.5) + (recency_score * 0.3) + (label_score * 0.2);
+            candidate.score =
+                (candidate.importance * 0.5) + (recency_score * 0.3) + (label_score * 0.2);
         }
-        
+
         // Sort by composite score (highest first)
         candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        
+
         Ok(candidates)
     }
 
@@ -107,24 +112,24 @@ impl ContextAssembler {
         let mut context = Vec::new();
         let mut token_count = 0;
         let target_tokens = (context_budget as f32 * 0.85) as usize; // Reserve 15% for system prompt
-        
+
         // Estimate: 1 token ≈ 4 characters
         for candidate in candidates {
             if token_count >= target_tokens {
                 break;
             }
-            
+
             // Fetch full message from SQLite
             if let Some(message) = self.repo.find_message_by_id(candidate.message_id).await? {
                 let msg_tokens = message.content.len() / 4;
-                
+
                 if token_count + msg_tokens <= target_tokens {
                     context.push(message);
                     token_count += msg_tokens;
                 }
             }
         }
-        
+
         Ok(context)
     }
 
@@ -137,7 +142,8 @@ impl ContextAssembler {
             // Fetch conversation metadata for citation
             if let Some(conversation) = self.repo.find_by_id(message.conversation_id).await? {
                 // Parse existing metadata string to Value
-                let mut meta: serde_json::Value = message.metadata
+                let mut meta: serde_json::Value = message
+                    .metadata
                     .as_ref()
                     .and_then(|s| serde_json::from_str(s).ok())
                     .unwrap_or_else(|| serde_json::json!({}));
@@ -153,7 +159,7 @@ impl ContextAssembler {
                 message.metadata = Some(meta.to_string());
             }
         }
-        
+
         Ok(context)
     }
 
@@ -166,18 +172,19 @@ impl ContextAssembler {
     /// Helper: Fetch a single message by ID
     async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
-        
+
         let model = message_entity::Entity::find_by_id(id.to_string())
             .one(self.repo.get_db()) // Need to access db directly
             .await
             .map_err(RepositoryError::DbError)?;
-            
+
         Ok(model.map(|m| Message {
             id: Uuid::parse_str(&m.id).unwrap(),
             conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
             role: m.role,
             content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+                .unwrap(),
             embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
             metadata: m.metadata.and_then(|meta| serde_json::from_str(&meta).ok()),
         }))

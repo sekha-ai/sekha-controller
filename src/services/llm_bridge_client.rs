@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use async_trait::async_trait;
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum LlmBridgeError {
@@ -38,7 +38,8 @@ impl LlmBridgeClient {
             model: model.map(|s| s.to_string()),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/embed", self.base_url))
             .json(&request)
             .send()
@@ -69,7 +70,8 @@ impl LlmBridgeClient {
             max_words: max_words.unwrap_or(200),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/summarize", self.base_url))
             .json(&request)
             .send()
@@ -98,7 +100,8 @@ impl LlmBridgeClient {
             model: model.map(|s| s.to_string()),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/score_importance", self.base_url))
             .json(&request)
             .send()
@@ -116,8 +119,12 @@ impl LlmBridgeClient {
     }
 
     pub async fn list_models(&self) -> Result<Vec<String>, LlmBridgeError> {
-        let response = self.client
-            .get(&format!("{}/api/tags", self.base_url.replace("5001", "11434")))
+        let response = self
+            .client
+            .get(&format!(
+                "{}/api/tags",
+                self.base_url.replace("5001", "11434")
+            ))
             .send()
             .await?;
 
@@ -140,7 +147,8 @@ impl LlmBridgeClient {
     }
 
     pub async fn health_check(&self) -> Result<bool, LlmBridgeError> {
-        let response = self.client
+        let response = self
+            .client
             .get(&format!("{}/health", self.base_url))
             .send()
             .await?;

@@ -3,19 +3,15 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     routing::{delete, get, post, put},
-    Router, Json,
+    Json, Router,
 };
 use serde::Deserialize;
+use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use serde_json::{json, Value};
 
-use crate::{
-    api::dto::*,
-    config::Config,
-    storage::repository::ConversationRepository,
-};
+use crate::{api::dto::*, config::Config, storage::repository::ConversationRepository};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -46,13 +42,13 @@ async fn create_conversation(
 ) -> Result<(StatusCode, Json<ConversationResponse>), (StatusCode, Json<ErrorResponse>)> {
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
-    
-    let word_count: i32 = req.messages.iter()
-        .map(|m| m.content.len() as i32)
-        .sum();
+
+    let word_count: i32 = req.messages.iter().map(|m| m.content.len() as i32).sum();
 
     // Map MessageDto to NewMessage
-    let new_messages: Vec<crate::models::internal::NewMessage> = req.messages.into_iter()
+    let new_messages: Vec<crate::models::internal::NewMessage> = req
+        .messages
+        .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
             content: m.content,
@@ -76,15 +72,19 @@ async fn create_conversation(
         messages: new_messages,
     };
 
-    state.repo.create_with_messages(new_conv).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .create_with_messages(new_conv)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
 
     Ok((
         StatusCode::CREATED,
@@ -138,8 +138,8 @@ async fn get_conversation(
             Json(ErrorResponse {
                 error: "Conversation not found".to_string(),
                 code: 404,
-            })),
-        ),
+            }),
+        )),
     }
 }
 
@@ -189,15 +189,19 @@ async fn update_conversation_label(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLabelRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state.repo.update_label(id, &req.label, &req.folder).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 404,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .update_label(id, &req.label, &req.folder)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 404,
+                }),
+            )
+        })?;
 
     Ok(StatusCode::OK)
 }
@@ -267,16 +271,18 @@ async fn semantic_query(
 
     let limit = req.limit.unwrap_or(10) as usize;
     let offset = req.offset.unwrap_or(0);
-    
+
     // Calculate page number
     let page = if limit > 0 {
         (offset as f64 / limit as f64).ceil() as u32
     } else {
         1
     };
-    
+
     // Use repository's semantic search (now powered by Chroma)
-    let results = state.repo.semantic_search(&req.query, limit, req.filters)
+    let results = state
+        .repo
+        .semantic_search(&req.query, limit, req.filters)
         .await
         .map_err(|e| {
             (
@@ -350,7 +356,7 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
     });
 
     let status = if all_healthy { "healthy" } else { "unhealthy" };
-    
+
     Json(json!({
         "status": status,
         "timestamp": chrono::Utc::now().to_rfc3339(),
@@ -361,7 +367,8 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
 /// Helper to check Ollama health (soft check, doesn't fail health endpoint)
 async fn check_ollama(url: &str) -> bool {
     let client = reqwest::Client::new();
-    client.get(format!("{}/api/tags", url))
+    client
+        .get(format!("{}/api/tags", url))
         .send()
         .await
         .map(|r| r.status().is_success())
@@ -373,7 +380,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/conversations", post(create_conversation))
         .route("/api/v1/conversations/{id}", get(get_conversation))
         .route("/api/v1/conversations", get(list_conversations))
-        .route("/api/v1/conversations/{id}/label", put(update_conversation_label))
+        .route(
+            "/api/v1/conversations/{id}/label",
+            put(update_conversation_label),
+        )
         .route("/api/v1/conversations/{id}", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
         .route("/api/v1/query", post(semantic_query))
