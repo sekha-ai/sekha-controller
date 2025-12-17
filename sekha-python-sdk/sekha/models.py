@@ -29,37 +29,41 @@ class SummaryLevel(str, Enum):
 
 class MessageDto(BaseModel):
     """Message data transfer object"""
+
     role: MessageRole
     content: str
     metadata: Optional[Dict[str, Any]] = None
-    
+
     model_config = ConfigDict(use_enum_values=True)
 
 
 class NewConversation(BaseModel):
     """Create a new conversation"""
+
     label: str = Field(..., min_length=1, max_length=200)
     folder: Optional[str] = Field(default="/", max_length=200)
     messages: List[MessageDto] = Field(..., min_length=1)
     metadata: Optional[Dict[str, Any]] = None
-    
+
     model_config = ConfigDict(use_enum_values=True)
 
 
 class ConversationResponse(BaseModel):
     """Conversation response from API"""
+
     id: str
     label: str
     folder: str
     status: ConversationStatus
     message_count: int
     created_at: datetime
-    
+
     model_config = ConfigDict(use_enum_values=True)
 
 
 class QueryRequest(BaseModel):
     """Smart query request"""
+
     query: str = Field(..., min_length=1)
     limit: Optional[int] = Field(default=10, ge=1, le=1000)
     filters: Optional[Dict[str, Any]] = None
@@ -67,6 +71,7 @@ class QueryRequest(BaseModel):
 
 class QueryResult(BaseModel):
     """Single search result"""
+
     conversation_id: str
     message_id: str
     score: float
@@ -79,6 +84,7 @@ class QueryResult(BaseModel):
 
 class QueryResponse(BaseModel):
     """Smart query response"""
+
     results: List[QueryResult]
     total: int
     page: int
@@ -87,6 +93,7 @@ class QueryResponse(BaseModel):
 
 class LabelSuggestion(BaseModel):
     """Auto-label suggestion"""
+
     label: str
     confidence: float
     is_existing: bool
@@ -95,6 +102,7 @@ class LabelSuggestion(BaseModel):
 
 class PruningSuggestion(BaseModel):
     """Intelligent pruning suggestion"""
+
     conversation_id: str
     conversation_label: str
     last_accessed: datetime
@@ -107,6 +115,7 @@ class PruningSuggestion(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     timestamp: str
     checks: Dict[str, Any]
@@ -114,6 +123,7 @@ class HealthResponse(BaseModel):
 
 class ImportanceScore(BaseModel):
     """Message importance score"""
+
     score: float = Field(..., ge=1.0, le=10.0)
     reasoning: Optional[str] = None
     model: str
@@ -121,6 +131,7 @@ class ImportanceScore(BaseModel):
 
 class SummaryResponse(BaseModel):
     """Generated summary"""
+
     summary: str
     level: SummaryLevel
     model: str

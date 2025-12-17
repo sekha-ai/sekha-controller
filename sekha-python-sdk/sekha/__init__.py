@@ -14,7 +14,6 @@ __all__ = [
     "SekhaClient",
     "SyncSekhaClient",
     "ClientConfig",
-    
     # Models
     "MessageRole",
     "ConversationStatus",
@@ -30,7 +29,6 @@ __all__ = [
     "HealthResponse",
     "ImportanceScore",
     "SummaryResponse",
-    
     # Errors
     "SekhaError",
     "SekhaAPIError",
