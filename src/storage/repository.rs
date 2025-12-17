@@ -46,6 +46,7 @@ pub trait ConversationRepository {
         new_folder: &str,
     ) -> Result<(), RepositoryError>;
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
+    async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError>;
     async fn semantic_search(
         &self,
         query: &str,
@@ -62,8 +63,8 @@ pub trait ConversationRepository {
     async fn count_messages_in_conversation(&self, conv_id: Uuid) -> Result<u64, RepositoryError>;
     async fn find_recent_messages(
         &self,
-        conv_id: Uuid,
-        limit: u64,
+        conversation_id: Uuid,
+        limit: usize,
     ) -> Result<Vec<Message>, RepositoryError>;
     async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError>;
     async fn get_conversation_messages(
@@ -347,6 +348,9 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
+        use crate::storage::entities::conversations;
+        use sea_orm::{ActiveModelTrait, EntityTrait};
+
         let model = conversations::Entity::find_by_id(id.to_string())
             .one(&self.db)
             .await?
@@ -354,6 +358,22 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let mut active_model: conversations::ActiveModel = model.into();
         active_model.status = Set(status.to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+
+        active_model.update(&self.db).await?;
+        Ok(())
+    }
+
+    async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError> {
+        use crate::storage::entities::conversations;
+
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Conversation not found".to_string()))?;
+
+        let mut active_model: conversations::ActiveModel = model.into();
+        active_model.importance_score = Set(score as i64);
         active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
 
         active_model.update(&self.db).await?;
@@ -397,12 +417,16 @@ impl ConversationRepository for SeaOrmConversationRepository {
         }))
     }
 
-    async fn count_messages_in_conversation(&self, conv_id: Uuid) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::messages as message_entity;
+    async fn count_messages_in_conversation(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<u64, RepositoryError> {
+        use crate::storage::entities::messages;
+        use sea_orm::EntityTrait;
 
-        let count = message_entity::Entity::find()
-            .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
-            .count(self.get_db())
+        let count = messages::Entity::find()
+            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .count(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
 
@@ -411,16 +435,16 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
     async fn find_recent_messages(
         &self,
-        conv_id: Uuid,
-        limit: u64,
+        conversation_id: Uuid,
+        limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
 
         let models = message_entity::Entity::find()
-            .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
+            .filter(message_entity::Column::ConversationId.eq(conversation_id.to_string()))
             .order_by_desc(message_entity::Column::Timestamp)
-            .limit(limit)
-            .all(self.get_db())
+            .limit(limit as u64)
+            .all(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
 
@@ -451,7 +475,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .column(conversations::Column::Label)
             .distinct()
             .into_tuple()
-            .all(self.get_db())
+            .all(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
 
@@ -466,7 +490,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let models = message_entity::Entity::find()
             .filter(message_entity::Column::ConversationId.eq(conv_id.to_string()))
-            .all(self.get_db())
+            .all(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
 
