@@ -202,6 +202,94 @@ class SekhaClient:
                 raise SekhaNotFoundError(f"Conversation {conversation_id} not found")
             raise SekhaAPIError("Failed to update label", e.response.status_code, e.response.text)
     
+    async def pin(self, conversation_id: str) -> None:
+        """
+        Pin a conversation (status = 'pinned')
+        
+        Args:
+            conversation_id: UUID of the conversation to pin
+            
+        Raises:
+            SekhaNotFoundError: Conversation not found
+            SekhaAPIError: API returned error
+        """
+        await self._update_status(conversation_id, "pinned")
+
+    async def archive(self, conversation_id: str) -> None:
+        """
+        Archive a conversation (status = 'archived')
+        
+        Args:
+            conversation_id: UUID of the conversation to archive
+            
+        Raises:
+            SekhaNotFoundError: Conversation not found
+            SekhaAPIError: API returned error
+        """
+        await self._update_status(conversation_id, "archived")
+
+    async def export(
+        self,
+        label: Optional[str] = None,
+        format: str = "markdown"
+    ) -> str:
+        """
+        Export conversations to specified format
+        
+        Args:
+            label: Optional label filter (exports all if None)
+            format: "markdown" or "json"
+            
+        Returns:
+            Exported content as string
+            
+        Raises:
+            SekhaValidationError: Invalid format parameter
+            SekhaAPIError: API returned error
+        """
+        await self.rate_limiter.acquire()
+        
+        params = {"format": format}
+        if label:
+            params["label"] = label
+        
+        try:
+            response = await self.client.get(
+                "/api/v1/export",
+                params=params,
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            return data["content"]
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400:
+                raise SekhaValidationError("Invalid export parameters", e.response.text)
+            raise SekhaAPIError("Export failed", e.response.status_code, e.response.text)
+        except Exception as e:
+            raise SekhaError(f"Export failed: {e}")
+
+    async def _update_status(self, conversation_id: str, status: str) -> None:
+        """Internal method to update conversation status"""
+        await self.rate_limiter.acquire()
+        
+        try:
+            response = await self.client.put(
+                f"/api/v1/conversations/{conversation_id}/status",
+                json={"status": status},
+            )
+            response.raise_for_status()
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise SekhaNotFoundError(f"Conversation {conversation_id} not found")
+            elif e.response.status_code == 400:
+                raise SekhaValidationError("Invalid status", e.response.text)
+            raise SekhaAPIError("Status update failed", e.response.status_code, e.response.text)
+        except Exception as e:
+            raise SekhaError(f"Status update failed: {e}")
+
     async def delete_conversation(self, conversation_id: str) -> None:
         """Delete a conversation"""
         await self.rate_limiter.acquire()
@@ -378,7 +466,7 @@ class SekhaClient:
         """Internal method to update conversation status"""
         # Implementation here
     
-    
+
     # ============== MCP Integration (future) ==============
     
     async def get_mcp_tools(self) -> List[Dict[str, Any]]:

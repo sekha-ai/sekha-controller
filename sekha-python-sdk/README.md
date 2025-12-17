@@ -127,6 +127,8 @@ async with SekhaClient(config) as client:
     with open("backup.json", "w") as f:
         f.write(json_data)
 
+    # Export without label filter (includes all conversations)
+    all_markdown = await client.export(format="markdown")
 
 ## Development
 
