@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sekha-cli"
+version = "0.1.0"
+description = "Command-line interface for Sekha AI Memory Controller"
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+authors = [
+    {name = "Sekha Contributors"}
+]
+dependencies = [
+    "sekha-python-sdk>=0.1.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0"
+]
+
+[project.scripts]
+sekha = "sekha_cli.main:cli"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0"
+]
