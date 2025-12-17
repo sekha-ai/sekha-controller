@@ -1,0 +1,48 @@
+{
+  "name": "sekha-vscode",
+  "displayName": "Sekha AI Memory",
+  "description": "Save and search AI conversations with Sekha",
+  "version": "0.1.0",
+  "publisher": "sekha-ai",
+  "license": "AGPL-3.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sekha.search",
+        "title": "Sekha: Search Memory"
+      }
+    ],
+    "configuration": {
+      "title": "Sekha",
+      "properties": {
+        "sekha.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "Sekha Controller API URL"
+        },
+        "sekha.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Sekha API Key"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
