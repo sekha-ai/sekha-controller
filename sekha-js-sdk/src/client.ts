@@ -88,26 +88,20 @@ export class MemoryController {
     return result.content;
   }
 
-  exportStream(options: ExportOptions = {}): ReadableStream<Uint8Array> {
-    const encoder = new TextEncoder();
-    
-    return new ReadableStream({
-      start: async (controller) => {
-        try {
-          const content = await this.export(options);
-          const chunks = this.chunkString(content, 1024);
-          
-          for (const chunk of chunks) {
-            controller.enqueue(encoder.encode(chunk));
-          }
-          
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
+  exportStream(options: ExportOptions): AsyncIterable<string> {
+  const self = this;
+  
+  return {
+    [Symbol.asyncIterator]: async function* () {
+      const content = await self.export(options);
+      const chunkSize = 1024;
+      
+      for (let i = 0; i < content.length; i += chunkSize) {
+        yield content.slice(i, Math.min(i + chunkSize, content.length));
       }
-    });
-  }
+    }
+  };
+}
 
   private chunkString(str: string, size: number): string[] {
     const chunks: string[] = [];
@@ -119,8 +113,9 @@ export class MemoryController {
 
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.config.baseURL}${endpoint}`;
-    const controller = new AbortController();
     
+    // Create abort controller with timeout
+    const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
     
     try {
@@ -131,7 +126,7 @@ export class MemoryController {
           'Authorization': `Bearer ${this.config.apiKey}`,
           ...options.headers,
         },
-        signal: options.signal || controller.signal,
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -151,7 +146,7 @@ export class MemoryController {
       }
       
       if (error instanceof SekhaError) throw error;
-      throw new SekhaError(`Request failed: ${error.message}`);
+      throw new SekhaError(`Request failed: ${error}`);
     }
   }
 
