@@ -1,5 +1,4 @@
 import { Conversation, MemoryConfig } from '../src/types';
-import { jest } from '@jest/globals';
 
 export const mockConfig: MemoryConfig = {
   baseURL: 'http://localhost:8080',
@@ -29,14 +28,14 @@ export function createMockResponse(data: any, status = 200): Promise<Response> {
     status,
     statusText: status === 200 ? 'OK' : 'Error',
     headers: new Headers({ 'Content-Type': 'application/json' }),
-    json: jest.fn().mockResolvedValue(data),
-    text: jest.fn().mockResolvedValue(body),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    clone: jest.fn(),
+    json: async () => data,
+    text: async () => body,
+    arrayBuffer: async () => new ArrayBuffer(0),
+    blob: async () => new Blob(),
+    clone: () => response,
     body: null,
     bodyUsed: false,
-    formData: jest.fn().mockResolvedValue(new FormData()),
+    formData: async () => new FormData(),
     type: 'basic',
     url: '',
   } as Response;
@@ -51,14 +50,14 @@ export function createMockErrorResponse(status: number, message: string): Promis
     status,
     statusText: message,
     headers: new Headers({ 'Content-Type': 'application/json' }),
-    json: jest.fn().mockResolvedValue(errorBody),
-    text: jest.fn().mockResolvedValue(JSON.stringify(errorBody)),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    clone: jest.fn(),
+    json: async () => errorBody,
+    text: async () => JSON.stringify(errorBody),
+    arrayBuffer: async () => new ArrayBuffer(0),
+    blob: async () => new Blob(),
+    clone: () => response,
     body: null,
     bodyUsed: false,
-    formData: jest.fn().mockResolvedValue(new FormData()),
+    formData: async () => new FormData(),
     type: 'basic',
     url: '',
   } as Response;
