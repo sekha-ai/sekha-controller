@@ -11,12 +11,11 @@ use sekha_controller::{
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::chroma_client::ChromaClient,
-    storage::{self, ConversationRepository, SeaOrmConversationRepository},
+    storage::{self, SeaOrmConversationRepository},
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
-use uuid::Uuid;
 
 // ============================================
 // Test Helpers
