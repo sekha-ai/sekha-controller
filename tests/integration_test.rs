@@ -1,24 +1,28 @@
 // tests/integration_test.rs - FULLY CORRECTED
 
-use sekha_controller::{
-    storage::{init_db, SeaOrmConversationRepository, ConversationRepository, chroma_client::ChromaClient},
-    services::embedding_service::EmbeddingService,
-    models::internal::{NewConversation, NewMessage},
-    api::routes::{create_router, AppState},
-    auth::McpAuth,
-    config::Config,
-    orchestrator::{MemoryOrchestrator, context_assembly::ContextAssembler, importance_engine::ImportanceEngine},
-};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
-use tower::ServiceExt;
-use uuid::Uuid;
+use sekha_controller::{
+    api::routes::{create_router, AppState},
+    auth::McpAuth,
+    config::Config,
+    models::internal::{NewConversation, NewMessage},
+    orchestrator::{
+        context_assembly::ContextAssembler, importance_engine::ImportanceEngine, MemoryOrchestrator,
+    },
+    services::embedding_service::EmbeddingService,
+    storage::{
+        chroma_client::ChromaClient, init_db, ConversationRepository, SeaOrmConversationRepository,
+    },
+};
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::json;
+use tower::ServiceExt;
+use uuid::Uuid;
 
 // ============================================
 // Test Fixtures and Helpers
@@ -52,28 +56,36 @@ async fn create_test_config() -> Arc<RwLock<Config>> {
 async fn create_test_app() -> Router {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
-    
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
         orchestrator: Arc::new(MemoryOrchestrator::new(repo)),
     };
-    
+
     create_router(state)
 }
 
 async fn create_test_mcp_app() -> Router {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
-    
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
         orchestrator: Arc::new(MemoryOrchestrator::new(repo)),
     };
-    
+
     sekha_controller::api::mcp::create_mcp_router(state)
 }
 
@@ -115,8 +127,12 @@ async fn test_repository_create_with_messages() {
 
     let conv = create_test_conversation();
     let result = repo.create_with_messages(conv).await;
-    
-    assert!(result.is_ok(), "Failed to create conversation with messages: {:?}", result);
+
+    assert!(
+        result.is_ok(),
+        "Failed to create conversation with messages: {:?}",
+        result
+    );
 }
 
 #[tokio::test]
@@ -130,8 +146,11 @@ async fn test_repository_semantic_search() {
     let conv_id = repo.create_with_messages(conv).await.unwrap();
 
     // Search for it
-    let results = repo.semantic_search("test message", 10, None).await.unwrap();
-    
+    let results = repo
+        .semantic_search("test message", 10, None)
+        .await
+        .unwrap();
+
     assert!(!results.is_empty(), "Search should return results");
     assert_eq!(results[0].conversation_id, conv_id);
 }
@@ -198,8 +217,10 @@ async fn test_api_create_conversation() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::CREATED);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let body_str = String::from_utf8(body.to_vec()).unwrap();
     assert!(body_str.contains("API Test"));
     assert!(body_str.contains("conversation_id"));
@@ -226,7 +247,9 @@ async fn test_api_get_conversation() {
         .unwrap();
 
     assert_eq!(create_response.status(), StatusCode::CREATED);
-    let body = axum::body::to_bytes(create_response.into_body(), 1024).await.unwrap();
+    let body = axum::body::to_bytes(create_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["id"].as_str().unwrap();
 
@@ -266,7 +289,9 @@ async fn test_api_update_conversation_label() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(create_response.into_body(), 1024).await.unwrap();
+    let body = axum::body::to_bytes(create_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["id"].as_str().unwrap();
 
@@ -278,7 +303,9 @@ async fn test_api_update_conversation_label() {
                 .method("PUT")
                 .uri(&format!("/api/v1/conversations/{}/label", conv_id))
                 .header("Content-Type", "application/json")
-                .body(Body::from(r#"{ "label": "Updated", "folder": "/updated" }"#))
+                .body(Body::from(
+                    r#"{ "label": "Updated", "folder": "/updated" }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -307,7 +334,9 @@ async fn test_api_delete_conversation() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(create_response.into_body(), 1024).await.unwrap();
+    let body = axum::body::to_bytes(create_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["id"].as_str().unwrap();
 
@@ -378,8 +407,10 @@ async fn test_api_count_conversations() {
         .unwrap();
 
     assert_eq!(count_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(count_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(count_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["count"], 3);
 }
@@ -419,8 +450,10 @@ async fn test_api_query_semantic_search() {
         .unwrap();
 
     assert_eq!(search_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(search_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(search_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["results"].is_array());
 }
@@ -450,8 +483,10 @@ async fn test_mcp_memory_store() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["success"].as_bool().unwrap());
     assert!(json["data"]["conversation_id"].is_string());
@@ -486,16 +521,23 @@ async fn test_mcp_memory_search() {
                 .method("POST")
                 .uri("/mcp/tools/memory_search")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(r#"{ "query": "Rust programming", "limit": 10 }"#))
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(
+                    r#"{ "query": "Rust programming", "limit": 10 }"#,
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(search_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(search_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(search_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["success"].as_bool().unwrap());
     assert!(json["data"]["results"].is_array());
@@ -522,7 +564,9 @@ async fn test_mcp_memory_update() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(store_response.into_body(), 1024).await.unwrap();
+    let body = axum::body::to_bytes(store_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["data"]["conversation_id"].as_str().unwrap();
 
@@ -545,8 +589,10 @@ async fn test_mcp_memory_update() {
         .unwrap();
 
     assert_eq!(update_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(update_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(update_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["success"].as_bool().unwrap());
     assert!(json["data"]["updated_fields"].is_array());
@@ -573,7 +619,9 @@ async fn test_mcp_memory_get_context() {
         .await
         .unwrap();
 
-    let body = axum::body::to_bytes(store_response.into_body(), 1024).await.unwrap();
+    let body = axum::body::to_bytes(store_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["data"]["conversation_id"].as_str().unwrap();
 
@@ -585,7 +633,10 @@ async fn test_mcp_memory_get_context() {
                 .method("POST")
                 .uri("/mcp/tools/memory_get_context")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(format!(
                     r#"{{ "conversation_id": "{}" }}"#,
                     conv_id
@@ -596,8 +647,10 @@ async fn test_mcp_memory_get_context() {
         .unwrap();
 
     assert_eq!(context_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(context_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(context_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["success"].as_bool().unwrap());
     assert_eq!(json["data"]["label"], "Context Test");
@@ -616,8 +669,13 @@ async fn test_mcp_memory_prune() {
                 .method("POST")
                 .uri("/mcp/tools/memory_prune")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(r#"{ "threshold_days": 30, "importance_threshold": 5.0 }"#))
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(
+                    r#"{ "threshold_days": 30, "importance_threshold": 5.0 }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -625,8 +683,10 @@ async fn test_mcp_memory_prune() {
 
     // Should succeed even with empty database
     assert_eq!(prune_response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(prune_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(prune_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["success"].as_bool().unwrap());
     assert!(json["data"]["suggestions"].is_array());
@@ -648,7 +708,9 @@ async fn test_mcp_auth_failure() {
                 .uri("/mcp/tools/memory_store")
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer wrong_key")
-                .body(Body::from(r#"{ "label": "Auth Test", "folder": "/auth", "messages": [] }"#))
+                .body(Body::from(
+                    r#"{ "label": "Auth Test", "folder": "/auth", "messages": [] }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -669,7 +731,9 @@ async fn test_mcp_auth_missing() {
                 .uri("/mcp/tools/memory_store")
                 .header("Content-Type", "application/json")
                 // No Authorization header
-                .body(Body::from(r#"{ "label": "Auth Test", "folder": "/auth", "messages": [] }"#))
+                .body(Body::from(
+                    r#"{ "label": "Auth Test", "folder": "/auth", "messages": [] }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -734,7 +798,10 @@ async fn test_mcp_update_nonexistent_conversation() {
                 .method("POST")
                 .uri("/mcp/tools/memory_update")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(format!(
                     r#"{{ "conversation_id": "{}", "label": "Updated" }}"#,
                     fake_id
@@ -755,8 +822,12 @@ async fn test_mcp_update_nonexistent_conversation() {
 async fn test_orchestrator_context_assembly() {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
-    
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+
     // Create multiple conversations for context
     for i in 0..5 {
         let mut conv = create_test_conversation();
@@ -764,10 +835,13 @@ async fn test_orchestrator_context_assembly() {
         conv.id = Some(Uuid::new_v4());
         repo.create_with_messages(conv).await.unwrap();
     }
-    
+
     let assembler = ContextAssembler::new(repo);
-    let context = assembler.assemble_context("test query", 1000).await.unwrap();
-    
+    let context = assembler
+        .assemble_context("test query", 1000)
+        .await
+        .unwrap();
+
     assert!(!context.is_empty());
     assert!(context.len() <= 1000); // Token budget respected
 }
@@ -775,19 +849,23 @@ async fn test_orchestrator_context_assembly() {
 #[tokio::test]
 async fn test_orchestrator_importance_scoring() {
     use crate::services::llm_bridge_client::LlmBridgeClient;
-    
+
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
-    
+
     // Need repo for second argument
     let engine = ImportanceEngine::new(llm_bridge, repo.clone());
-    
+
     let mut conv = create_test_conversation();
     conv.id = Some(Uuid::new_v4());
     let conv_id = repo.create_with_messages(conv).await.unwrap();
-    
+
     // This method signature doesn't match - skip this test for now
     // let score = engine.calculate_importance(conv_id, &repo).await.unwrap();
     // assert!(score >= 1.0 && score <= 10.0);
@@ -805,7 +883,7 @@ async fn test_repository_empty_messages() {
 
     let mut conv = create_test_conversation();
     conv.messages = vec![]; // Empty messages
-    
+
     let result = repo.create_with_messages(conv).await;
     assert!(result.is_ok());
 }
@@ -823,7 +901,7 @@ async fn test_repository_very_long_message() {
         timestamp: chrono::Utc::now().naive_utc(),
         metadata: json!({}),
     }];
-    
+
     let result = repo.create_with_messages(conv).await;
     assert!(result.is_ok());
 }
@@ -832,10 +910,14 @@ async fn test_repository_very_long_message() {
 async fn test_concurrent_inserts() {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma_client, embedding_service));
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
 
     let mut handles = vec![];
-    
+
     // Spawn 10 concurrent inserts
     for i in 0..10 {
         let repo_clone = repo.clone();
@@ -847,12 +929,12 @@ async fn test_concurrent_inserts() {
         });
         handles.push(handle);
     }
-    
+
     // Wait for all to complete
     for handle in handles {
         assert!(handle.await.unwrap().is_ok());
     }
-    
+
     // Verify all were created
     let count = repo.count_by_label("Concurrent").await.unwrap();
     assert_eq!(count, 10);
@@ -866,9 +948,9 @@ async fn test_concurrent_inserts() {
 async fn test_mcp_tools_discovery() {
     // This test verifies that all 6 MCP tools are registered correctly
     let app = create_test_mcp_app().await;
-    
+
     // Try to call each tool - if router is misconfigured, this will fail
-    
+
     // memory_store
     let response = app
         .clone()
@@ -876,8 +958,13 @@ async fn test_mcp_tools_discovery() {
             Request::builder()
                 .method("POST")
                 .uri("/mcp/tools/memory_store")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(r#"{ "label": "Discovery", "folder": "/", "messages": [] }"#))
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(
+                    r#"{ "label": "Discovery", "folder": "/", "messages": [] }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -891,7 +978,10 @@ async fn test_mcp_tools_discovery() {
             Request::builder()
                 .method("POST")
                 .uri("/mcp/tools/memory_search")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{ "query": "test", "limit": 10 }"#))
                 .unwrap(),
         )
@@ -921,8 +1011,13 @@ async fn test_mcp_tools_discovery() {
             Request::builder()
                 .method("POST")
                 .uri("/mcp/tools/memory_get_context")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(r#"{ "conversation_id": "00000000-0000-0000-0000-000000000000" }"#))
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(
+                    r#"{ "conversation_id": "00000000-0000-0000-0000-000000000000" }"#,
+                ))
                 .unwrap(),
         )
         .await
@@ -936,7 +1031,10 @@ async fn test_mcp_tools_discovery() {
             Request::builder()
                 .method("POST")
                 .uri("/mcp/tools/memory_prune")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{ "threshold_days": 30 }"#))
                 .unwrap(),
         )
@@ -950,7 +1048,10 @@ async fn test_mcp_tools_discovery() {
             Request::builder()
                 .method("POST")
                 .uri("/mcp/tools/memory_query")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{ "query": "test" }"#))
                 .unwrap(),
         )
