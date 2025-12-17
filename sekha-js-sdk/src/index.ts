@@ -1,4 +1,4 @@
+// Main entry point - exports everything
 export * from './client';
-export * from './models';
-export * from './errors';
 export * from './types';
+export * from './errors';

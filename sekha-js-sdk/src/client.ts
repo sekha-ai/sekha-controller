@@ -1,10 +1,9 @@
 import { MemoryConfig, Conversation, CreateOptions, ListFilter, SearchOptions, 
-         ContextOptions, ExportOptions } from './types';
+         ContextOptions, ExportOptions, SearchResult, ContextAssembly } from './types';
 import { SekhaError, SekhaNotFoundError, SekhaValidationError, SekhaAPIError } from './errors';
 
 export class MemoryController {
   private config: MemoryConfig;
-  private abortControllers: Map<string, AbortController> = new Map();
 
   constructor(config: MemoryConfig) {
     this.config = {
@@ -28,8 +27,13 @@ export class MemoryController {
     const params = new URLSearchParams();
     if (filter?.label) params.append('label', filter.label);
     if (filter?.status) params.append('status', filter.status);
+    if (filter?.limit) params.append('limit', filter.limit.toString());
+    if (filter?.offset) params.append('offset', filter.offset.toString());
     
-    return this.request(`/api/v1/conversations?${params}`);
+    const queryString = params.toString();
+    const url = queryString ? `/api/v1/conversations?${queryString}` : '/api/v1/conversations';
+    
+    return this.request(url);
   }
 
   async updateLabel(id: string, label: string): Promise<void> {
@@ -59,7 +63,7 @@ export class MemoryController {
     });
   }
 
-  async search(query: string, options?: SearchOptions): Promise<any> {
+  async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
     return this.request('/api/v1/query', {
       method: 'POST',
       body: JSON.stringify({ query, ...options }),
@@ -67,7 +71,7 @@ export class MemoryController {
     });
   }
 
-  async assembleContext(options: ContextOptions): Promise<any> {
+  async assembleContext(options: ContextOptions): Promise<ContextAssembly> {
     return this.request('/api/v1/query', {
       method: 'POST',
       body: JSON.stringify(options),
@@ -75,33 +79,42 @@ export class MemoryController {
     });
   }
 
-  async export(options: ExportOptions): Promise<string> {
+  async export(options: ExportOptions = {}): Promise<string> {
     const params = new URLSearchParams();
     if (options.label) params.append('label', options.label);
     params.append('format', options.format || 'markdown');
     
-    const result = await this.request(`/api/v1/export?${params}`);
+    const result = await this.request(`/api/v1/export?${params.toString()}`);
     return result.content;
   }
 
-  exportStream(options: ExportOptions): AsyncIterable<string> {
-    const stream = new ReadableStream({
+  exportStream(options: ExportOptions = {}): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    
+    return new ReadableStream({
       start: async (controller) => {
         try {
           const content = await this.export(options);
-          // Simulate streaming by chunking the content
-          const chunkSize = 1024;
-          for (let i = 0; i < content.length; i += chunkSize) {
-            controller.enqueue(content.slice(i, i + chunkSize));
+          const chunks = this.chunkString(content, 1024);
+          
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(chunk));
           }
+          
           controller.close();
         } catch (error) {
           controller.error(error);
         }
-      },
+      }
     });
+  }
 
-    return stream.getIterator();
+  private chunkString(str: string, size: number): string[] {
+    const chunks: string[] = [];
+    for (let i = 0; i < str.length; i += size) {
+      chunks.push(str.slice(i, i + size));
+    }
+    return chunks;
   }
 
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -118,7 +131,7 @@ export class MemoryController {
           'Authorization': `Bearer ${this.config.apiKey}`,
           ...options.headers,
         },
-        signal: controller.signal,
+        signal: options.signal || controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -131,6 +144,12 @@ export class MemoryController {
       return text ? JSON.parse(text) : null;
     } catch (error) {
       clearTimeout(timeoutId);
+      
+      // Check if it's an abort error (timeout)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new SekhaError(`Request timed out after ${this.config.timeout}ms`);
+      }
+      
       if (error instanceof SekhaError) throw error;
       throw new SekhaError(`Request failed: ${error.message}`);
     }
@@ -138,17 +157,22 @@ export class MemoryController {
 
   private async handleError(response: Response): Promise<void> {
     const text = await response.text();
+    const errorData = text ? JSON.parse(text) : { error: 'Unknown error' };
     
     switch (response.status) {
       case 400:
-        throw new SekhaValidationError('Invalid request', text);
+        throw new SekhaValidationError(errorData.error || 'Invalid request', text);
       case 404:
-        throw new SekhaNotFoundError('Resource not found');
+        throw new SekhaNotFoundError(errorData.error || 'Not found');
       case 401:
       case 403:
         throw new SekhaAPIError('Authentication failed', response.status, text);
       default:
-        throw new SekhaAPIError(`API error: ${response.status}`, response.status, text);
+        throw new SekhaAPIError(
+          errorData.error || `API error: ${response.status}`, 
+          response.status, 
+          text
+        );
     }
   }
 }
