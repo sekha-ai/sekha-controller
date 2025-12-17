@@ -161,7 +161,7 @@ class SekhaClient:
         """List conversations with optional filtering"""
         await self.rate_limiter.acquire()
         
-        params = {"page": page, "page_size": page_size}
+        params: Dict[str, Any] = {"page": page, "page_size": page_size}
         if label:
             params["label"] = label
         

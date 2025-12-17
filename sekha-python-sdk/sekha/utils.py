@@ -25,7 +25,7 @@ class RateLimiter:
     def __init__(self, max_requests: int, window_seconds: float = 60.0):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self.requests: list = []
+        self.requests: list[float] = []
         self._lock = asyncio.Lock()
     
     async def acquire(self):
@@ -97,5 +97,11 @@ def format_bytes(n: int) -> str:
     for unit in ['B', 'KB', 'MB', 'GB']:
         if n < 1024.0:
             return f"{n:.1f} {unit}"
-        n = int(n / 1024.0)
+        # Convert n to float for calculations and return formatted string
+        size = float(n)
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
     return f"{n:.1f} TB"
