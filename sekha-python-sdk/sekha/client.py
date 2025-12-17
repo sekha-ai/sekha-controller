@@ -459,12 +459,61 @@ class SekhaClient:
         label: Optional[str] = None,
         format: str = "markdown"
     ) -> str:
-        """Export conversations to specified format"""
-        # Call export endpoint and return content
+        """Export conversations to specified format
+        
+        Args:
+            label: Optional label filter (exports all if None)
+            format: "markdown" or "json"
+            
+        Returns:
+            Exported content as string
+            
+        Raises:
+            SekhaValidationError: Invalid format parameter
+            SekhaAPIError: API returned error
+        """
+        await self.rate_limiter.acquire()
+        
+        params = {"format": format}
+        if label:
+            params["label"] = label
+        
+        try:
+            response = await self.client.get(
+                "/api/v1/export",
+                params=params,
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            return data["content"]
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 400:
+                raise SekhaValidationError("Invalid export parameters", e.response.text)
+            raise SekhaAPIError("Export failed", e.response.status_code, e.response.text)
+        except Exception as e:
+            raise SekhaError(f"Export failed: {e}")
 
     async def _update_status(self, conversation_id: str, status: str) -> None:
         """Internal method to update conversation status"""
-        # Implementation here
+        await self.rate_limiter.acquire()
+        
+        try:
+            response = await self.client.put(
+                f"/api/v1/conversations/{conversation_id}/status",
+                json={"status": status},
+            )
+            response.raise_for_status()
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise SekhaNotFoundError(f"Conversation {conversation_id} not found")
+            elif e.response.status_code == 400:
+                raise SekhaValidationError("Invalid status", e.response.text)
+            raise SekhaAPIError("Status update failed", e.response.status_code, e.response.text)
+        except Exception as e:
+            raise SekhaError(f"Status update failed: {e}")    
     
 
     # ============== MCP Integration (future) ==============

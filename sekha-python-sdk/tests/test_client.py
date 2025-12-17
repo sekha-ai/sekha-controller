@@ -27,10 +27,13 @@ async def mock_client():
     config = ClientConfig(api_key="sk-sekha-test-key-for-testing-only")
     client = SekhaClient(config)
 
-    # Mock the httpx client with all methods
-    mock_response = Mock()
-    mock_response.raise_for_status = Mock()
-    mock_response.json = Mock(return_value={
+    # Create a mock that tracks calls but allows method assignment
+    mock_httpx_client = AsyncMock()
+    
+    # Set up default mock response
+    default_response = Mock()
+    default_response.raise_for_status = Mock()
+    default_response.json = Mock(return_value={
         "id": "test-uuid",
         "label": "Test",
         "folder": "/",
@@ -38,12 +41,14 @@ async def mock_client():
         "message_count": 1,
         "created_at": datetime.now().isoformat(),
     })
-
-    client.client = AsyncMock()
-    client.client.post = AsyncMock(return_value=mock_response)
-    client.client.get = AsyncMock(return_value=mock_response)
-    client.client.put = AsyncMock(return_value=mock_response)
-    client.client.delete = AsyncMock(return_value=mock_response)
+    
+    # Set default return values for all common methods
+    mock_httpx_client.post = AsyncMock(return_value=default_response)
+    mock_httpx_client.get = AsyncMock(return_value=default_response)
+    mock_httpx_client.put = AsyncMock(return_value=default_response)
+    mock_httpx_client.delete = AsyncMock(return_value=default_response)
+    
+    client.client = mock_httpx_client
 
     yield client
 
@@ -105,11 +110,12 @@ async def test_pin_conversation(mock_client):
     mock_response = Mock()
     mock_response.raise_for_status = Mock()
     
+    # Override the put method for this test
     mock_client.client.put = AsyncMock(return_value=mock_response)
 
     # Test pin
     await mock_client.pin("test-conv-123")
-
+    
     # Verify the call
     assert mock_client.client.put.called
     call_args = mock_client.client.put.call_args
@@ -127,7 +133,7 @@ async def test_archive_conversation(mock_client):
 
     # Test archive
     await mock_client.archive("test-conv-123")
-
+    
     # Verify the call
     assert mock_client.client.put.called
     call_args = mock_client.client.put.call_args
@@ -149,7 +155,7 @@ async def test_export_conversations(mock_client):
 
     # Test export
     result = await mock_client.export(label="Project:AI", format="markdown")
-
+    
     assert result == "# Test Export\n\n## Conversation 1"
     assert mock_client.client.get.called
     call_args = mock_client.client.get.call_args
@@ -171,7 +177,7 @@ async def test_export_conversations_json(mock_client):
     mock_client.client.get = AsyncMock(return_value=mock_response)
 
     result = await mock_client.export(format="json")
-
+    
     assert "[{\"id\": \"123\"" in result
     assert mock_client.client.get.called
     call_args = mock_client.client.get.call_args
