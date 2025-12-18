@@ -191,12 +191,12 @@ async fn test_get_conversations_pagination() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = axum::body::to_bytes(response.into_body(), 1024)
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert!(json["conversations"].is_array());
-    assert_eq!(json["conversations"].as_array().unwrap().len(), 3);
+    assert!(json["results"].is_array());
+    assert_eq!(json["results"].as_array().unwrap().len(), 3);
 }
 
 #[tokio::test]

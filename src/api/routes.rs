@@ -1,5 +1,6 @@
 // src/api/routes.rs - FINAL VERSION WITH FIXED DB CALLS
 
+use crate::models::internal::NewMessage;
 use crate::orchestrator::MemoryOrchestrator;
 use axum::{
     extract::{Path, Query, State},
@@ -54,14 +55,14 @@ async fn create_conversation(
     let word_count: i32 = req.messages.iter().map(|m| m.content.len() as i32).sum();
 
     // Map MessageDto to NewMessage
-    let new_messages: Vec<crate::models::internal::NewMessage> = req
+    let new_messages: Vec<NewMessage> = req
         .messages
         .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
             content: m.content,
             metadata: serde_json::json!({}),
-            timestamp: now,
+            timestamp: now, // Add this line!
         })
         .collect();
 

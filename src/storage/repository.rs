@@ -1,4 +1,4 @@
-// src/storage/repository.rs - FULL CORRECTED VERSION
+// src/storage/repository.rs - FINAL FIXED VERSION (Minimal Changes)
 
 use async_trait::async_trait;
 use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
@@ -62,7 +62,10 @@ pub trait ConversationRepository {
         id: Uuid,
     ) -> Result<Option<crate::models::internal::Message>, RepositoryError>;
     fn get_db(&self) -> &DatabaseConnection;
-    async fn count_messages_in_conversation(&self, conv_id: Uuid) -> Result<u64, RepositoryError>;
+    async fn count_messages_in_conversation(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<u64, RepositoryError>;
     async fn find_recent_messages(
         &self,
         conversation_id: Uuid,
@@ -101,43 +104,16 @@ impl SeaOrmConversationRepository {
             embedding_service,
         }
     }
+}
 
+// Inherent methods are now thin wrappers that call trait methods
+impl SeaOrmConversationRepository {
     /// Store conversation and messages with embeddings
     pub async fn create_with_messages(
         &self,
         new_conv: NewConversation,
     ) -> Result<Uuid, RepositoryError> {
-        let conv_id = new_conv.id.unwrap_or_else(Uuid::new_v4);
-        let now = chrono::Utc::now().naive_utc();
-
-        let word_count: i64 = new_conv
-            .messages
-            .iter()
-            .map(|m| m.content.len() as i64)
-            .sum();
-
-        // Store conversation in SQLite
-        let conversation = conversations::ActiveModel {
-            id: Set(conv_id.to_string()),
-            label: Set(new_conv.label.clone()),
-            folder: Set(new_conv.folder.clone()),
-            status: Set("active".to_string()),
-            importance_score: Set(5i64),
-            word_count: Set(word_count),
-            session_count: Set(new_conv.session_count.unwrap_or(1) as i64),
-            created_at: Set(now.to_string()),
-            updated_at: Set(now.to_string()),
-        };
-
-        conversation.insert(&self.db).await?;
-        tracing::info!("Created conversation: {}", conv_id);
-
-        // Store messages with embeddings
-        for msg in new_conv.messages {
-            self.create_message(conv_id, msg).await?;
-        }
-
-        Ok(conv_id)
+        <Self as ConversationRepository>::create_with_messages(self, new_conv).await
     }
 
     /// Store individual message with embedding in Chroma
@@ -149,7 +125,6 @@ impl SeaOrmConversationRepository {
         let msg_id = Uuid::new_v4();
         let timestamp = new_msg.timestamp;
 
-        // Try to generate embedding
         let embedding_id = match self
             .embedding_service
             .process_message_with_retry(
@@ -173,7 +148,6 @@ impl SeaOrmConversationRepository {
 
         let has_embedding = embedding_id.is_some();
 
-        // Store message in SQLite
         let message = messages::ActiveModel {
             id: Set(msg_id.to_string()),
             conversation_id: Set(conversation_id.to_string()),
@@ -201,46 +175,7 @@ impl SeaOrmConversationRepository {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError> {
-        let chroma_results = self
-            .embedding_service
-            .search_messages(query, limit, filters)
-            .await
-            .map_err(|e| RepositoryError::ChromaError(e.to_string()))?;
-
-        let mut results = Vec::new();
-
-        for scored in chroma_results {
-            if let Ok(msg_id) = Uuid::parse_str(&scored.id) {
-                // Fetch message and conversation data from SQLite
-                if let Some(message) = messages::Entity::find_by_id(msg_id.to_string())
-                    .one(&self.db)
-                    .await?
-                {
-                    if let Some(conversation) =
-                        conversations::Entity::find_by_id(message.conversation_id.clone())
-                            .one(&self.db)
-                            .await?
-                    {
-                        results.push(SearchResult {
-                            conversation_id: Uuid::parse_str(&conversation.id).unwrap(),
-                            message_id: msg_id,
-                            score: scored.score,
-                            content: message.content,
-                            metadata: scored.metadata,
-                            label: conversation.label,
-                            folder: conversation.folder,
-                            timestamp: chrono::NaiveDateTime::parse_from_str(
-                                &message.timestamp,
-                                "%Y-%m-%d %H:%M:%S%.f",
-                            )
-                            .unwrap(),
-                        });
-                    }
-                }
-            }
-        }
-
-        Ok(results)
+        <Self as ConversationRepository>::semantic_search(self, query, limit, filters).await
     }
 }
 
@@ -270,7 +205,33 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
-        SeaOrmConversationRepository::create_with_messages(self, conv).await
+        let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);
+        let now = chrono::Utc::now().naive_utc();
+
+        let word_count: i64 = conv.messages.iter().map(|m| m.content.len() as i64).sum();
+
+        // Store conversation in SQLite
+        let conversation = conversations::ActiveModel {
+            id: Set(conv_id.to_string()),
+            label: Set(conv.label),
+            folder: Set(conv.folder),
+            status: Set("active".to_string()),
+            importance_score: Set(5i64),
+            word_count: Set(word_count),
+            session_count: Set(conv.session_count.unwrap_or(1) as i64),
+            created_at: Set(now.to_string()),
+            updated_at: Set(now.to_string()),
+        };
+
+        conversation.insert(&self.db).await?;
+        tracing::info!("Created conversation: {}", conv_id);
+
+        // Store messages with embeddings
+        for msg in conv.messages {
+            self.create_message(conv_id, msg).await?;
+        }
+
+        Ok(conv_id)
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
@@ -383,12 +344,59 @@ impl ConversationRepository for SeaOrmConversationRepository {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError> {
-        SeaOrmConversationRepository::semantic_search(self, query, limit, filters).await
+        let chroma_results = self
+            .embedding_service
+            .search_messages(query, limit, filters)
+            .await
+            .map_err(|e| RepositoryError::ChromaError(e.to_string()))?;
+
+        let mut results = Vec::new();
+
+        for scored in chroma_results {
+            if let Ok(msg_id) = Uuid::parse_str(&scored.id) {
+                if let Some(message) = messages::Entity::find_by_id(msg_id.to_string())
+                    .one(&self.db)
+                    .await?
+                {
+                    if let Some(conversation) =
+                        conversations::Entity::find_by_id(message.conversation_id.clone())
+                            .one(&self.db)
+                            .await?
+                    {
+                        results.push(SearchResult {
+                            conversation_id: Uuid::parse_str(&conversation.id).unwrap(),
+                            message_id: msg_id,
+                            score: scored.score,
+                            content: message.content,
+                            metadata: scored.metadata,
+                            label: conversation.label,
+                            folder: conversation.folder,
+                            timestamp: chrono::NaiveDateTime::parse_from_str(
+                                &message.timestamp,
+                                "%Y-%m-%d %H:%M:%S%.f",
+                            )
+                            .unwrap(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     async fn ping(&self) -> Result<(), RepositoryError> {
         self.db.execute_unprepared("SELECT 1").await?;
         Ok(())
+    }
+
+    async fn check_dependencies(&self) -> Result<Value, RepositoryError> {
+        let chroma_healthy = self.chroma.ping().await.is_ok();
+        Ok(json!({
+            "chroma": {
+                "status": if chroma_healthy { "healthy" } else { "unhealthy" }
+            }
+        }))
     }
 
     async fn find_message_by_id(
@@ -510,15 +518,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
         &self.db
     }
 
-    async fn check_dependencies(&self) -> Result<Value, RepositoryError> {
-        let chroma_healthy = self.chroma.ping().await.is_ok();
-        Ok(json!({
-            "chroma": {
-                "status": if chroma_healthy { "healthy" } else { "unhealthy" }
-            }
-        }))
-    }
-
     async fn find_by_filter(
         &self,
         filter: Option<String>,
@@ -575,7 +574,7 @@ impl From<conversations::Model> for Conversation {
             .unwrap(),
             updated_at: chrono::NaiveDateTime::parse_from_str(
                 &model.updated_at,
-                "%Y-%M-%d %H:%M:%S%.f",
+                "%Y-%m-%d %H:%M:%S%.f",
             )
             .unwrap(),
         }
