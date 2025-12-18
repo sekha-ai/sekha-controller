@@ -1,5 +1,3 @@
-// tests/integration_test.rs - FIXED VERSION
-
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -7,13 +5,8 @@ use axum::{
 };
 use sekha_controller::{
     api::routes::{create_router, AppState},
-    auth::McpAuth,
     config::Config,
     models::internal::{NewConversation, NewMessage},
-    orchestrator::{
-        context_assembly::ContextAssembler, importance_engine::ImportanceEngine,
-        pruning_engine::PruningEngine, MemoryOrchestrator,
-    },
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
         chroma_client::ChromaClient, init_db, ConversationRepository, SeaOrmConversationRepository,
@@ -68,7 +61,9 @@ async fn create_test_app() -> Router {
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
-        orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge)),
+        orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
+            repo, llm_bridge,
+        )),
     };
 
     create_router(state)
@@ -88,7 +83,9 @@ async fn create_test_mcp_app() -> Router {
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
-        orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge)),
+        orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
+            repo, llm_bridge,
+        )),
     };
 
     sekha_controller::api::mcp::create_mcp_router(state)
@@ -116,9 +113,9 @@ fn create_test_conversation() -> NewConversation {
         session_count: Some(1),
         created_at: chrono::Utc::now().naive_utc(),
         importance_score: Some(5),
-        status: Some("active".to_string()),
-        word_count: Some(42),
-        updated_at: Some(chrono::Utc::now().naive_utc()),
+        status: "active".to_string(),
+        word_count: 42,
+        updated_at: chrono::Utc::now().naive_utc(),
     }
 }
 
@@ -947,7 +944,9 @@ async fn test_mcp_tools_discovery() {
                 .method("POST")
                 .uri("/mcp/tools/memory_update")
                 .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(r#"{ "conversation_id": "00000000-0000-0000-0000-000000000000", "label": "Test" }"#))
+                .body(Body::from(
+                    r#"{ "conversation_id": "00000000-0000-0000-0000-000000000000", "label": "Test" }"#,
+                ))
                 .unwrap(),
         )
         .await

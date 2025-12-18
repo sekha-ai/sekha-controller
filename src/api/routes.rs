@@ -1,3 +1,5 @@
+// src/api/routes.rs - FINAL VERSION WITH FIXED DB CALLS
+
 use crate::orchestrator::MemoryOrchestrator;
 use axum::{
     extract::{Path, Query, State},
@@ -5,13 +7,17 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{api::dto::*, config::Config, storage::repository::ConversationRepository};
+use crate::{
+    api::dto::*, config::Config, storage::entities::conversations,
+    storage::repository::ConversationRepository,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -22,8 +28,10 @@ pub struct AppState {
 
 #[derive(Deserialize)]
 pub struct PaginationParams {
-    page: Option<u32>,
-    page_size: Option<u32>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+    pub label: Option<String>,
+    pub folder: Option<String>,
 }
 
 #[utoipa::path(
@@ -151,28 +159,67 @@ async fn get_conversation(
     ),
     params(
         ("label" = Option<String>, Query, description = "Filter by label"),
+        ("folder" = Option<String>, Query, description = "Filter by folder"),
         ("page" = Option<u32>, Query, description = "Page number"),
         ("page_size" = Option<u32>, Query, description = "Page size")
     )
 )]
 async fn list_conversations(
-    State(_state): State<AppState>,
-    Query(params): Query<PaginationParams>,
-    Query(_label): Query<Option<String>>,
-) -> Json<QueryResponse> {
-    let page = params.page.unwrap_or(1);
-    let page_size = params.page_size.unwrap_or(50);
-    let _offset = (page - 1) * page_size;
+    State(state): State<AppState>,
+    Query(mut params): Query<PaginationParams>,
+) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Use sensible defaults
+    let page_size = params.page_size.unwrap_or(50).max(1).min(100); // Clamp between 1-100
+    let page = params.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * page_size;
 
-    // TODO: Implement label filtering
-    let results = vec![]; // Placeholder
+    // Build query based on filters
+    let mut query = conversations::Entity::find();
 
-    Json(QueryResponse {
+    if let Some(ref label) = params.label {
+        query = query.filter(conversations::Column::Label.eq(label));
+    }
+
+    if let Some(ref folder) = params.folder {
+        query = query.filter(conversations::Column::Folder.eq(folder));
+    }
+
+    // Get total count - FIX: Pass connection directly, not &&connection
+    let total = query
+        .clone()
+        .count(state.repo.get_db())
+        .await
+        .map_err(|e| internal_server_error(e))?;
+
+    // Get paginated results - FIX: Pass connection directly, not &&connection
+    let models = query
+        .order_by_desc(conversations::Column::UpdatedAt)
+        .limit(page_size as u64)
+        .offset(offset as u64)
+        .all(state.repo.get_db())
+        .await
+        .map_err(|e| internal_server_error(e))?;
+
+    let results: Vec<SearchResultDto> = models
+        .into_iter()
+        .map(|c| SearchResultDto {
+            conversation_id: Uuid::parse_str(&c.id).unwrap(),
+            message_id: Uuid::nil(), // No specific message
+            score: 0.0,
+            content: "".to_string(),
+            metadata: json!({}),
+            label: c.label,
+            folder: c.folder,
+            timestamp: c.created_at.clone(),
+        })
+        .collect();
+
+    Ok(Json(QueryResponse {
         results,
-        total: 0,
+        total: total as u32,
         page,
         page_size,
-    })
+    }))
 }
 
 #[utoipa::path(
@@ -519,4 +566,18 @@ pub fn create_router(state: AppState) -> Router {
 
 async fn metrics() -> &'static str {
     "# HELP sekha_conversations_total Total number of conversations\n# TYPE sekha_conversations_total gauge\nsekha_conversations_total 0\n"
+}
+
+pub async fn update_status() -> &'static str {
+    "Status updated"
+}
+
+fn internal_server_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: e.to_string(),
+            code: 500,
+        }),
+    )
 }

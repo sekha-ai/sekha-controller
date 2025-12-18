@@ -1,3 +1,5 @@
+// src/storage/repository.rs - FULL CORRECTED VERSION
+
 use async_trait::async_trait;
 use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
 use serde_json::json;
@@ -348,9 +350,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
-        use crate::storage::entities::conversations;
-        use sea_orm::{ActiveModelTrait, EntityTrait};
-
         let model = conversations::Entity::find_by_id(id.to_string())
             .one(&self.db)
             .await?
@@ -365,8 +364,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError> {
-        use crate::storage::entities::conversations;
-
         let model = conversations::Entity::find_by_id(id.to_string())
             .one(&self.db)
             .await?
@@ -421,9 +418,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::messages;
-        use sea_orm::EntityTrait;
-
         let count = messages::Entity::find()
             .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
             .count(&self.db)
