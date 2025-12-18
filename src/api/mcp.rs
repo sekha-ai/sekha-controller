@@ -4,7 +4,6 @@ use crate::api::routes::AppState;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};

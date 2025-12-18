@@ -166,7 +166,7 @@ async fn get_conversation(
 )]
 async fn list_conversations(
     State(state): State<AppState>,
-    Query(mut params): Query<PaginationParams>,
+    Query(params): Query<PaginationParams>,
 ) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Use sensible defaults
     let page_size = params.page_size.unwrap_or(50).max(1).min(100); // Clamp between 1-100
