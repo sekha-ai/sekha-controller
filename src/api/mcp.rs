@@ -327,37 +327,9 @@ pub async fn memory_get_context(
 pub fn create_mcp_router(state: AppState) -> Router {
     Router::new()
         .route("/mcp/tools/memory_store", post(memory_store))
-        .route("/mcp/tools/memory_query", post(memory_query))
         .route("/mcp/tools/memory_get_context", post(memory_get_context))
         .route("/mcp/tools/memory_update", post(memory_update))
         .route("/mcp/tools/memory_search", post(memory_search))
         .route("/mcp/tools/memory_prune", post(memory_prune))
         .with_state(state)
-}
-
-// Legacy endpoint - redirects to memory_search for backward compatibility
-#[derive(Debug, Deserialize)]
-pub struct MemoryQueryArgs {
-    query: String,
-    filters: Option<Value>,
-    limit: Option<u32>,
-}
-
-pub async fn memory_query(
-    _auth: McpAuth,
-    _state: State<AppState>,
-    Json(args): Json<MemoryQueryArgs>,
-) -> Result<Json<McpToolResponse>, StatusCode> {
-    // Redirect to memory_search
-    memory_search(
-        _auth,
-        _state,
-        Json(MemorySearchArgs {
-            query: args.query,
-            filters: args.filters,
-            limit: args.limit,
-            offset: Some(0),
-        }),
-    )
-    .await
 }
