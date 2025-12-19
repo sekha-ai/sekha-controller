@@ -107,6 +107,10 @@ impl SeaOrmConversationRepository {
 // ============================================
 #[async_trait]
 impl ConversationRepository for SeaOrmConversationRepository {
+    fn get_db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError> {
         let active_model = conversations::ActiveModel {
             id: Set(conv.id.to_string()),
