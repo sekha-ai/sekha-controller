@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set, Statement};
+use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -73,6 +73,8 @@ pub trait ConversationRepository: Send + Sync {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError>;
+    
+    fn get_db(&self) -> &DatabaseConnection;
 }
 
 // ============================================

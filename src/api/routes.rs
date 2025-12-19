@@ -217,34 +217,22 @@ async fn list_conversations(
         .unwrap_or_else(|_| (Vec::new(), 0));
 
     let total = results.1;
-    let conversations: Vec<SearchResultDto> = results
-        .0
-        .into_iter()
-        .map(|c| {
-            // Get message count for this conversation
-            let message_count = state
-                .repo
-                .count_messages_in_conversation(c.id)
-                .await
-                .unwrap_or(0);
-
-            SearchResultDto {
-                conversation_id: c.id,
-                message_id: Uuid::nil(), // Not a message-level search
-                score: 1.0,              // Not semantically scored
-                content: format!("{} ({} messages)", c.label, message_count),
-                metadata: serde_json::json!({
-                    "folder": c.folder,
-                    "status": c.status,
-                    "importance_score": c.importance_score,
-                    "message_count": message_count,
-                }),
-                label: c.label,
-                folder: c.folder,
-                timestamp: c.updated_at.to_string(), // FIXED: Added .to_string()
-            }
-        })
-        .collect();
+    let conversations: Vec<SearchResultDto> = results.0.into_iter().map(|c| {
+        SearchResultDto {
+            conversation_id: c.id,
+            message_id: Uuid::nil(),
+            score: 1.0,
+            content: c.label.clone(),
+            metadata: serde_json::json!({
+                "folder": c.folder,
+                "status": c.status,
+                "importance_score": c.importance_score,
+            }),
+            label: c.label,
+            folder: c.folder,
+            timestamp: c.updated_at.to_string(),
+        }
+    }).collect();
 
     Json(QueryResponse {
         results: conversations,
