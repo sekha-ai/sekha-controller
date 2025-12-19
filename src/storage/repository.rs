@@ -33,6 +33,7 @@ pub trait ConversationRepository {
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError>;
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+    async fn delete_by_id(&self, id: Uuid) -> Result<(), RepositoryError>;
     async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Conversation>, RepositoryError>;
     async fn find_by_label(
@@ -49,12 +50,6 @@ pub trait ConversationRepository {
     ) -> Result<(), RepositoryError>;
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError>;
-    async fn semantic_search(
-        &self,
-        query: &str,
-        limit: usize,
-        filters: Option<Value>,
-    ) -> Result<Vec<SearchResult>, RepositoryError>;
     async fn ping(&self) -> Result<(), RepositoryError>;
     async fn check_dependencies(&self) -> Result<Value, RepositoryError>;
     async fn find_message_by_id(
@@ -62,6 +57,12 @@ pub trait ConversationRepository {
         id: Uuid,
     ) -> Result<Option<crate::models::internal::Message>, RepositoryError>;
     fn get_db(&self) -> &DatabaseConnection;
+    async fn semantic_search(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: Option<Value>,
+    ) -> Result<Vec<SearchResult>, RepositoryError>;
     async fn count_messages_in_conversation(
         &self,
         conversation_id: Uuid,
@@ -257,6 +258,14 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(())
     }
 
+    async fn delete_by_id(&self, id: Uuid) -> Result<(), RepositoryError> {
+        conversations::Entity::delete_by_id(id.to_string())
+            .exec(&self.db)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
     async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError> {
         let count = conversations::Entity::find()
             .filter(conversations::Column::Label.eq(label))
@@ -426,12 +435,12 @@ impl ConversationRepository for SeaOrmConversationRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<u64, RepositoryError> {
+        use crate::storage::entities::messages;
         let count = messages::Entity::find()
             .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
             .count(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
-
         Ok(count)
     }
 

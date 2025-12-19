@@ -2,23 +2,21 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     routing::{delete, get, post, put},
-    Router, Json,
+    Json, Router,
 };
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{
-    api::dto::*,
-    config::Config,
-    storage::repository::ConversationRepository,
-};
+use crate::orchestrator::MemoryOrchestrator;
+use crate::{api::dto::*, config::Config, storage::repository::ConversationRepository};
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<RwLock<Config>>,
     pub repo: Arc<dyn ConversationRepository>,
+    pub orchestrator: Arc<MemoryOrchestrator>,
 }
 
 #[derive(Deserialize)]
@@ -54,15 +52,16 @@ async fn create_conversation(
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
 
-    let word_count: i32 = req.messages.iter()
-        .map(|m| m.content.len() as i32)
-        .sum();
+    let word_count: i32 = req.messages.iter().map(|m| m.content.len() as i32).sum();
 
-    let new_messages: Vec<_> = req.messages.into_iter()
+    let new_messages: Vec<_> = req
+        .messages
+        .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
             content: m.content,
             metadata: serde_json::json!({}),
+            timestamp: now,
         })
         .collect();
 
@@ -81,15 +80,19 @@ async fn create_conversation(
         messages: new_messages,
     };
 
-    state.repo.create_with_messages(new_conv).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .create_with_messages(new_conv)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
 
     Ok((
         StatusCode::CREATED,
@@ -134,16 +137,20 @@ async fn get_conversation(
 
     match conv {
         Some(c) => {
-            let message_count = state.repo.count_messages_in_conversation(id).await.unwrap_or(0);
+            let message_count = state
+                .repo
+                .count_messages_in_conversation(id)
+                .await
+                .unwrap_or(0);
             Ok(Json(ConversationResponse {
                 id: c.id,
                 label: c.label,
                 folder: c.folder,
                 status: c.status,
-                message_count,
+                message_count: message_count.try_into().unwrap(),
                 created_at: c.created_at.to_string(),
             }))
-        },
+        }
         None => Err((
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -177,6 +184,7 @@ async fn list_conversations(
     Query(params): Query<PaginationParams>,
     Query(filters): Query<FilterParams>,
 ) -> Json<QueryResponse> {
+    let _ = (filters.pinned, filters.archived);
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(50);
     let offset = (page - 1) * page_size;
@@ -202,25 +210,31 @@ async fn list_conversations(
     };
 
     // Use repository method with filters
-    let results = state.repo.find_with_filters(filter_str, page_size as usize, offset as u32)
+    let results = state
+        .repo
+        .find_with_filters(filter_str, page_size as usize, offset as u32)
         .await
         .unwrap_or_else(|_| (Vec::new(), 0));
 
     let total = results.1;
-    let conversations: Vec<SearchResultDto> = results.0.into_iter().map(|c| SearchResultDto {
-        conversation_id: c.id,
-        message_id: Uuid::nil(), // No specific message
-        score: 1.0, // Not a semantic search
-        content: c.label.clone(),
-        metadata: serde_json::json!({
-            "folder": c.folder,
-            "status": c.status,
-            "importance_score": c.importance_score,
-        }),
-        label: c.label,
-        folder: c.folder,
-        timestamp: c.updated_at,
-    }).collect();
+    let conversations: Vec<SearchResultDto> = results
+        .0
+        .into_iter()
+        .map(|c| SearchResultDto {
+            conversation_id: c.id,
+            message_id: Uuid::nil(), // No specific message
+            score: 1.0,              // Not a semantic search
+            content: c.label.clone(),
+            metadata: serde_json::json!({
+                "folder": c.folder,
+                "status": c.status,
+                "importance_score": c.importance_score,
+            }),
+            label: c.label,
+            folder: c.folder,
+            timestamp: c.updated_at,
+        })
+        .collect();
 
     Json(QueryResponse {
         results: conversations,
@@ -247,15 +261,19 @@ async fn update_conversation_label(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLabelRequest>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state.repo.update_label(id, &req.label, &req.folder).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 404,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .update_label(id, &req.label, &req.folder)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 404,
+                }),
+            )
+        })?;
 
     Ok(StatusCode::OK)
 }
@@ -343,7 +361,9 @@ async fn semantic_query(
     };
 
     // Use repository's semantic search (now powered by Chroma)
-    let results = state.repo.semantic_search(&req.query, limit, req.filters)
+    let results = state
+        .repo
+        .semantic_search(&req.query, limit, req.filters)
         .await
         .map_err(|e| {
             (
@@ -389,6 +409,7 @@ async fn health() -> &'static str {
 // ============================================
 async fn metrics() -> &'static str {
     "# HELP sekha_conversations_total Total number of conversations\n# TYPE sekha_conversations_total gauge\nsekha_conversations_total 0\n"
+}
 
 // ============================================
 // NEW ENDPOINT: PUT /api/v1/conversations/{id}/folder
@@ -428,15 +449,19 @@ async fn update_conversation_folder(
         ));
     }
 
-    state.repo.update_label(id, &req.folder, &req.folder).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .update_label(id, &req.folder, &req.folder)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
 
     Ok(StatusCode::OK)
 }
@@ -491,15 +516,19 @@ async fn archive_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state.repo.update_status(id, "archived").await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
+    state
+        .repo
+        .update_status(id, "archived")
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
 
     Ok(StatusCode::OK)
 }
@@ -516,7 +545,7 @@ async fn archive_conversation(
     )
 )]
 async fn rebuild_embeddings(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     // Trigger async rebuild via embedding service
     tokio::spawn(async move {
@@ -535,10 +564,19 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/conversations", post(create_conversation))
         .route("/api/v1/conversations/{id}", get(get_conversation))
         .route("/api/v1/conversations", get(list_conversations))
-        .route("/api/v1/conversations/{id}/label", put(update_conversation_label))
-        .route("/api/v1/conversations/{id}/folder", put(update_conversation_folder))
+        .route(
+            "/api/v1/conversations/{id}/label",
+            put(update_conversation_label),
+        )
+        .route(
+            "/api/v1/conversations/{id}/folder",
+            put(update_conversation_folder),
+        )
         .route("/api/v1/conversations/{id}/pin", put(pin_conversation))
-        .route("/api/v1/conversations/{id}/archive", put(archive_conversation))
+        .route(
+            "/api/v1/conversations/{id}/archive",
+            put(archive_conversation),
+        )
         .route("/api/v1/conversations/{id}", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
         .route("/api/v1/query", post(semantic_query))
