@@ -217,8 +217,10 @@ async fn list_conversations(
         .unwrap_or_else(|_| (Vec::new(), 0));
 
     let total = results.1;
-    let conversations: Vec<SearchResultDto> = results.0.into_iter().map(|c| {
-        SearchResultDto {
+    let conversations: Vec<SearchResultDto> = results
+        .0
+        .into_iter()
+        .map(|c| SearchResultDto {
             conversation_id: c.id,
             message_id: Uuid::nil(),
             score: 1.0,
@@ -231,8 +233,8 @@ async fn list_conversations(
             label: c.label,
             folder: c.folder,
             timestamp: c.updated_at.to_string(),
-        }
-    }).collect();
+        })
+        .collect();
 
     Json(QueryResponse {
         results: conversations,

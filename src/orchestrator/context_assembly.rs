@@ -186,22 +186,23 @@ impl ContextAssembler {
 
     async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
-        
+
         let model = message_entity::Entity::find_by_id(id.to_string())
             .one(self.repo.get_db())
             .await
             .map_err(RepositoryError::DbError)?;
-        
+
         Ok(model.map(|m| Message {
             id: Uuid::parse_str(&m.id).unwrap(),
             conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
             role: m.role,
             content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+                .unwrap(),
             embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
             metadata: m.metadata,
         }))
-    }    
+    }
 }
 
 /// Internal candidate message with scoring metadata

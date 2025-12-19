@@ -40,6 +40,8 @@ pub trait ConversationRepository: Send + Sync {
         offset: u64,
     ) -> Result<Vec<Conversation>, RepositoryError>;
 
+    async fn find_message_by_id(&self, id: Uuid) -> Result<Option<Message>, RepositoryError>;
+
     // NEW: Find with complex filters
     async fn find_with_filters(
         &self,
@@ -73,7 +75,7 @@ pub trait ConversationRepository: Send + Sync {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError>;
-    
+
     fn get_db(&self) -> &DatabaseConnection;
 }
 
@@ -191,6 +193,14 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .await?;
 
         Ok(model.map(Conversation::from))
+    }
+
+    async fn find_message_by_id(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
+        let model = messages::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?;
+
+        Ok(model.map(Message::from))
     }
 
     async fn find_by_label(
