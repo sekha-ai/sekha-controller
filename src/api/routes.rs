@@ -15,6 +15,7 @@ use crate::{api::dto::*, config::Config, storage::repository::ConversationReposi
 pub struct AppState {
     pub config: Arc<RwLock<Config>>,
     pub repo: Arc<dyn ConversationRepository + Send + Sync>,
+    pub orchestrator: Arc<MemoryOrchestrator>,
 }
 
 #[derive(Deserialize)]

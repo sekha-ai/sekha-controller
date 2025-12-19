@@ -14,3 +14,7 @@ Thumbs.db
 
 # Logs
 server.log
+
+# Add to .gitignore
+docker-compose*.yml
+Dockerfile
