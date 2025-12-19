@@ -74,6 +74,12 @@ pub trait ConversationRepository: Send + Sync {
         conversation_id: Uuid,
     ) -> Result<u64, RepositoryError>;
 
+    async fn full_text_search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Message>, RepositoryError>;
+
     async fn semantic_search(
         &self,
         query: &str,
@@ -367,6 +373,30 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .count(&self.db)
             .await?;
         Ok(count)
+    }
+
+    pub async fn full_text_search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        let sql = r#"
+            SELECT m.* FROM messages_fts fts
+            JOIN messages m ON fts.rowid = m.id
+            WHERE messages_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+        "#;
+
+        let messages = Message::find_by_statement(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Sqlite,
+            sql,
+            vec![query.into(), (limit as i64).into()],
+        ))
+        .all(&self.db)
+        .await?;
+
+        Ok(messages.into_iter().map(Message::from).collect())
     }
 
     async fn semantic_search(
