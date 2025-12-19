@@ -281,7 +281,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError> {
-        use sea_orm::{ColumnTrait, QuerySelect, QueryTrait};
+        use sea_orm::QuerySelect;
 
         let labels = conversations::Entity::find()
             .select_only()
