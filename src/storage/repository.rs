@@ -320,7 +320,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
             .order_by_desc(messages::Column::Timestamp)
             .limit(limit as u64)
-            .all(self.db)
+            .all(&self.db)
             .await
             .map_err(RepositoryError::DbError)?;
 

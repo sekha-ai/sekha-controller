@@ -3,6 +3,7 @@ use sekha_controller::models::internal::{NewConversation, NewMessage};
 use sekha_controller::services::embedding_service::EmbeddingService;
 use sekha_controller::storage::chroma_client::ChromaClient;
 use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
+use sekha_controller::ConversationRepository;
 use std::sync::Arc;
 use tokio::time::Instant;
 
