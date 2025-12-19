@@ -40,9 +40,19 @@ pub trait ConversationRepository: Send + Sync {
         offset: u64,
     ) -> Result<Vec<Conversation>, RepositoryError>;
 
+    async fn get_conversation_messages(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Vec<Message>, RepositoryError>;
+
     async fn find_message_by_id(&self, id: Uuid) -> Result<Option<Message>, RepositoryError>;
 
-    // NEW: Find with complex filters
+    async fn find_recent_messages(
+        &self,
+        conversation_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<Message>, RepositoryError>;
+
     async fn find_with_filters(
         &self,
         filter: Option<String>,
@@ -57,13 +67,8 @@ pub trait ConversationRepository: Send + Sync {
         new_folder: &str,
     ) -> Result<(), RepositoryError>;
 
-    // NEW: Update status (for archive)
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
-
-    // NEW: Update importance (for pin)
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError>;
-
-    // NEW: Count messages in conversation
     async fn count_messages_in_conversation(
         &self,
         conversation_id: Uuid,
@@ -75,6 +80,8 @@ pub trait ConversationRepository: Send + Sync {
         limit: usize,
         filters: Option<Value>,
     ) -> Result<Vec<SearchResult>, RepositoryError>;
+
+    async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError>;
 
     fn get_db(&self) -> &DatabaseConnection;
 }
@@ -271,6 +278,53 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         active_model.update(&self.db).await?;
         Ok(())
+    }
+
+    async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError> {
+        use sea_orm::{ColumnTrait, QuerySelect, QueryTrait};
+
+        let labels = conversations::Entity::find()
+            .select_only()
+            .column(conversations::Column::Label)
+            .distinct()
+            .order_by_asc(conversations::Column::Label)
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await?;
+
+        Ok(labels)
+    }
+
+    async fn get_conversation_messages(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        let msg_models = messages::Entity::find()
+            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .order_by_asc(messages::Column::Timestamp)
+            .all(&self.db)
+            .await?;
+
+        Ok(msg_models.into_iter().map(Message::from).collect())
+    }
+
+    async fn find_recent_messages(
+        &self,
+        conversation_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        use crate::storage::entities::messages;
+        use sea_orm::{QueryOrder, QuerySelect};
+
+        let models = messages::Entity::find()
+            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .order_by_desc(messages::Column::Timestamp)
+            .limit(limit as u64)
+            .all(self.db)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        Ok(models.into_iter().map(Message::from).collect())
     }
 
     // NEW: Update status
