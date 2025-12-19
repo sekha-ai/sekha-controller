@@ -24,6 +24,11 @@ pub struct UpdateLabelRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateFolderRequest {
+    pub folder: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct QueryRequest {
     pub query: String,
     pub filters: Option<serde_json::Value>,
@@ -32,22 +37,7 @@ pub struct QueryRequest {
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateStatusRequest {
-    pub status: String,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct ExportRequest {
-    pub label: Option<String>,
-    pub format: Option<String>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ExportResponse {
-    pub content: String,
-    pub format: String,
-    pub conversation_count: usize,
-}
+pub struct RebuildEmbeddingsRequest {}
 
 // ==================== RESPONSE DTOs ====================
 
@@ -92,6 +82,13 @@ pub struct HealthResponse {
 pub struct ErrorResponse {
     pub error: String,
     pub code: u32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RebuildEmbeddingsResponse {
+    pub success: bool,
+    pub message: String,
+    pub estimated_completion_seconds: u32,
 }
 
 // ==================== MCP DTOs ====================
