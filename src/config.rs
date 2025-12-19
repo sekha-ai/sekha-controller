@@ -36,7 +36,15 @@ impl Config {
             .set_default("summarization_model", "llama3.1:8b")?
             .set_default("summarization_enabled", true)?
             .set_default("pruning_enabled", true)?
-            .add_source(config::File::with_name("config").required(false))
+            // .add_source(config::File::with_name("config").required(false))
+            // FIX: Load from ~/.sekha/config.toml
+            .add_source(
+                config::File::with_name(&format!(
+                    "{}/.sekha/config",
+                    std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
+                ))
+                .required(false),
+            )
             .add_source(config::Environment::with_prefix("SEKHA").separator("__"))
             .build()?;
 
