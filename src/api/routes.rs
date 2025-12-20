@@ -33,68 +33,6 @@ pub struct FilterParams {
     archived: Option<bool>,
 }
 
-// health check config
-use crate::storage::db::get_connection;
-
-async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
-    let mut checks = serde_json::json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "checks": {}
-    });
-
-    // Check database
-    match get_connection().await {
-        Some(db) => match db.execute_unprepared("SELECT 1").await {
-            Ok(_) => checks["checks"]["database"] = serde_json::json!({"status": "ok"}),
-            Err(e) => {
-                checks["checks"]["database"] = serde_json::json!({
-                    "status": "error",
-                    "error": e.to_string()
-                });
-                checks["status"] = "unhealthy";
-            }
-        },
-        None => {
-            checks["checks"]["database"] = serde_json::json!({
-                "status": "error",
-                "error": "No database connection"
-            });
-            checks["status"] = "unhealthy";
-        }
-    }
-
-    // Check Chroma (basic connectivity)
-    let chroma_check = state.repo.semantic_search("test", 1, None).await;
-    match chroma_check {
-        Ok(_) => checks["checks"]["chroma"] = serde_json::json!({"status": "ok"}),
-        Err(e) => {
-            checks["checks"]["chroma"] = serde_json::json!({
-                "status": "error",
-                "error": e.to_string()
-            });
-            checks["status"] = "unhealthy";
-        }
-    }
-
-    // Check embedding service (without generating actual embedding)
-    let embedding_service = &state.embedding_service;
-    if embedding_service.semaphore.available_permits() > 0 {
-        checks["checks"]["embedding_service"] = serde_json::json!({"status": "ok"});
-    } else {
-        checks["checks"]["embedding_service"] = serde_json::json!({
-            "status": "warning",
-            "error": "All embedding workers busy"
-        });
-    }
-
-    if checks["status"] == "healthy" {
-        Ok(Json(checks))
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
-    }
-}
-
 // ============================================
 // Endpoint 1: POST /api/v1/conversations
 // ============================================
