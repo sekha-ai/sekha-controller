@@ -39,6 +39,17 @@ pub struct QueryRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RebuildEmbeddingsRequest {}
 
+#[derive(Deserialize, ToSchema)]
+pub struct FtsSearchRequest {
+    pub query: String,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+}
+
+fn default_limit() -> usize {
+    10
+}
+
 // ==================== RESPONSE DTOs ====================
 
 #[derive(Debug, Serialize, ToSchema)]

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use sea_orm::Statement;
 use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
 use serde_json::Value;
 use std::sync::Arc;
@@ -446,6 +447,35 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         Ok(results)
     }
+}
+
+/// Full-text search using FTS5
+pub async fn full_text_search(
+    &self,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<crate::models::Message>, RepositoryError> {
+    let sql = r#"
+        SELECT m.* FROM messages_fts fts
+        JOIN messages m ON fts.rowid = m.id
+        WHERE messages_fts MATCH ?1
+        ORDER BY rank
+        LIMIT ?2
+    "#;
+
+    let messages = entities::messages::Entity::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        sql,
+        vec![query.into(), (limit as i64).into()],
+    ))
+    .all(&self.db)
+    .await
+    .map_err(RepositoryError::from)?;
+
+    Ok(messages
+        .into_iter()
+        .map(|m| crate::models::Message::from(m))
+        .collect())
 }
 
 // ============================================

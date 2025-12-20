@@ -33,6 +33,68 @@ pub struct FilterParams {
     archived: Option<bool>,
 }
 
+// health check config
+use crate::storage::db::get_connection;
+
+async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, StatusCode> {
+    let mut checks = serde_json::json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "checks": {}
+    });
+
+    // Check database
+    match get_connection().await {
+        Some(db) => match db.execute_unprepared("SELECT 1").await {
+            Ok(_) => checks["checks"]["database"] = serde_json::json!({"status": "ok"}),
+            Err(e) => {
+                checks["checks"]["database"] = serde_json::json!({
+                    "status": "error",
+                    "error": e.to_string()
+                });
+                checks["status"] = "unhealthy";
+            }
+        },
+        None => {
+            checks["checks"]["database"] = serde_json::json!({
+                "status": "error",
+                "error": "No database connection"
+            });
+            checks["status"] = "unhealthy";
+        }
+    }
+
+    // Check Chroma (basic connectivity)
+    let chroma_check = state.repo.semantic_search("test", 1, None).await;
+    match chroma_check {
+        Ok(_) => checks["checks"]["chroma"] = serde_json::json!({"status": "ok"}),
+        Err(e) => {
+            checks["checks"]["chroma"] = serde_json::json!({
+                "status": "error",
+                "error": e.to_string()
+            });
+            checks["status"] = "unhealthy";
+        }
+    }
+
+    // Check embedding service (without generating actual embedding)
+    let embedding_service = &state.embedding_service;
+    if embedding_service.semaphore.available_permits() > 0 {
+        checks["checks"]["embedding_service"] = serde_json::json!({"status": "ok"});
+    } else {
+        checks["checks"]["embedding_service"] = serde_json::json!({
+            "status": "warning",
+            "error": "All embedding workers busy"
+        });
+    }
+
+    if checks["status"] == "healthy" {
+        Ok(Json(checks))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
 // ============================================
 // Endpoint 1: POST /api/v1/conversations
 // ============================================
@@ -556,6 +618,23 @@ async fn rebuild_embeddings(
     Ok(StatusCode::ACCEPTED)
 }
 
+// POST /api/v1/search/fts
+#[utoipa::path(
+    post,
+    path = "/api/v1/search/fts",
+    request_body = FtsSearchRequest,
+    responses(
+        (status = 200, description = "Full-text search results", body = Vec<MessageResponse>)
+    )
+)]
+async fn full_text_search(
+    State(state): State<AppState>,
+    Json(req): Json<FtsSearchRequest>,
+) -> Result<Json<Vec<crate::models::Message>>, AppError> {
+    let messages = state.repo.full_text_search(&req.query, req.limit).await?;
+    Ok(Json(messages))
+}
+
 // ============================================
 // Router - All 12 endpoints registered
 // ============================================
@@ -581,6 +660,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/conversations/count", get(count_conversations))
         .route("/api/v1/query", post(semantic_query))
         .route("/api/v1/rebuild-embeddings", post(rebuild_embeddings))
+        .route("/api/v1/search/fts", post(full_text_search))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)

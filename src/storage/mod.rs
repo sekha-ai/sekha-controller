@@ -7,3 +7,6 @@ pub use chroma_client::{ChromaClient, ChromaError};
 pub use db::init_db;
 pub use entities::{conversations, messages};
 pub use repository::{ConversationRepository, SeaOrmConversationRepository};
+
+#[cfg(test)]
+mod repository_tests;

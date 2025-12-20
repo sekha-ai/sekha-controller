@@ -76,9 +76,6 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 # EMBEDDING GENERATION - Ollama
 ollama-rs = "0.3.3"
 
-# For Ollama retries
-tokio-retry = "0.3"
-
 # VECTOR MATH (if needed)
 ndarray = "0.17.1"
 

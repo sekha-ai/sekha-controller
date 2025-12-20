@@ -1,4 +1,5 @@
 // use async_trait::async_trait;
+use crate::services::embedding_service::EmbeddingError;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -289,20 +290,6 @@ impl ChromaClient {
         self.client.get(&url).send().await?.error_for_status()?;
         Ok(())
     }
-}
-
-/// Retry logic for Ollama failures
-use tokio_retry::{strategy::ExponentialBackoff, Retry};
-
-async fn generate_embedding_with_retry(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
-    let retry_strategy = ExponentialBackoff::from_millis(100).map(|d| d * 2).take(3); // 100ms, 200ms, 400ms
-
-    let result = Retry::spawn(retry_strategy.clone(), || async {
-        self.generate_embedding(content).await
-    })
-    .await?;
-
-    Ok(result)
 }
 
 #[cfg(test)]
