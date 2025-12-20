@@ -39,7 +39,7 @@ pub struct QueryRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RebuildEmbeddingsRequest {}
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct FtsSearchRequest {
     pub query: String,
     #[serde(default = "default_limit")]
@@ -48,6 +48,12 @@ pub struct FtsSearchRequest {
 
 fn default_limit() -> usize {
     10
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FtsSearchResponse {
+    pub results: Vec<crate::models::Message>,
+    pub total: usize,
 }
 
 // ==================== RESPONSE DTOs ====================

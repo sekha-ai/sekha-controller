@@ -90,6 +90,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_chroma_upsert_and_query() {
+        let chroma = ChromaClient::new("http://localhost:8000".to_string());
+        let id = format!("test-{}", Uuid::new_v4());
+        let embedding = vec![0.1; 768];
+
+        // Test upsert
+        chroma
+            .upsert("test_collection", vec![(id.clone(), embedding.clone())])
+            .await
+            .unwrap();
+
+        // Test query
+        let results = chroma
+            .query("test_collection", embedding, 1, None)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, id);
+    }
+
+    #[tokio::test]
     async fn test_semantic_search_with_filters() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");

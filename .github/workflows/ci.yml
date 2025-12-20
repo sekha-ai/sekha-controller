@@ -162,6 +162,10 @@ jobs:
       
       - name: Run API tests
         run: cargo test --test api_test --all-features
+
+      - name: Run 1M message benchmark
+        run: cargo test --release --test insert_1m_messages -- --nocapture
+        timeout-minutes: 15
       
       # Cleanup: Stop LLM Bridge
       - name: Cleanup

@@ -462,8 +462,48 @@ async fn semantic_query(
 // ============================================
 // Endpoint 8: GET /health
 // ============================================
-async fn health() -> &'static str {
-    "OK"
+async fn health(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
+    let mut checks = json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "checks": {}
+    });
+
+    // Check database
+    match get_connection().await {
+        Some(db) => match db.execute_unprepared("SELECT 1").await {
+            Ok(_) => checks["checks"]["database"] = json!({"status": "ok"}),
+            Err(e) => {
+                checks["checks"]["database"] = json!({"status": "error", "error": e.to_string()});
+                checks["status"] = "unhealthy";
+            }
+        },
+        None => {
+            checks["checks"]["database"] = json!({"status": "error", "error": "No connection"});
+            checks["status"] = "unhealthy";
+        }
+    }
+
+    // Check Chroma
+    match state
+        .chroma
+        .client
+        .get("http://localhost:8000/api/v1/heartbeat")
+        .send()
+        .await
+    {
+        Ok(_) => checks["checks"]["chroma"] = json!({"status": "ok"}),
+        Err(e) => {
+            checks["checks"]["chroma"] = json!({"status": "error", "error": e.to_string()});
+            checks["status"] = "unhealthy";
+        }
+    }
+
+    if checks["status"] == "healthy" {
+        Ok(Json(checks))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
 }
 
 // ============================================
@@ -624,15 +664,19 @@ async fn rebuild_embeddings(
     path = "/api/v1/search/fts",
     request_body = FtsSearchRequest,
     responses(
-        (status = 200, description = "Full-text search results", body = Vec<MessageResponse>)
+        (status = 200, description = "Full-text search results", body = FtsSearchResponse)
     )
 )]
 async fn full_text_search(
     State(state): State<AppState>,
     Json(req): Json<FtsSearchRequest>,
-) -> Result<Json<Vec<crate::models::Message>>, AppError> {
+) -> Result<Json<FtsSearchResponse>, AppError> {
     let messages = state.repo.full_text_search(&req.query, req.limit).await?;
-    Ok(Json(messages))
+    let total = messages.len();
+    Ok(Json(FtsSearchResponse {
+        results: messages,
+        total,
+    }))
 }
 
 // ============================================

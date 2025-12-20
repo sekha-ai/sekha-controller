@@ -455,26 +455,45 @@ pub async fn full_text_search(
     query: &str,
     limit: usize,
 ) -> Result<Vec<crate::models::Message>, RepositoryError> {
-    let sql = r#"
-        SELECT m.* FROM messages_fts fts
-        JOIN messages m ON fts.rowid = m.id
-        WHERE messages_fts MATCH ?1
-        ORDER BY rank
-        LIMIT ?2
-    "#;
+    use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
 
-    let messages = entities::messages::Entity::find_by_statement(Statement::from_sql_and_values(
+    #[derive(FromQueryResult)]
+    struct MessageResult {
+        id: String,
+        conversation_id: String,
+        role: String,
+        content: String,
+        timestamp: String,
+        metadata: String,
+    }
+
+    let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
         DatabaseBackend::Sqlite,
-        sql,
+        r#"
+        SELECT m.id, m.conversation_id, m.role, m.content, m.timestamp, m.metadata 
+        FROM messages m 
+        JOIN messages_fts fts ON m.id = fts.rowid 
+        WHERE messages_fts MATCH ?1 
+        ORDER BY rank 
+        LIMIT ?2
+        "#,
         vec![query.into(), (limit as i64).into()],
     ))
     .all(&self.db)
-    .await
-    .map_err(RepositoryError::from)?;
+    .await?;
 
-    Ok(messages
+    Ok(results
         .into_iter()
-        .map(|m| crate::models::Message::from(m))
+        .map(|m| crate::models::Message {
+            id: Uuid::parse_str(&m.id).unwrap(),
+            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            role: m.role,
+            content: m.content,
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+                .unwrap(),
+            embedding_id: None,
+            metadata: serde_json::from_str(&m.metadata).unwrap_or(json!({})),
+        })
         .collect())
 }
 
