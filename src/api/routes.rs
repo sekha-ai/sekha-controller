@@ -618,6 +618,225 @@ async fn full_text_search(
 }
 
 // ============================================
+// MODULE 5 ORCHESTRATION ENDPOINTS
+// ============================================
+
+// Endpoint: POST /api/v1/context/assemble
+#[utoipa::path(
+    post,
+    path = "/api/v1/context/assemble",
+    request_body = ContextAssembleRequest,
+    responses(
+        (status = 200, description = "Context assembled", body = Vec<Message>),
+        (status = 500, description = "Server error", body = ErrorResponse)
+    )
+)]
+async fn assemble_context(
+    State(state): State<AppState>,
+    Json(req): Json<ContextAssembleRequest>,
+) -> Result<Json<Vec<Message>>, (StatusCode, Json<ErrorResponse>)> {
+    let results = state
+        .orchestrator
+        .assemble_context(&req.query, req.preferred_labels, req.context_budget)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    Ok(Json(results))
+}
+
+// Endpoint: POST /api/v1/summarize
+#[utoipa::path(
+    post,
+    path = "/api/v1/summarize",
+    request_body = SummarizeRequest,
+    responses(
+        (status = 200, description = "Summary generated", body = SummaryResponse),
+        (status = 500, description = "Server error", body = ErrorResponse)
+    )
+)]
+async fn generate_summary(
+    State(state): State<AppState>,
+    Json(req): Json<SummarizeRequest>,
+) -> Result<Json<SummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let summary = match req.level.as_str() {
+        "daily" => {
+            state
+                .orchestrator
+                .generate_daily_summary(req.conversation_id)
+                .await
+        }
+        "weekly" => {
+            state
+                .orchestrator
+                .summarizer
+                .generate_weekly_summary(req.conversation_id)
+                .await
+        }
+        "monthly" => {
+            state
+                .orchestrator
+                .summarizer
+                .generate_monthly_summary(req.conversation_id)
+                .await
+        }
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "Invalid level: must be daily, weekly, or monthly".to_string(),
+                    code: 400,
+                }),
+            ))
+        }
+    }
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    Ok(Json(SummaryResponse {
+        conversation_id: req.conversation_id,
+        level: req.level,
+        summary,
+        generated_at: chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+// Endpoint: POST /api/v1/prune/dry-run
+#[utoipa::path(
+    post,
+    path = "/api/v1/prune/dry-run",
+    request_body = PruneRequest,
+    responses(
+        (status = 200, description = "Pruning suggestions", body = PruneResponse),
+        (status = 500, description = "Server error", body = ErrorResponse)
+    )
+)]
+async fn prune_dry_run(
+    State(state): State<AppState>,
+    Json(req): Json<PruneRequest>,
+) -> Result<Json<PruneResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let suggestions = state
+        .orchestrator
+        .suggest_pruning(req.threshold_days)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    Ok(Json(PruneResponse {
+        suggestions: suggestions
+            .into_iter()
+            .map(|s| PruningSuggestionDto {
+                conversation_id: s.conversation_id,
+                conversation_label: s.conversation_label,
+                last_accessed: s.last_accessed.to_string(),
+                message_count: s.message_count,
+                token_estimate: s.token_estimate,
+                importance_score: s.importance_score,
+                preview: s.preview,
+                recommendation: s.recommendation,
+            })
+            .collect(),
+        total: suggestions.len(),
+    }))
+}
+
+// Endpoint: POST /api/v1/prune/execute
+#[utoipa::path(
+    post,
+    path = "/api/v1/prune/execute",
+    request_body = ExecutePruneRequest,
+    responses(
+        (status = 200, description = "Conversations archived"),
+        (status = 500, description = "Server error", body = ErrorResponse)
+    )
+)]
+async fn prune_execute(
+    State(state): State<AppState>,
+    Json(req): Json<ExecutePruneRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    for id in req.conversation_ids {
+        state
+            .repo
+            .update_status(id, "archived")
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: e.to_string(),
+                        code: 500,
+                    }),
+                )
+            })?;
+    }
+
+    Ok(StatusCode::OK)
+}
+
+// Endpoint: POST /api/v1/labels/suggest
+#[utoipa::path(
+    post,
+    path = "/api/v1/labels/suggest",
+    request_body = LabelSuggestRequest,
+    responses(
+        (status = 200, description = "Label suggestions", body = LabelSuggestResponse),
+        (status = 500, description = "Server error", body = ErrorResponse)
+    )
+)]
+async fn suggest_labels(
+    State(state): State<AppState>,
+    Json(req): Json<LabelSuggestRequest>,
+) -> Result<Json<LabelSuggestResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let suggestions = state
+        .orchestrator
+        .suggest_labels(req.conversation_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    Ok(Json(LabelSuggestResponse {
+        conversation_id: req.conversation_id,
+        suggestions: suggestions
+            .into_iter()
+            .map(|s| LabelSuggestionDto {
+                label: s.label,
+                confidence: s.confidence,
+                is_existing: s.is_existing,
+                reason: s.reason,
+            })
+            .collect(),
+    }))
+}
+
+// ============================================
 // Router - All 12 endpoints registered
 // ============================================
 pub fn create_router(state: AppState) -> Router {
@@ -643,6 +862,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/query", post(semantic_query))
         .route("/api/v1/rebuild-embeddings", post(rebuild_embeddings))
         .route("/api/v1/search/fts", post(full_text_search))
+        .route("/api/v1/context/assemble", post(assemble_context))
+        .route("/api/v1/summarize", post(generate_summary))
+        .route("/api/v1/prune/dry-run", post(prune_dry_run))
+        .route("/api/v1/prune/execute", post(prune_execute))
+        .route("/api/v1/labels/suggest", post(suggest_labels))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)

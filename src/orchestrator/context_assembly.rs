@@ -170,18 +170,99 @@ impl ContextAssembler {
 
     /// Helper: Get pinned messages (always included)
     async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
-        // TODO: Implement once 'pinned' status is in schema (Module 5 enhancement)
-        Ok(Vec::new())
+        use crate::storage::entities::{conversations, messages};
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        // Find conversations with importance_score >= 10 (pinned)
+        let pinned_convs = conversations::Entity::find()
+            .filter(conversations::Column::ImportanceScore.gte(10))
+            .filter(conversations::Column::Status.eq("active"))
+            .all(self.repo.get_db())
+            .await?;
+
+        let mut candidates = Vec::new();
+
+        for conv in pinned_convs {
+            let conv_id = Uuid::parse_str(&conv.id).unwrap();
+
+            // Get recent messages from pinned conversation
+            let messages = messages::Entity::find()
+                .filter(messages::Column::ConversationId.eq(conv.id.clone()))
+                .all(self.repo.get_db())
+                .await?;
+
+            for msg in messages {
+                candidates.push(CandidateMessage {
+                    message_id: Uuid::parse_str(&msg.id).unwrap(),
+                    conversation_id: conv_id,
+                    score: 10.0, // Max score for pinned
+                    timestamp: chrono::NaiveDateTime::parse_from_str(
+                        &msg.timestamp,
+                        "%Y-%m-%d %H:%M:%S%.f",
+                    )
+                    .unwrap(),
+                    label: conv.label.clone(),
+                    is_pinned: true,
+                    importance: 10.0,
+                });
+            }
+        }
+
+        Ok(candidates)
     }
 
     /// Helper: Get recent messages from preferred labels
     async fn get_recent_labeled_messages(
         &self,
-        _labels: &[String],
-        _days: i64,
+        labels: &[String],
+        days: i64,
     ) -> Result<Vec<CandidateMessage>, RepositoryError> {
-        // TODO: Implement FTS5 search for recent messages (Module 5 enhancement)
-        Ok(Vec::new())
+        use crate::storage::entities::{conversations, messages};
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        if labels.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let cutoff = (chrono::Utc::now().naive_utc() - chrono::Duration::days(days)).to_string();
+
+        let mut candidates = Vec::new();
+
+        for label in labels {
+            let convs = conversations::Entity::find()
+                .filter(conversations::Column::Label.eq(label))
+                .filter(conversations::Column::Status.eq("active"))
+                .all(self.repo.get_db())
+                .await?;
+
+            for conv in convs {
+                let conv_id = Uuid::parse_str(&conv.id).unwrap();
+
+                let messages = messages::Entity::find()
+                    .filter(messages::Column::ConversationId.eq(conv.id.clone()))
+                    .filter(messages::Column::Timestamp.gte(cutoff.clone()))
+                    .all(self.repo.get_db())
+                    .await?;
+
+                for msg in messages {
+                    candidates.push(CandidateMessage {
+                        message_id: Uuid::parse_str(&msg.id).unwrap(),
+                        conversation_id: conv_id,
+                        score: 5.0, // Default, will be refined
+                        timestamp: chrono::NaiveDateTime::parse_from_str(
+                            &msg.timestamp,
+                            "%Y-%m-%d %H:%M:%S%.f",
+                        )
+                        .unwrap(),
+                        label: conv.label.clone(),
+                        is_pinned: false,
+                        importance: conv.importance_score as f32,
+                    });
+                }
+            }
+        }
+
+        Ok(candidates)
     }
 
     async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {

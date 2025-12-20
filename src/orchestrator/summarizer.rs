@@ -139,13 +139,24 @@ impl HierarchicalSummarizer {
 
     async fn fetch_summaries_from_last_n_days(
         &self,
-        _conversation_id: Uuid,
-        _days: i64,
-        _level: &str,
+        conversation_id: Uuid,
+        days: i64,
+        level: &str,
     ) -> Result<Vec<String>, RepositoryError> {
-        // TODO: Query summaries table once it's created
-        // For now, just return empty to trigger fallback
-        Ok(Vec::new())
+        use crate::storage::entities::hierarchical_summaries;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        let cutoff = Utc::now().naive_utc() - Duration::days(days);
+
+        let models = hierarchical_summaries::Entity::find()
+            .filter(hierarchical_summaries::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(hierarchical_summaries::Column::Level.eq(level))
+            .filter(hierarchical_summaries::Column::GeneratedAt.gte(cutoff.to_string()))
+            .all(self.repo.get_db())
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        Ok(models.into_iter().map(|m| m.summary_text).collect())
     }
 
     async fn store_summary(
@@ -154,12 +165,30 @@ impl HierarchicalSummarizer {
         level: &str,
         summary: &str,
     ) -> Result<(), RepositoryError> {
+        use crate::storage::entities::hierarchical_summaries;
+        use sea_orm::Set;
+
+        let now = chrono::Utc::now().naive_utc();
+
+        let new_summary = hierarchical_summaries::ActiveModel {
+            id: Set(Uuid::new_v4().to_string()),
+            conversation_id: Set(conversation_id.to_string()),
+            level: Set(level.to_string()),
+            summary_text: Set(summary.to_string()),
+            token_count: Set(Some((summary.len() / 4) as i32)), // Estimate tokens
+            generated_at: Set(now.to_string()),
+            ..Default::default()
+        };
+
+        new_summary.insert(self.repo.get_db()).await?;
+
         tracing::info!(
-            "Stored {} summary for {}: {}",
+            "✅ Stored {} summary for {} ({} chars)",
             level,
             conversation_id,
-            summary.chars().take(50).collect::<String>()
+            summary.len()
         );
+
         Ok(())
     }
 }

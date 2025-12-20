@@ -137,3 +137,72 @@ pub struct MemoryQueryResponse {
     pub data: QueryResponse,
     pub error: Option<String>,
 }
+
+// Module 5 DTOs
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ContextAssembleRequest {
+    pub query: String,
+    pub preferred_labels: Vec<String>,
+    pub context_budget: usize,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SummarizeRequest {
+    pub conversation_id: Uuid,
+    pub level: String, // "daily", "weekly", "monthly"
+}
+
+#[derive(Debug, Serialize)]
+pub struct SummaryResponse {
+    pub conversation_id: Uuid,
+    pub level: String,
+    pub summary: String,
+    pub generated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PruneRequest {
+    pub threshold_days: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PruneResponse {
+    pub suggestions: Vec<PruningSuggestionDto>,
+    pub total: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PruningSuggestionDto {
+    pub conversation_id: Uuid,
+    pub conversation_label: String,
+    pub last_accessed: String,
+    pub message_count: u64,
+    pub token_estimate: u32,
+    pub importance_score: f32,
+    pub preview: String,
+    pub recommendation: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExecutePruneRequest {
+    pub conversation_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LabelSuggestRequest {
+    pub conversation_id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LabelSuggestResponse {
+    pub conversation_id: Uuid,
+    pub suggestions: Vec<LabelSuggestionDto>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LabelSuggestionDto {
+    pub label: String,
+    pub confidence: f32,
+    pub is_existing: bool,
+    pub reason: String,
+}
