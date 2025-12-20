@@ -92,6 +92,22 @@ async fn main() -> anyhow::Result<()> {
         orchestrator,
     };
 
+    // Start file watcher in background
+    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+    let watch_path = home_dir.join(".sekha").join("import");
+
+    let watcher_repo = repository.clone();
+    tokio::spawn(async move {
+        let watcher =
+            sekha_controller::services::file_watcher::ImportWatcher::new(watch_path, watcher_repo);
+
+        if let Err(e) = watcher.watch().await {
+            tracing::error!("❌ File watcher error: {}", e);
+        }
+    });
+
+    tracing::info!("👀 File watcher started for ~/.sekha/import/");
+
     // Build router with both REST and MCP endpoints
     let app = Router::new()
         .merge(routes::create_router(state.clone()))

@@ -28,6 +28,7 @@ dotenv = "0.15.0"
 
 # File watching
 notify = "8.2.0"
+dirs = "5.0"  # For home directory detection
 
 # Logging
 tracing = "0.1"
@@ -78,6 +79,13 @@ ollama-rs = "0.3.3"
 
 # VECTOR MATH (if needed)
 ndarray = "0.17.1"
+
+# Optional: Better XML parsing
+quick-xml = { version = "0.31", optional = true }
+
+[features]
+cli = []  # Enable CLI tool
+xml = ["quick-xml"]  # Better XML parsing
 
 [dev-dependencies]
 tempfile = "3.23.0"

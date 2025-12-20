@@ -1,5 +1,6 @@
 pub mod embedding_queue;
 pub mod embedding_service;
+pub mod file_watcher;
 pub mod llm_bridge_client;
 
 // Re-export for convenience

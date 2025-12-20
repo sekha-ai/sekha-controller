@@ -1,13 +1,637 @@
+use anyhow::{Context, Result};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::fs;
+use tokio::sync::mpsc;
+use uuid::Uuid;
+
+use crate::models::internal::{NewConversation, NewMessage};
+use crate::storage::repository::ConversationRepository;
+
+// ============================================
+// ChatGPT Export Format
+// ============================================
+
+#[derive(Debug, Deserialize)]
+struct ChatGptExport {
+    title: Option<String>,
+    create_time: Option<f64>,
+    update_time: Option<f64>,
+    mapping: std::collections::HashMap<String, ChatGptNode>,
+    #[serde(default)]
+    conversation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatGptNode {
+    id: String,
+    message: Option<ChatGptMessage>,
+    parent: Option<String>,
+    children: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatGptMessage {
+    id: String,
+    author: ChatGptAuthor,
+    create_time: Option<f64>,
+    content: ChatGptContent,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatGptAuthor {
+    role: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatGptContent {
+    content_type: String,
+    parts: Option<Vec<String>>,
+}
+
+// ============================================
+// Claude Export Format (XML-based)
+// ============================================
+
+#[derive(Debug, Deserialize)]
+struct ClaudeExport {
+    #[serde(rename = "conversation")]
+    conversations: Vec<ClaudeConversation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaudeConversation {
+    title: Option<String>,
+    created_at: Option<String>,
+    updated_at: Option<String>,
+    messages: Vec<ClaudeMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaudeMessage {
+    role: String,
+    content: String,
+    timestamp: Option<String>,
+}
+
+// ============================================
+// Unified Import Format
+// ============================================
+
+#[derive(Debug, Clone)]
+struct ParsedConversation {
+    title: String,
+    messages: Vec<ParsedMessage>,
+    created_at: chrono::NaiveDateTime,
+    updated_at: chrono::NaiveDateTime,
+    source: ImportSource,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedMessage {
+    role: String,
+    content: String,
+    timestamp: chrono::NaiveDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum ImportSource {
+    ChatGPT,
+    Claude,
+    Unknown,
+}
+
+// ============================================
+// File Watcher
+// ============================================
+
 pub struct ImportWatcher {
     watch_path: PathBuf,
     processor: Arc<ImportProcessor>,
 }
 
 impl ImportWatcher {
+    pub fn new(watch_path: PathBuf, repo: Arc<dyn ConversationRepository + Send + Sync>) -> Self {
+        Self {
+            watch_path,
+            processor: Arc::new(ImportProcessor::new(repo)),
+        }
+    }
+
+    /// Start watching the import directory for new files
     pub async fn watch(&self) -> Result<()> {
-        // Use notify crate to watch ~/.sekha/import/
-        // Auto-detect ChatGPT/Claude export formats
-        // Parse and store in database
-        // Move processed files to ~/.sekha/imported/
+        // Ensure directories exist
+        self.ensure_directories().await?;
+
+        // Create channel for file events
+        let (tx, mut rx) = mpsc::channel(100);
+
+        // Clone for async move
+        let processor = self.processor.clone();
+
+        // Spawn watcher on separate thread (notify requires blocking)
+        let watch_path = self.watch_path.clone();
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Handle::current();
+            let tx_clone = tx.clone();
+
+            let mut watcher: RecommendedWatcher = Watcher::new(
+                move |res: Result<Event, notify::Error>| {
+                    if let Ok(event) = res {
+                        if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
+                            for path in event.paths {
+                                if path.extension().and_then(|s| s.to_str()) == Some("json")
+                                    || path.extension().and_then(|s| s.to_str()) == Some("xml")
+                                {
+                                    let _ = tx_clone.blocking_send(path);
+                                }
+                            }
+                        }
+                    }
+                },
+                notify::Config::default(),
+            )
+            .expect("Failed to create watcher");
+
+            watcher
+                .watch(&watch_path, RecursiveMode::NonRecursive)
+                .expect("Failed to watch directory");
+
+            tracing::info!("📁 Watching for imports in: {}", watch_path.display());
+
+            // Keep watcher alive
+            std::thread::park();
+        });
+
+        // Process initial files already in directory
+        self.process_existing_files().await?;
+
+        // Process new files as they arrive
+        while let Some(path) = rx.recv().await {
+            tracing::info!("📥 New file detected: {}", path.display());
+
+            // Small delay to ensure file is fully written
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            if let Err(e) = processor.process_file(&path).await {
+                tracing::error!("❌ Failed to process {}: {}", path.display(), e);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn ensure_directories(&self) -> Result<()> {
+        fs::create_dir_all(&self.watch_path).await?;
+
+        let imported_path = self.watch_path.parent().unwrap().join("imported");
+        fs::create_dir_all(&imported_path).await?;
+
+        tracing::info!("✅ Import directories ready");
+        Ok(())
+    }
+
+    async fn process_existing_files(&self) -> Result<()> {
+        let mut entries = fs::read_dir(&self.watch_path).await?;
+
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext == "json" || ext == "xml" {
+                        tracing::info!("📄 Processing existing file: {}", path.display());
+
+                        if let Err(e) = self.processor.process_file(&path).await {
+                            tracing::error!("❌ Failed to process {}: {}", path.display(), e);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// ============================================
+// Import Processor
+// ============================================
+
+pub struct ImportProcessor {
+    repo: Arc<dyn ConversationRepository + Send + Sync>,
+}
+
+impl ImportProcessor {
+    pub fn new(repo: Arc<dyn ConversationRepository + Send + Sync>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn process_file(&self, path: &Path) -> Result<()> {
+        tracing::info!("🔍 Processing file: {}", path.display());
+
+        // Read file content
+        let content = fs::read_to_string(path)
+            .await
+            .context("Failed to read file")?;
+
+        // Detect format and parse
+        let conversations = self.parse_file(&content, path)?;
+
+        tracing::info!("📊 Found {} conversations", conversations.len());
+
+        // Store each conversation
+        let mut imported_count = 0;
+        for conv in conversations {
+            match self.import_conversation(conv).await {
+                Ok(id) => {
+                    imported_count += 1;
+                    tracing::info!("✅ Imported conversation: {}", id);
+                }
+                Err(e) => {
+                    tracing::error!("❌ Failed to import conversation: {}", e);
+                }
+            }
+        }
+
+        // Move processed file
+        self.move_to_imported(path).await?;
+
+        tracing::info!(
+            "🎉 Successfully imported {} conversations from {}",
+            imported_count,
+            path.file_name().unwrap().to_str().unwrap()
+        );
+
+        Ok(())
+    }
+
+    fn parse_file(&self, content: &str, path: &Path) -> Result<Vec<ParsedConversation>> {
+        // Try ChatGPT format first
+        if let Ok(chatgpt_data) = serde_json::from_str::<Vec<ChatGptExport>>(content) {
+            tracing::info!("🤖 Detected ChatGPT export format (array)");
+            return Ok(chatgpt_data
+                .into_iter()
+                .filter_map(|export| self.parse_chatgpt_export(export).ok())
+                .collect());
+        }
+
+        // Try single ChatGPT conversation
+        if let Ok(chatgpt_export) = serde_json::from_str::<ChatGptExport>(content) {
+            tracing::info!("🤖 Detected ChatGPT export format (single)");
+            return Ok(vec![self.parse_chatgpt_export(chatgpt_export)?]);
+        }
+
+        // Try Claude XML format
+        if content.trim_start().starts_with("<?xml")
+            || content.trim_start().starts_with("<conversation")
+        {
+            tracing::info!("🧠 Detected Claude export format");
+            return self.parse_claude_export(content);
+        }
+
+        // Try Claude JSON format
+        if let Ok(claude_export) = serde_json::from_str::<ClaudeExport>(content) {
+            tracing::info!("🧠 Detected Claude JSON export format");
+            return Ok(claude_export
+                .conversations
+                .into_iter()
+                .filter_map(|conv| self.parse_claude_conversation(conv).ok())
+                .collect());
+        }
+
+        anyhow::bail!("Unknown export format for file: {}", path.display())
+    }
+
+    fn parse_chatgpt_export(&self, export: ChatGptExport) -> Result<ParsedConversation> {
+        let title = export
+            .title
+            .unwrap_or_else(|| "Untitled ChatGPT Conversation".to_string());
+
+        // Build conversation tree from mapping
+        let mut messages = Vec::new();
+
+        // Find root node (node with no parent or parent = null)
+        let root_id = export
+            .mapping
+            .iter()
+            .find(|(_, node)| node.parent.is_none())
+            .map(|(id, _)| id.clone());
+
+        if let Some(root) = root_id {
+            self.traverse_chatgpt_tree(&export.mapping, &root, &mut messages);
+        }
+
+        let created_at = export
+            .create_time
+            .map(|ts| {
+                chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                    .unwrap_or_else(chrono::Utc::now().naive_utc)
+            })
+            .unwrap_or_else(chrono::Utc::now().naive_utc);
+
+        let updated_at = export
+            .update_time
+            .map(|ts| {
+                chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                    .unwrap_or_else(chrono::Utc::now().naive_utc)
+            })
+            .unwrap_or(created_at);
+
+        Ok(ParsedConversation {
+            title,
+            messages,
+            created_at,
+            updated_at,
+            source: ImportSource::ChatGPT,
+        })
+    }
+
+    fn traverse_chatgpt_tree(
+        &self,
+        mapping: &std::collections::HashMap<String, ChatGptNode>,
+        node_id: &str,
+        messages: &mut Vec<ParsedMessage>,
+    ) {
+        if let Some(node) = mapping.get(node_id) {
+            // Add message if it exists and has content
+            if let Some(msg) = &node.message {
+                if let Some(parts) = &msg.content.parts {
+                    if !parts.is_empty() {
+                        let content = parts.join("\n");
+
+                        // Filter out empty messages
+                        if !content.trim().is_empty() {
+                            let timestamp = msg
+                                .create_time
+                                .and_then(|ts| {
+                                    chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                                })
+                                .unwrap_or_else(chrono::Utc::now().naive_utc);
+
+                            messages.push(ParsedMessage {
+                                role: msg.author.role.clone(),
+                                content,
+                                timestamp,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Traverse children (typically only one active child in ChatGPT exports)
+            for child_id in &node.children {
+                self.traverse_chatgpt_tree(mapping, child_id, messages);
+            }
+        }
+    }
+
+    fn parse_claude_export(&self, content: &str) -> Result<Vec<ParsedConversation>> {
+        // Simple XML parser for Claude format
+        // Note: For production, use a proper XML parser like quick-xml
+
+        let mut conversations = Vec::new();
+
+        // Basic XML parsing (simplified)
+        if content.contains("<conversation>") {
+            // Parse single conversation
+            let title = self
+                .extract_xml_tag(content, "title")
+                .unwrap_or_else(|| "Untitled Claude Conversation".to_string());
+
+            let messages = self.extract_claude_messages_xml(content);
+
+            conversations.push(ParsedConversation {
+                title,
+                messages,
+                created_at: chrono::Utc::now().naive_utc(),
+                updated_at: chrono::Utc::now().naive_utc(),
+                source: ImportSource::Claude,
+            });
+        }
+
+        Ok(conversations)
+    }
+
+    fn parse_claude_conversation(&self, conv: ClaudeConversation) -> Result<ParsedConversation> {
+        let title = conv
+            .title
+            .unwrap_or_else(|| "Untitled Claude Conversation".to_string());
+
+        let messages: Vec<ParsedMessage> = conv
+            .messages
+            .into_iter()
+            .map(|msg| {
+                let timestamp = msg
+                    .timestamp
+                    .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
+                    .map(|dt| dt.naive_utc())
+                    .unwrap_or_else(chrono::Utc::now().naive_utc);
+
+                ParsedMessage {
+                    role: msg.role,
+                    content: msg.content,
+                    timestamp,
+                }
+            })
+            .collect();
+
+        let created_at = conv
+            .created_at
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
+            .map(|dt| dt.naive_utc())
+            .unwrap_or_else(chrono::Utc::now().naive_utc);
+
+        let updated_at = conv
+            .updated_at
+            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
+            .map(|dt| dt.naive_utc())
+            .unwrap_or(created_at);
+
+        Ok(ParsedConversation {
+            title,
+            messages,
+            created_at,
+            updated_at,
+            source: ImportSource::Claude,
+        })
+    }
+
+    fn extract_xml_tag(&self, content: &str, tag: &str) -> Option<String> {
+        let start_tag = format!("<{}>", tag);
+        let end_tag = format!("</{}>", tag);
+
+        if let Some(start) = content.find(&start_tag) {
+            if let Some(end) = content[start..].find(&end_tag) {
+                let value = &content[start + start_tag.len()..start + end];
+                return Some(value.trim().to_string());
+            }
+        }
+        None
+    }
+
+    fn extract_claude_messages_xml(&self, content: &str) -> Vec<ParsedMessage> {
+        let mut messages = Vec::new();
+
+        // Simple extraction (for production, use quick-xml crate)
+        let parts: Vec<&str> = content.split("<message>").collect();
+
+        for part in parts.iter().skip(1) {
+            if let Some(end) = part.find("</message>") {
+                let msg_content = &part[..end];
+
+                let role = self
+                    .extract_xml_tag(msg_content, "role")
+                    .unwrap_or_else(|| "user".to_string());
+
+                let content = self
+                    .extract_xml_tag(msg_content, "content")
+                    .unwrap_or_default();
+
+                if !content.is_empty() {
+                    messages.push(ParsedMessage {
+                        role,
+                        content,
+                        timestamp: chrono::Utc::now().naive_utc(),
+                    });
+                }
+            }
+        }
+
+        messages
+    }
+
+    async fn import_conversation(&self, parsed: ParsedConversation) -> Result<Uuid> {
+        let messages: Vec<NewMessage> = parsed
+            .messages
+            .into_iter()
+            .map(|msg| NewMessage {
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp,
+                metadata: serde_json::json!({
+                    "source": match parsed.source {
+                        ImportSource::ChatGPT => "chatgpt",
+                        ImportSource::Claude => "claude",
+                        ImportSource::Unknown => "unknown",
+                    },
+                    "imported_at": chrono::Utc::now().to_rfc3339(),
+                }),
+            })
+            .collect();
+
+        let word_count: i32 = messages.iter().map(|m| m.content.len() as i32).sum();
+
+        let new_conv = NewConversation {
+            id: Some(Uuid::new_v4()),
+            label: parsed.title,
+            folder: match parsed.source {
+                ImportSource::ChatGPT => "/imports/chatgpt".to_string(),
+                ImportSource::Claude => "/imports/claude".to_string(),
+                ImportSource::Unknown => "/imports/unknown".to_string(),
+            },
+            status: "active".to_string(),
+            importance_score: Some(5),
+            word_count,
+            session_count: Some(1),
+            created_at: parsed.created_at,
+            updated_at: parsed.updated_at,
+            messages,
+        };
+
+        self.repo
+            .create_with_messages(new_conv)
+            .await
+            .context("Failed to store conversation in database")
+    }
+
+    async fn move_to_imported(&self, path: &Path) -> Result<()> {
+        let imported_dir = path.parent().unwrap().parent().unwrap().join("imported");
+        fs::create_dir_all(&imported_dir).await?;
+
+        let filename = path.file_name().unwrap();
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let new_filename = format!("{}_{}", timestamp, filename.to_str().unwrap());
+        let new_path = imported_dir.join(new_filename);
+
+        fs::rename(path, &new_path).await?;
+
+        tracing::info!("📦 Moved to: {}", new_path.display());
+
+        Ok(())
+    }
+}
+
+// ============================================
+// Standalone CLI Tool (Optional)
+// ============================================
+
+#[cfg(feature = "cli")]
+pub async fn run_import_watcher(repo: Arc<dyn ConversationRepository + Send + Sync>) -> Result<()> {
+    let home_dir = dirs::home_dir().context("Failed to get home directory")?;
+    let watch_path = home_dir.join(".sekha").join("import");
+
+    let watcher = ImportWatcher::new(watch_path, repo);
+    watcher.watch().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_chatgpt_json() {
+        let json = r#"{
+            "title": "Test Conversation",
+            "create_time": 1703073600.0,
+            "update_time": 1703073600.0,
+            "mapping": {
+                "root": {
+                    "id": "root",
+                    "message": null,
+                    "parent": null,
+                    "children": ["msg1"]
+                },
+                "msg1": {
+                    "id": "msg1",
+                    "message": {
+                        "id": "msg1",
+                        "author": {"role": "user"},
+                        "create_time": 1703073600.0,
+                        "content": {
+                            "content_type": "text",
+                            "parts": ["Hello world"]
+                        }
+                    },
+                    "parent": "root",
+                    "children": []
+                }
+            }
+        }"#;
+
+        let export: ChatGptExport = serde_json::from_str(json).unwrap();
+        assert_eq!(export.title.unwrap(), "Test Conversation");
+    }
+
+    #[test]
+    fn test_extract_xml_tag() {
+        let processor = ImportProcessor::new(Arc::new(MockRepo));
+        let xml = "<conversation><title>Test</title></conversation>";
+
+        assert_eq!(
+            processor.extract_xml_tag(xml, "title"),
+            Some("Test".to_string())
+        );
+    }
+
+    // Mock repository for tests
+    struct MockRepo;
+
+    #[async_trait::async_trait]
+    impl ConversationRepository for MockRepo {
+        // Implement minimal trait methods for testing
+        // ... (stub implementations)
     }
 }
