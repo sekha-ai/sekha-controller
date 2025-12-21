@@ -59,3 +59,13 @@ pub struct ReloadableConfig {
     pub pruning_enabled: bool,
     pub log_level: String,
 }
+
+// REST API Fallback 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    pub server_port: u16,
+    pub mcp_api_key: String,
+    // ...
+    pub rest_api_key: Option<String>, // new; optional, falls back to mcp_api_key
+}
+
