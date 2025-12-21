@@ -142,9 +142,10 @@ impl ImportWatcher {
                     if let Ok(event) = res {
                         if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
                             for path in event.paths {
-                                if path.extension().and_then(|s| s.to_str()) == Some("json")
-                                    || path.extension().and_then(|s| s.to_str()) == Some("xml")
-                                {
+                                if matches!(
+                                    path.extension().and_then(|s| s.to_str()),
+                                    Some("json") | Some("xml") | Some("md") | Some("txt")
+                                )
                                     let _ = tx_clone.blocking_send(path);
                                 }
                             }
@@ -458,6 +459,134 @@ impl ImportProcessor {
             source: ImportSource::Claude,
         })
     }
+
+    // Try Markdown format (ChatGPT exports)
+    if path.extension().and_then(|s| s.to_str()) == Some("md") {
+        tracing::info!("📝 Detected Markdown export format");
+        let filename = path.file_name().unwrap().to_str().unwrap();
+        return Ok(vec![self.parse_markdown_export(content, filename)?]);
+    }
+
+    // Try TXT format (custom)
+    if path.extension().and_then(|s| s.to_str()) == Some("txt") {
+        tracing::info!("📄 Detected TXT export format");
+        let filename = path.file_name().unwrap().to_str().unwrap();
+        return Ok(vec![self.parse_txt_export(content, filename)?]);
+    }
+
+
+    fn parse_markdown_export(&self, content: &str, filename: &str) -> Result<ParsedConversation> {
+        let mut messages = Vec::new();
+        let mut current_role = String::new();
+        let mut current_content = String::new();
+        
+        for line in content.lines() {
+            if line.starts_with("# ") {
+                // Title line - skip
+                continue;
+            } else if line.starts_with("## ") || line.starts_with("**User:**") || line.starts_with("**Assistant:**") {
+                // Save previous message
+                if !current_content.is_empty() {
+                    messages.push(ParsedMessage {
+                        role: current_role.clone(),
+                        content: current_content.trim().to_string(),
+                        timestamp: chrono::Utc::now().naive_utc(),
+                    });
+                }
+                
+                // Detect role
+                current_role = if line.contains("User") || line.contains("user") {
+                    "user".to_string()
+                } else {
+                    "assistant".to_string()
+                };
+                current_content = String::new();
+            } else if !line.trim().is_empty() {
+                current_content.push_str(line);
+                current_content.push('\n');
+            }
+        }
+        
+        // Save last message
+        if !current_content.is_empty() {
+            messages.push(ParsedMessage {
+                role: current_role,
+                content: current_content.trim().to_string(),
+                timestamp: chrono::Utc::now().naive_utc(),
+            });
+        }
+        
+        let title = filename
+            .strip_suffix(".md")
+            .unwrap_or(filename)
+            .to_string();
+        
+        Ok(ParsedConversation {
+            title,
+            messages,
+            created_at: chrono::Utc::now().naive_utc(),
+            updated_at: chrono::Utc::now().naive_utc(),
+            source: ImportSource::ChatGPT,
+        })
+    }
+
+    fn parse_txt_export(&self, content: &str, filename: &str) -> Result<ParsedConversation> {
+        // Simple line-by-line parser for custom format
+        // Expected format: "User: message" or "Assistant: message"
+        let mut messages = Vec::new();
+        let mut current_role = String::new();
+        let mut current_content = String::new();
+        
+        for line in content.lines() {
+            if line.starts_with("User:") || line.starts_with("user:") {
+                if !current_content.is_empty() {
+                    messages.push(ParsedMessage {
+                        role: current_role.clone(),
+                        content: current_content.trim().to_string(),
+                        timestamp: chrono::Utc::now().naive_utc(),
+                    });
+                }
+                current_role = "user".to_string();
+                current_content = line.trim_start_matches("User:").trim_start_matches("user:").trim().to_string();
+            } else if line.starts_with("Assistant:") || line.starts_with("assistant:") {
+                if !current_content.is_empty() {
+                    messages.push(ParsedMessage {
+                        role: current_role.clone(),
+                        content: current_content.trim().to_string(),
+                        timestamp: chrono::Utc::now().naive_utc(),
+                    });
+                }
+                current_role = "assistant".to_string();
+                current_content = line.trim_start_matches("Assistant:").trim_start_matches("assistant:").trim().to_string();
+            } else if !line.trim().is_empty() && !current_role.is_empty() {
+                current_content.push('\n');
+                current_content.push_str(line);
+            }
+        }
+        
+        // Save last message
+        if !current_content.is_empty() {
+            messages.push(ParsedMessage {
+                role: current_role,
+                content: current_content.trim().to_string(),
+                timestamp: chrono::Utc::now().naive_utc(),
+            });
+        }
+        
+        let title = filename
+            .strip_suffix(".txt")
+            .unwrap_or(filename)
+            .to_string();
+        
+        Ok(ParsedConversation {
+            title,
+            messages,
+            created_at: chrono::Utc::now().naive_utc(),
+            updated_at: chrono::Utc::now().naive_utc(),
+            source: ImportSource::Unknown,
+        })
+    }
+
 
     fn extract_xml_tag(&self, content: &str, tag: &str) -> Option<String> {
         let start_tag = format!("<{}>", tag);

@@ -1,3 +1,5 @@
+# LLM Configuration
+ollama_url = "http://localhost:11434"
 embedding_model = "nomic-embed-text:latest"
 summarization_model = "llama3.1:8b"
 
@@ -18,7 +20,7 @@ collection_name = "sekha_conversations"
 url = "http://localhost:5001"
 timeout_secs = 30
 
-# NEW: API Configuration
+# API Configuration
 [api]
 # API keys for Bearer token authentication
 # Format: sk-sekha-<32_random_characters>
@@ -28,8 +30,21 @@ api_keys = [
 ]
 mcp_api_key = "test_key_12345678901234567890123456789012"
 
+# Optional: Separate REST API key (falls back to mcp_api_key if not set)
+rest_api_key = "rest_key_xyz7890123456789xyz7890123456789"
+
+# Additional API keys for multi-user access
+additional_api_keys = [
+    "team_key_111222333444555666777888999000",
+    "service_key_aabbccddeeaabbccddeeaabbccdd",
+]
+
 # Rate limiting: requests per minute per IP
 rate_limit_per_minute = 1000
 
 # Enable CORS
 cors_enabled = true
+
+# Features
+summarization_enabled = true
+pruning_enabled = true
