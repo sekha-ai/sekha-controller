@@ -1,15 +1,24 @@
 [package]
 name = "sekha-controller"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+authors = ["Sekha AI <hello@sekha.ai>"]
+description = "Persistent AI memory controller for context management"
+homepage = "https://sekha.ai"
+repository = "https://github.com/sekha-ai/sekha-controller"
+license = "AGPL-3.0"
+keywords = ["ai", "memory", "llm", "context", "ml"]
+categories = ["command-line-utilities", "web-programming"]
+readme = "README.md"
+
+# Binary configuration
+[[bin]]
+name = "sekha-controller"
+path = "src/main.rs"
 
 [lib]
 name = "sekha_controller"
 path = "src/lib.rs"
-
-[[bin]]
-name = "sekha-controller"
-path = "src/main.rs"
 
 [dependencies]
 # Core async runtime
@@ -71,6 +80,10 @@ sea-orm-migration = "=2.0.0-rc.20"
 sea-orm-cli = "=2.0.0-rc.20"
 sea-orm-codegen = "=2.0.0-rc.20"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite"] }
+
+# Daemon requirements
+daemonize = "0.5"
+clap = { version = "4.5", features = ["derive"] }
 
 # CHROMA INTEGRATION - Vector Database
 chromadb = "^2.3"

@@ -15,6 +15,173 @@ use sekha_controller::{
     storage::{self, chroma_client::ChromaClient, repository::SeaOrmConversationRepository},
 };
 
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "sekha-controller")]
+#[command(about = "Sekha AI Memory Controller", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the controller server
+    Start {
+        /// Run as background daemon
+        #[arg(short, long)]
+        daemon: bool,
+        
+        /// Port to listen on
+        #[arg(short, long, default_value_t = 8080)]
+        port: u16,
+    },
+    
+    /// Stop the running daemon
+    Stop,
+    
+    /// Check controller health
+    Health,
+    
+    /// Show current status
+    Status,
+    
+    /// Initialize configuration
+    Setup,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = Cli::parse();
+    
+    match &cli.command {
+        Some(Commands::Start { daemon, port }) => {
+            if *daemon {
+                start_daemon(*port).await?;
+            } else {
+                start_server(*port).await?;
+            }
+        }
+        Some(Commands::Stop) => {
+            stop_daemon().await?;
+        }
+        Some(Commands::Health) => {
+            check_health().await?;
+        }
+        Some(Commands::Status) => {
+            show_status().await?;
+        }
+        Some(Commands::Setup) => {
+            run_setup().await?;
+        }
+        None => {
+            // Default: start server
+            start_server(8080).await?;
+        }
+    }
+    
+    Ok(())
+}
+
+async fn start_daemon(port: u16) -> Result<()> {
+    use daemonize::Daemonize;
+    
+    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+    let pid_file = home_dir.join(".sekha/sekha.pid");
+    let log_dir = home_dir.join(".sekha/logs");
+    
+    std::fs::create_dir_all(&log_dir)?;
+    
+    let daemonize = Daemonize::new()
+        .pid_file(pid_file)
+        .working_directory(home_dir)
+        .umask(0o027);
+    
+    match daemonize.start() {
+        Ok(_) => {
+            tracing::info!("🔧 Sekha Controller started as daemon on port {}", port);
+            start_server(port).await
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to start daemon: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn stop_daemon() -> Result<()> {
+    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+    let pid_file = home_dir.join(".sekha/sekha.pid");
+    
+    if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            unsafe {
+                libc::kill(pid, libc::SIGTERM);
+            }
+            std::fs::remove_file(&pid_file)?;
+            println!("✅ Sekha Controller stopped");
+        }
+    } else {
+        println!("❌ No running daemon found");
+    }
+    
+    Ok(())
+}
+
+async fn check_health() -> Result<()> {
+    let client = reqwest::Client::new();
+    match client.get("http://localhost:8080/health").send().await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("✅ Sekha Controller is healthy");
+            } else {
+                println!("⚠️  Sekha Controller responded with status: {}", resp.status());
+            }
+        }
+        Err(_) => {
+            println!("❌ Sekha Controller is not running");
+        }
+    }
+    Ok(())
+}
+
+async fn show_status() -> Result<()> {
+    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+    let pid_file = home_dir.join(".sekha/sekha.pid");
+    
+    if pid_file.exists() {
+        println!("✅ Daemon running (PID file exists)");
+        check_health().await?;
+    } else {
+        println!("❌ Daemon not running");
+    }
+    
+    Ok(())
+}
+
+async fn run_setup() -> Result<()> {
+    println!("🔧 Setting up Sekha Controller...");
+    
+    let home_dir = dirs::home_dir().expect("Failed to get home directory");
+    let config_dir = home_dir.join(".sekha");
+    
+    std::fs::create_dir_all(&config_dir)?;
+    std::fs::create_dir_all(config_dir.join("data"))?;
+    std::fs::create_dir_all(config_dir.join("logs"))?;
+    std::fs::create_dir_all(config_dir.join("import"))?;
+    std::fs::create_dir_all(config_dir.join("imported"))?;
+    
+    println!("✅ Directories created");
+    println!("✅ Setup complete!");
+    println!("\nNext steps:");
+    println!("  1. Edit config: ~/.sekha/config.toml");
+    println!("  2. Start server: sekha-controller start --daemon");
+    
+    Ok(())
+}
+
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
