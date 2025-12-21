@@ -1,9 +1,35 @@
-mcp_api_key = "test_key_12345678901234567890123456789012"
-
-[database]
-url = "sqlite://sekha.db"
-
-chroma_url = "http://localhost:8000"
-
 embedding_model = "nomic-embed-text:latest"
 summarization_model = "llama3.1:8b"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+cors_origins = ["http://localhost:3000", "http://localhost:5173"]
+
+[database]
+url = "sqlite://sekha.db?mode=rwc"
+max_connections = 10
+
+[chroma]
+url = "http://localhost:8000"
+collection_name = "sekha_conversations"
+
+[llm_bridge]
+url = "http://localhost:5001"
+timeout_secs = 30
+
+# NEW: API Configuration
+[api]
+# API keys for Bearer token authentication
+# Format: sk-sekha-<32_random_characters>
+api_keys = [
+    "test_key_12345678901234567890123456789012",
+    "sk-sekha-prod1234567890123456789012",
+]
+mcp_api_key = "test_key_12345678901234567890123456789012"
+
+# Rate limiting: requests per minute per IP
+rate_limit_per_minute = 1000
+
+# Enable CORS
+cors_enabled = true
