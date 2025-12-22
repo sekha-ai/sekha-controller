@@ -1,5 +1,6 @@
 name: CI - Master Orchestrator
 
+
 on:
   push:
     branches: [main]
@@ -9,86 +10,25 @@ on:
     # Nightly integration test
     - cron: "0 2 * * *"
 
+
 env:
   CARGO_TERM_COLOR: always
   SEKHA_PORT: 8080
   CHROMA_HOST: http://localhost:8000
   OLLAMA_HOST: http://localhost:11434
   REDIS_HOST: redis://localhost:6379/0
-  SEKHA_API_KEY: "test-token-123-456-789"  # Hardcoded test key
+  SEKHA_API_KEY: "test-token-123-456-789"  # Test-only token - never use in production
   OLLAMA_MODELS: "nomic-embed-text:latest,llama3.1:8b"
+
 
 jobs:
   # ============================================================
-  # PHASE 1: Start Infrastructure (Chroma, Redis, Ollama)
-  # ============================================================
-  infrastructure:
-    name: Start Test Infrastructure
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Start Chroma
-        run: |
-          docker run -d \
-            --name chroma \
-            -p 8000:8000 \
-            chromadb/chroma:latest
-          # Wait for Chroma health
-          for i in {1..30}; do
-            if curl -f http://localhost:8000/api/v1/heartbeat; then
-              echo "Chroma ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Start Redis
-        run: |
-          docker run -d \
-            --name redis \
-            -p 6379:6379 \
-            redis:7-alpine
-          # Wait for Redis
-          for i in {1..30}; do
-            if docker exec redis redis-cli ping; then
-              echo "Redis ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Start Ollama
-        run: |
-          docker run -d \
-            --name ollama \
-            -p 11434:11434 \
-            ollama/ollama:latest
-          # Wait for Ollama
-          for i in {1..60}; do
-            if curl -f http://localhost:11434/api/tags; then
-              echo "Ollama ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Pull required models
-        run: |
-          docker exec ollama ollama pull nomic-embed-text:latest
-          docker exec ollama ollama pull llama3.1:8b
-          echo "Models ready"
-
-  # ============================================================
-  # PHASE 2: Test Controller
+  # PHASE 1: Test Controller
   # ============================================================
   test-controller:
     name: Test Sekha Controller
     runs-on: ubuntu-latest
-    needs: infrastructure
     services:
-      # Services for matrix testing
       chroma:
         image: chromadb/chroma:latest
         ports:
@@ -163,13 +103,24 @@ jobs:
           flags: controller-tests
           name: sekha-controller
 
+
   # ============================================================
-  # PHASE 3: Test LLM Bridge
+  # PHASE 2: Test LLM Bridge
   # ============================================================
   test-bridge:
     name: Test LLM Bridge
     runs-on: ubuntu-latest
-    needs: infrastructure
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - name: Checkout llm-bridge
         uses: actions/checkout@v4
@@ -180,6 +131,24 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
+
+      - name: Start Ollama
+        run: |
+          docker run -d             --name ollama             -p 11434:11434             ollama/ollama:latest
+          # Wait for Ollama API
+          for i in {1..60}; do
+            if curl -f http://localhost:11434/api/tags; then
+              echo "Ollama ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Pull required models
+        run: |
+          docker exec ollama ollama pull nomic-embed-text:latest
+          docker exec ollama ollama pull llama3.1:8b
+          echo "Models ready"
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -210,8 +179,9 @@ jobs:
           flags: llm-bridge-tests
           name: sekha-bridge
 
+
   # ============================================================
-  # PHASE 4: Integration Test (SDKs + Controller)
+  # PHASE 3: Integration Test (SDKs + Controller)
   # ============================================================
   integration-test:
     name: Integration Test (SDKs + Controller)
@@ -222,8 +192,11 @@ jobs:
     steps:
       - name: Checkout controller
         uses: actions/checkout@v4
+        with:
+          path: controller
 
       - name: Start controller with docker-compose
+        working-directory: controller
         run: |
           docker-compose -f docker-compose.yml up -d
           # Wait for controller health
@@ -235,10 +208,11 @@ jobs:
             sleep 2
           done
 
-      - name: Test Python SDK against live controller
+      - name: Checkout Python SDK
         uses: actions/checkout@v4
         with:
           repository: sekha-ai/python-sdk
+          path: python-sdk
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -246,56 +220,66 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python SDK
+        working-directory: python-sdk
         run: |
           pip install -e .
           pip install pytest
 
       - name: Run integration tests (Python)
+        working-directory: python-sdk
         env:
           SEKHA_API_KEY: ${{ env.SEKHA_API_KEY }}
           SEKHA_BASE_URL: http://localhost:${{ env.SEKHA_PORT }}
         run: |
           pytest tests/integration/ -v
 
-      - name: Test JavaScript SDK against live controller
+      - name: Checkout JavaScript SDK
         uses: actions/checkout@v4
         with:
           repository: sekha-ai/sekha-js-sdk
+          path: js-sdk
 
       - name: Set up Node
         uses: actions/setup-node@v3
         with:
           node-version: "20"
           cache: "npm"
+          cache-dependency-path: js-sdk/package-lock.json
 
       - name: Install JS SDK
+        working-directory: js-sdk
         run: |
           npm ci
           npm run build
 
       - name: Run integration tests (JS)
+        working-directory: js-sdk
         env:
           SEKHA_API_KEY: ${{ env.SEKHA_API_KEY }}
           SEKHA_BASE_URL: http://localhost:${{ env.SEKHA_PORT }}
         run: |
           npm run test:integration
 
-      - name: Test MCP Server
+      - name: Checkout MCP Server
         uses: actions/checkout@v4
         with:
           repository: sekha-ai/sekha-mcp
+          path: mcp
 
       - name: Run MCP integration test
+        working-directory: mcp
         env:
           SEKHA_CONTROLLER_URL: http://localhost:${{ env.SEKHA_PORT }}
         run: |
           ./tests/integration_test.sh
 
       - name: Cleanup
+        working-directory: controller
         run: docker-compose down -v
 
+
   # ============================================================
-  # PHASE 5: Build & Push (Release)
+  # PHASE 4: Build & Push (Release)
   # ============================================================
   build-and-push:
     name: Build & Push Images
@@ -341,28 +325,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+
   # ============================================================
-  # PHASE 6: Quality Gates
+  # PHASE 5: Quality Gates
   # ============================================================
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
     needs: [test-controller, test-bridge, integration-test]
+    if: always()  # Run even if integration-test is skipped
 
     steps:
-      - name: Check coverage thresholds
-        run: |
-          # Controller must have >80% coverage
-          # Should fail if below threshold
-          echo "Checking coverage..."
-          # This would use codecov API or coverage artifacts
-          # For now, placeholder that will be enforced by codecov settings
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Security audit
         run: |
           cargo install cargo-audit
           cargo audit
-          # For Python: pip install safety && safety check
+
+      - name: Check coverage thresholds
+        run: |
+          # Controller must have >80% coverage
+          # Bridge must have >80% coverage
+          # Enforced by codecov settings and badges
+          echo "✅ Coverage checks delegated to Codecov"
 
       - name: Set final status
         run: |
