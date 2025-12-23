@@ -59,7 +59,12 @@ model = "nomic-embed-text"
 data_dir = "$HOME/.sekha/data"
 log_dir = "$HOME/.sekha/logs"
 EOF
+    echo ""
+    echo "⚠️  SECURITY WARNING: Default API key is for development only!"
+    echo "    Generate a secure key: openssl rand -hex 32"
+    echo "    Update it in: $CONFIG_DIR/config.toml"
 fi
+
 
 # Add to PATH if not already there
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then

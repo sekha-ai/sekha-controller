@@ -91,6 +91,12 @@ jobs:
           SEKHA_API_KEY: ${{ env.SEKHA_API_KEY }}
           SEKHA_BASE_URL: http://localhost:${{ env.SEKHA_PORT }}
 
+      - name: Test installation script
+        run: |
+          chmod +x tests/test_install.sh
+          ./tests/test_install.sh
+    
+
       - name: Generate coverage
         run: |
           cargo install cargo-tarpaulin --version 0.27.0
