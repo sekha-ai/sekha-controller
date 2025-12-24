@@ -1,17 +1,17 @@
 use crate::api::routes::AppState;
+use crate::config::Config;
+use axum::routing::post;
 use axum::{
     extract::{Request, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
-use crate::config::Config;
-use axum::{Router, Json};
-use axum::routing::post;
 
 use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};
 
@@ -27,10 +27,7 @@ pub async fn auth_middleware(
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
         .ok_or_else(|| {
-            (
-                StatusCode::UNAUTHORIZED,
-                "Missing Authorization header",
-            ).into_response()
+            (StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response()
         })?;
 
     // Check Bearer token format
@@ -38,7 +35,8 @@ pub async fn auth_middleware(
         return Err((
             StatusCode::UNAUTHORIZED,
             "Invalid Authorization format. Use: Bearer <token>",
-        ).into_response());
+        )
+            .into_response());
     }
 
     // Extract token
@@ -46,10 +44,7 @@ pub async fn auth_middleware(
 
     // Validate against config
     if !config.is_valid_api_key(token) {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "Invalid API key",
-        ).into_response());
+        return Err((StatusCode::UNAUTHORIZED, "Invalid API key").into_response());
     }
 
     // Continue to next middleware/handler
@@ -60,32 +55,27 @@ pub async fn auth_middleware(
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request as HttpRequest, header};
+    use axum::http::{header, Request as HttpRequest};
 
     #[tokio::test]
     async fn test_valid_api_key() {
         // Create test config
         let mut config = Config::default();
-        config.api.api_keys = vec!["test_key".to_string()];
-        
+        config.mcp_api_key = "test_key".to_string();
+
         let config = Arc::new(config);
-        
+
         // Create request with valid auth
-        let mut request = HttpRequest::builder()
-            .uri("/")
-            .body(Body::empty())
-            .unwrap();
-        
-        request.headers_mut().insert(
-            header::AUTHORIZATION,
-            "Bearer test_key".parse().unwrap(),
-        );
-        
+        let mut request = HttpRequest::builder().uri("/").body(Body::empty()).unwrap();
+
+        request
+            .headers_mut()
+            .insert(header::AUTHORIZATION, "Bearer test_key".parse().unwrap());
+
         // Auth should succeed
         // (full test requires mock Next handler)
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpToolResponse {

@@ -1,16 +1,14 @@
-use axum::{Router, Json};
-use axum::routing::{get, post, put, delete};
-use axum::extract::{State, Path, Query};
-use serde_json::Value;
-use uuid::Uuid;
-use crate::AppState;
 use crate::api::dto::QueryRequest;
 use crate::api::routes::{
-    create_conversation, get_conversation, list_conversations,
-    update_conversation_label, delete_conversation, count_conversations,
-    health, metrics
+    count_conversations, create_conversation, delete_conversation, get_conversation, health,
+    list_conversations, metrics, update_conversation_label,
 };
-
+use crate::AppState;
+use axum::extract::{Path, Query, State};
+use axum::routing::{delete, get, post, put};
+use axum::{Json, Router};
+use serde_json::Value;
+use uuid::Uuid;
 
 // Add endpoint:
 #[utoipa::path(
@@ -27,20 +25,18 @@ async fn semantic_query(
 ) -> Json<Value> {
     // TODO: In Module 5, integrate with Chroma
     // For now, return mock results with correct schema
-    
-    let mock_results = vec![
-        serde_json::json!({
-            "conversation_id": Uuid::new_v4(),
-            "message_id": Uuid::new_v4(),
-            "score": 0.85,
-            "content": "Mock result for: ".to_string() + &req.query,
-            "metadata": {
-                "label": "Project:AI-Memory",
-                "timestamp": "2025-12-11T21:00:00Z"
-            }
-        })
-    ];
-    
+
+    let mock_results = vec![serde_json::json!({
+        "conversation_id": Uuid::new_v4(),
+        "message_id": Uuid::new_v4(),
+        "score": 0.85,
+        "content": "Mock result for: ".to_string() + &req.query,
+        "metadata": {
+            "label": "Project:AI-Memory",
+            "timestamp": "2025-12-11T21:00:00Z"
+        }
+    })];
+
     Json(serde_json::json!({
         "query": req.query,
         "results": mock_results,
@@ -56,10 +52,13 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/conversations", post(create_conversation))
         .route("/api/v1/conversations/:id", get(get_conversation))
         .route("/api/v1/conversations", get(list_conversations))
-        .route("/api/v1/conversations/:id/label", put(update_conversation_label))
+        .route(
+            "/api/v1/conversations/:id/label",
+            put(update_conversation_label),
+        )
         .route("/api/v1/conversations/:id", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
-        .route("/api/v1/query", post(semantic_query))  // NEW
+        .route("/api/v1/query", post(semantic_query)) // NEW
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)

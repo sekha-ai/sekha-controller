@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use sea_orm::Statement;
 use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
+use serde_json::json;
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
-use serde_json::json;
 
 use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
 use crate::services::embedding_service::EmbeddingService;
@@ -377,26 +377,26 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(count)
     }
 
-async fn full_text_search(
-    &self,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<Message>, RepositoryError> {
-    use sea_orm::{DatabaseBackend, FromQueryResult};
+    async fn full_text_search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        use sea_orm::{DatabaseBackend, FromQueryResult};
 
-    #[derive(FromQueryResult)]
-    struct MessageResult {
-        id: String,
-        conversation_id: String,
-        role: String,
-        content: String,
-        timestamp: String,
-        metadata: String,
-    }
+        #[derive(FromQueryResult)]
+        struct MessageResult {
+            id: String,
+            conversation_id: String,
+            role: String,
+            content: String,
+            timestamp: String,
+            metadata: String,
+        }
 
-    let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        r#"
+        let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            r#"
         SELECT m.id, m.conversation_id, m.role, m.content, m.timestamp, m.metadata 
         FROM messages m 
         JOIN messages_fts fts ON m.id = fts.rowid 
@@ -404,26 +404,28 @@ async fn full_text_search(
         ORDER BY rank 
         LIMIT ?2
         "#,
-        vec![query.into(), (limit as i64).into()],
-    ))
-    .all(&self.db)
-    .await?;
+            vec![query.into(), (limit as i64).into()],
+        ))
+        .all(&self.db)
+        .await?;
 
-    Ok(results
-        .into_iter()
-        .map(|m| Message {
-            id: Uuid::parse_str(&m.id).unwrap(),
-            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
-            role: m.role,
-            content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+        Ok(results
+            .into_iter()
+            .map(|m| Message {
+                id: Uuid::parse_str(&m.id).unwrap(),
+                conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+                role: m.role,
+                content: m.content,
+                timestamp: chrono::NaiveDateTime::parse_from_str(
+                    &m.timestamp,
+                    "%Y-%m-%d %H:%M:%S%.f",
+                )
                 .unwrap(),
-            embedding_id: None,
-            metadata: serde_json::from_str(&m.metadata).ok(),
-        })
-        .collect())
-}
-
+                embedding_id: None,
+                metadata: serde_json::from_str(&m.metadata).ok(),
+            })
+            .collect())
+    }
 
     async fn semantic_search(
         &self,

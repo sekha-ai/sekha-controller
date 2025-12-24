@@ -320,7 +320,6 @@ impl ImportProcessor {
         anyhow::bail!("Unknown export format for file: {}", path.display())
     }
 
-
     fn parse_chatgpt_export(&self, export: ChatGptExport) -> Result<ParsedConversation> {
         let title = export
             .title
@@ -479,12 +478,15 @@ impl ImportProcessor {
         let mut messages = Vec::new();
         let mut current_role = String::new();
         let mut current_content = String::new();
-        
+
         for line in content.lines() {
             if line.starts_with("# ") {
                 // Title line - skip
                 continue;
-            } else if line.starts_with("## ") || line.starts_with("**User:**") || line.starts_with("**Assistant:**") {
+            } else if line.starts_with("## ")
+                || line.starts_with("**User:**")
+                || line.starts_with("**Assistant:**")
+            {
                 // Save previous message
                 if !current_content.is_empty() {
                     messages.push(ParsedMessage {
@@ -493,7 +495,7 @@ impl ImportProcessor {
                         timestamp: chrono::Utc::now().naive_utc(),
                     });
                 }
-                
+
                 // Detect role
                 current_role = if line.contains("User") || line.contains("user") {
                     "user".to_string()
@@ -506,7 +508,7 @@ impl ImportProcessor {
                 current_content.push('\n');
             }
         }
-        
+
         // Save last message
         if !current_content.is_empty() {
             messages.push(ParsedMessage {
@@ -515,12 +517,9 @@ impl ImportProcessor {
                 timestamp: chrono::Utc::now().naive_utc(),
             });
         }
-        
-        let title = filename
-            .strip_suffix(".md")
-            .unwrap_or(filename)
-            .to_string();
-        
+
+        let title = filename.strip_suffix(".md").unwrap_or(filename).to_string();
+
         Ok(ParsedConversation {
             title,
             messages,
@@ -536,7 +535,7 @@ impl ImportProcessor {
         let mut messages = Vec::new();
         let mut current_role = String::new();
         let mut current_content = String::new();
-        
+
         for line in content.lines() {
             if line.starts_with("User:") || line.starts_with("user:") {
                 if !current_content.is_empty() {
@@ -547,7 +546,11 @@ impl ImportProcessor {
                     });
                 }
                 current_role = "user".to_string();
-                current_content = line.trim_start_matches("User:").trim_start_matches("user:").trim().to_string();
+                current_content = line
+                    .trim_start_matches("User:")
+                    .trim_start_matches("user:")
+                    .trim()
+                    .to_string();
             } else if line.starts_with("Assistant:") || line.starts_with("assistant:") {
                 if !current_content.is_empty() {
                     messages.push(ParsedMessage {
@@ -557,13 +560,17 @@ impl ImportProcessor {
                     });
                 }
                 current_role = "assistant".to_string();
-                current_content = line.trim_start_matches("Assistant:").trim_start_matches("assistant:").trim().to_string();
+                current_content = line
+                    .trim_start_matches("Assistant:")
+                    .trim_start_matches("assistant:")
+                    .trim()
+                    .to_string();
             } else if !line.trim().is_empty() && !current_role.is_empty() {
                 current_content.push('\n');
                 current_content.push_str(line);
             }
         }
-        
+
         // Save last message
         if !current_content.is_empty() {
             messages.push(ParsedMessage {
@@ -572,12 +579,12 @@ impl ImportProcessor {
                 timestamp: chrono::Utc::now().naive_utc(),
             });
         }
-        
+
         let title = filename
             .strip_suffix(".txt")
             .unwrap_or(filename)
             .to_string();
-        
+
         Ok(ParsedConversation {
             title,
             messages,
@@ -586,7 +593,6 @@ impl ImportProcessor {
             source: ImportSource::Unknown,
         })
     }
-
 
     fn extract_xml_tag(&self, content: &str, tag: &str) -> Option<String> {
         let start_tag = format!("<{}>", tag);
@@ -709,6 +715,12 @@ pub async fn run_import_watcher(repo: Arc<dyn ConversationRepository + Send + Sy
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::internal::{Conversation, Message};
+    use crate::storage::repository::{ConversationRepository, RepositoryError, SearchResult};
+    use sea_orm::DatabaseConnection;
+    use serde_json::Value;
+    use std::sync::Arc;
+    use uuid::Uuid;
 
     #[test]
     fn test_parse_chatgpt_json() {
@@ -760,7 +772,77 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ConversationRepository for MockRepo {
-        // Implement minimal trait methods for testing
-        // ... (stub implementations)
+        async fn create(&self, _conv: Conversation) -> Result<Uuid, RepositoryError> {
+            Ok(Uuid::new_v4())
+        }
+
+        async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
+            Ok(conv.id.unwrap_or_else(Uuid::new_v4))
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn count_by_label(&self, _label: &str) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
+
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<Conversation>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_by_label(&self, _label: &str, _limit: u64, _offset: u64) -> Result<Vec<Conversation>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_conversation_messages(&self, _conversation_id: Uuid) -> Result<Vec<Message>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn find_message_by_id(&self, _id: Uuid) -> Result<Option<Message>, RepositoryError> {
+            Ok(None)
+        }
+
+        async fn find_recent_messages(&self, _conversation_id: Uuid, _limit: usize) -> Result<Vec<Message>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn find_with_filters(&self, _filter: Option<String>, _limit: usize, _offset: u32) -> Result<(Vec<Conversation>, u64), RepositoryError> {
+            Ok((Vec::new(), 0))
+        }
+
+        async fn update_label(&self, _id: Uuid, _new_label: &str, _new_folder: &str) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn update_status(&self, _id: Uuid, _status: &str) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn update_importance(&self, _id: Uuid, _score: i32) -> Result<(), RepositoryError> {
+            Ok(())
+        }
+
+        async fn count_messages_in_conversation(&self, _conversation_id: Uuid) -> Result<u64, RepositoryError> {
+            Ok(0)
+        }
+
+        async fn full_text_search(&self, _query: &str, _limit: usize) -> Result<Vec<Message>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn semantic_search(&self, _query: &str, _limit: usize, _filters: Option<Value>) -> Result<Vec<SearchResult>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        fn get_db(&self) -> &DatabaseConnection {
+            panic!("MockRepo::get_db() should not be called in tests")
+        }
     }
 }
+

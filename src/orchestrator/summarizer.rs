@@ -4,9 +4,9 @@ use crate::storage::entities::messages as message_entity;
 use crate::storage::repository::{ConversationRepository, RepositoryError};
 use chrono::Duration;
 use chrono::Utc;
+use sea_orm::ActiveModelTrait;
 use sea_orm::EntityTrait;
 use sea_orm::{ColumnTrait, QueryFilter}; // REMOVE EntityTrait from here
-use sea_orm::ActiveModelTrait;
 use std::sync::Arc;
 use uuid::Uuid;
 

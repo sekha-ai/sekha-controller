@@ -3371,6 +3371,7 @@ dependencies = [
  "futures",
  "governor",
  "hex",
+ "libc",
  "ndarray",
  "notify",
  "ollama-rs",

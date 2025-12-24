@@ -32,29 +32,29 @@ enum Commands {
         /// Run as background daemon
         #[arg(short, long)]
         daemon: bool,
-        
+
         /// Port to listen on
         #[arg(short, long, default_value_t = 8080)]
         port: u16,
     },
-    
+
     /// Stop the running daemon
     Stop,
-    
+
     /// Check controller health
     Health,
-    
+
     /// Show current status
     Status,
-    
+
     /// Initialize configuration
     Setup,
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    
+
     match &cli.command {
         Some(Commands::Start { daemon, port }) => {
             if *daemon {
@@ -80,24 +80,24 @@ async fn main() -> Result<()> {
             start_server(8080).await?;
         }
     }
-    
+
     Ok(())
 }
 
-async fn start_daemon(port: u16) -> Result<()> {
+async fn start_daemon(port: u16) -> anyhow::Result<()> {
     use daemonize::Daemonize;
-    
+
     let home_dir = dirs::home_dir().expect("Failed to get home directory");
     let pid_file = home_dir.join(".sekha/sekha.pid");
     let log_dir = home_dir.join(".sekha/logs");
-    
+
     std::fs::create_dir_all(&log_dir)?;
-    
+
     let daemonize = Daemonize::new()
         .pid_file(pid_file)
         .working_directory(home_dir)
         .umask(0o027);
-    
+
     match daemonize.start() {
         Ok(_) => {
             tracing::info!("🔧 Sekha Controller started as daemon on port {}", port);
@@ -110,10 +110,10 @@ async fn start_daemon(port: u16) -> Result<()> {
     }
 }
 
-async fn stop_daemon() -> Result<()> {
+async fn stop_daemon() -> anyhow::Result<()> {
     let home_dir = dirs::home_dir().expect("Failed to get home directory");
     let pid_file = home_dir.join(".sekha/sekha.pid");
-    
+
     if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
         if let Ok(pid) = pid_str.trim().parse::<i32>() {
             unsafe {
@@ -125,18 +125,21 @@ async fn stop_daemon() -> Result<()> {
     } else {
         println!("❌ No running daemon found");
     }
-    
+
     Ok(())
 }
 
-async fn check_health() -> Result<()> {
+async fn check_health() -> anyhow::Result<()> {
     let client = reqwest::Client::new();
     match client.get("http://localhost:8080/health").send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 println!("✅ Sekha Controller is healthy");
             } else {
-                println!("⚠️  Sekha Controller responded with status: {}", resp.status());
+                println!(
+                    "⚠️  Sekha Controller responded with status: {}",
+                    resp.status()
+                );
             }
         }
         Err(_) => {
@@ -146,44 +149,42 @@ async fn check_health() -> Result<()> {
     Ok(())
 }
 
-async fn show_status() -> Result<()> {
+async fn show_status() -> anyhow::Result<()> {
     let home_dir = dirs::home_dir().expect("Failed to get home directory");
     let pid_file = home_dir.join(".sekha/sekha.pid");
-    
+
     if pid_file.exists() {
         println!("✅ Daemon running (PID file exists)");
         check_health().await?;
     } else {
         println!("❌ Daemon not running");
     }
-    
+
     Ok(())
 }
 
-async fn run_setup() -> Result<()> {
+async fn run_setup() -> anyhow::Result<()> {
     println!("🔧 Setting up Sekha Controller...");
-    
+
     let home_dir = dirs::home_dir().expect("Failed to get home directory");
     let config_dir = home_dir.join(".sekha");
-    
+
     std::fs::create_dir_all(&config_dir)?;
     std::fs::create_dir_all(config_dir.join("data"))?;
     std::fs::create_dir_all(config_dir.join("logs"))?;
     std::fs::create_dir_all(config_dir.join("import"))?;
     std::fs::create_dir_all(config_dir.join("imported"))?;
-    
+
     println!("✅ Directories created");
     println!("✅ Setup complete!");
     println!("\nNext steps:");
     println!("  1. Edit config: ~/.sekha/config.toml");
     println!("  2. Start server: sekha-controller start --daemon");
-    
+
     Ok(())
 }
 
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn start_server(port: u16) -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
     // Initialize tracing
@@ -202,7 +203,10 @@ async fn main() -> anyhow::Result<()> {
     {
         let cfg = config.read().await;
         tracing::info!("🔒 API authentication enabled");
-        tracing::info!("🚦 Rate limit: {} requests/minute", cfg.rate_limit_per_minute);
+        tracing::info!(
+            "🚦 Rate limit: {} requests/minute",
+            cfg.rate_limit_per_minute
+        );
         tracing::info!("🌐 CORS enabled: {}", cfg.cors_enabled);
         tracing::info!("🔑 Configured API keys: {}", cfg.get_all_api_keys().len());
     }
@@ -235,8 +239,8 @@ async fn main() -> anyhow::Result<()> {
     // Create repository with both SQLite and Chroma integration
     let repository = Arc::new(SeaOrmConversationRepository::new(
         db_conn,
-        chroma_client,
-        embedding_service,
+        chroma_client.clone(),
+        embedding_service.clone(),
     ));
 
     // Initialize LLM Bridge client (MODULE 6 integration)
@@ -271,6 +275,8 @@ async fn main() -> anyhow::Result<()> {
         config: config.clone(),
         repo: repository.clone(),
         orchestrator,
+        embedding_service: embedding_service.clone(),
+        chroma_client: chroma_client.clone(),
     };
 
     // Start file watcher in background
@@ -313,8 +319,8 @@ async fn main() -> anyhow::Result<()> {
         // Apply CORS
         .layer(cors);
 
-    // Start server
-    let addr_str = format!("127.0.0.1:{}", config.read().await.server_port);
+    // Start server (use port parameter)
+    let addr_str = format!("127.0.0.1:{}", port);
     let addr: SocketAddr = addr_str.parse().expect("Invalid address");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 

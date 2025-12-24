@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, Clone)]
+#[derive(Debug, Deserialize, Validate, Clone, Default)]
 pub struct Config {
     #[validate(range(min = 1024, max = 65535))]
     pub server_port: u16,
@@ -25,15 +25,15 @@ pub struct Config {
     // REST API Configuration (Module 6.3)
     /// Optional REST API key (falls back to mcp_api_key if not provided)
     pub rest_api_key: Option<String>,
-    
+
     /// Additional API keys for multi-user access
     #[serde(default)]
     pub additional_api_keys: Vec<String>,
-    
+
     /// Rate limit: requests per minute
     #[serde(default = "default_rate_limit")]
     pub rate_limit_per_minute: u32,
-    
+
     /// Enable CORS
     #[serde(default = "default_cors_enabled")]
     pub cors_enabled: bool,
@@ -85,12 +85,9 @@ impl Config {
 
     /// Get all valid API keys (primary + additional)
     pub fn get_all_api_keys(&self) -> Vec<String> {
-        let mut keys = vec![
-            self.mcp_api_key.clone(),
-            self.get_rest_api_key(),
-        ];
+        let mut keys = vec![self.mcp_api_key.clone(), self.get_rest_api_key()];
         keys.extend(self.additional_api_keys.clone());
-        
+
         // Deduplicate
         keys.sort();
         keys.dedup();

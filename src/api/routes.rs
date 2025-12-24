@@ -1,12 +1,13 @@
-use axum::{Router, Json};
-use axum::routing::{get, post, put, delete};
-use axum::extract::{State, Path, Query};
-use serde_json::Value;
-use serde_json::{json, Value};
-use sea_orm::ConnectionTrait;
 use crate::api::dto::*;
 use crate::models::internal::Message;
+use crate::services::embedding_service::EmbeddingService;
+use crate::storage::chroma_client::ChromaClient;
 use crate::storage::db::get_connection;
+use axum::extract::{Path, Query, State};
+use axum::routing::{delete, get, post, put};
+use axum::{Json, Router};
+use sea_orm::ConnectionTrait;
+use serde_json::{json, Value};
 
 use axum::http::StatusCode;
 use serde::Deserialize;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub config: Arc<RwLock<Config>>,
     pub repo: Arc<dyn ConversationRepository>,
     pub orchestrator: Arc<MemoryOrchestrator>,
+    pub embedding_service: Arc<EmbeddingService>,
+    pub chroma_client: Arc<ChromaClient>,
 }
 
 #[derive(Deserialize)]
@@ -419,27 +422,21 @@ pub async fn health(State(state): State<AppState>) -> Result<Json<Value>, Status
             Ok(_) => checks["checks"]["database"] = json!({"status": "ok"}),
             Err(e) => {
                 checks["checks"]["database"] = json!({"status": "error", "error": e.to_string()});
-                checks["status"] = "unhealthy";
+                checks["status"] = "unhealthy".into();
             }
         },
         None => {
             checks["checks"]["database"] = json!({"status": "error", "error": "No connection"});
-            checks["status"] = "unhealthy";
+            checks["status"] = "unhealthy".into();
         }
     }
 
     // Check Chroma
-    match state
-        .chroma
-        .client
-        .get("http://localhost:8000/api/v1/heartbeat")
-        .send()
-        .await
-    {
+    match state.chroma_client.ping().await {
         Ok(_) => checks["checks"]["chroma"] = json!({"status": "ok"}),
         Err(e) => {
             checks["checks"]["chroma"] = json!({"status": "error", "error": e.to_string()});
-            checks["status"] = "unhealthy";
+            checks["status"] = "unhealthy".into();
         }
     }
 
@@ -614,9 +611,23 @@ async fn rebuild_embeddings(
 async fn full_text_search(
     State(state): State<AppState>,
     Json(req): Json<FtsSearchRequest>,
-) -> Result<Json<FtsSearchResponse>, AppError> {
-    let messages = state.repo.full_text_search(&req.query, req.limit).await?;
+) -> Result<Json<FtsSearchResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let messages = state
+        .repo
+        .full_text_search(&req.query, req.limit)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
+
     let total = messages.len();
+
     Ok(Json(FtsSearchResponse {
         results: messages,
         total,
@@ -749,6 +760,8 @@ async fn prune_dry_run(
             )
         })?;
 
+    let total = suggestions.len(); // Calculate before consuming
+
     Ok(Json(PruneResponse {
         suggestions: suggestions
             .into_iter()
@@ -763,7 +776,7 @@ async fn prune_dry_run(
                 recommendation: s.recommendation,
             })
             .collect(),
-        total: suggestions.len(),
+        total,
     }))
 }
 
