@@ -1,5 +1,16 @@
-// Add to imports:
+use axum::{Router, Json};
+use axum::routing::{get, post, put, delete};
+use axum::extract::{State, Path, Query};
 use serde_json::Value;
+use uuid::Uuid;
+use crate::AppState;
+use crate::api::dto::QueryRequest;
+use crate::api::routes::{
+    create_conversation, get_conversation, list_conversations,
+    update_conversation_label, delete_conversation, count_conversations,
+    health, metrics
+};
+
 
 // Add endpoint:
 #[utoipa::path(

@@ -4,6 +4,7 @@ use sea_orm::{prelude::*, QueryOrder, QuerySelect, Set};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
+use serde_json::json;
 
 use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
 use crate::services::embedding_service::EmbeddingService;
@@ -376,29 +377,53 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(count)
     }
 
-    pub async fn full_text_search(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<Message>, RepositoryError> {
-        let sql = r#"
-            SELECT m.* FROM messages_fts fts
-            JOIN messages m ON fts.rowid = m.id
-            WHERE messages_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-        "#;
+async fn full_text_search(
+    &self,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<Message>, RepositoryError> {
+    use sea_orm::{DatabaseBackend, FromQueryResult};
 
-        let messages = Message::find_by_statement(Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::Sqlite,
-            sql,
-            vec![query.into(), (limit as i64).into()],
-        ))
-        .all(&self.db)
-        .await?;
-
-        Ok(messages.into_iter().map(Message::from).collect())
+    #[derive(FromQueryResult)]
+    struct MessageResult {
+        id: String,
+        conversation_id: String,
+        role: String,
+        content: String,
+        timestamp: String,
+        metadata: String,
     }
+
+    let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
+        DatabaseBackend::Sqlite,
+        r#"
+        SELECT m.id, m.conversation_id, m.role, m.content, m.timestamp, m.metadata 
+        FROM messages m 
+        JOIN messages_fts fts ON m.id = fts.rowid 
+        WHERE messages_fts MATCH ?1 
+        ORDER BY rank 
+        LIMIT ?2
+        "#,
+        vec![query.into(), (limit as i64).into()],
+    ))
+    .all(&self.db)
+    .await?;
+
+    Ok(results
+        .into_iter()
+        .map(|m| Message {
+            id: Uuid::parse_str(&m.id).unwrap(),
+            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            role: m.role,
+            content: m.content,
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
+                .unwrap(),
+            embedding_id: None,
+            metadata: serde_json::from_str(&m.metadata).ok(),
+        })
+        .collect())
+}
+
 
     async fn semantic_search(
         &self,
@@ -447,54 +472,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         Ok(results)
     }
-}
-
-/// Full-text search using FTS5
-pub async fn full_text_search(
-    &self,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<crate::models::Message>, RepositoryError> {
-    use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
-
-    #[derive(FromQueryResult)]
-    struct MessageResult {
-        id: String,
-        conversation_id: String,
-        role: String,
-        content: String,
-        timestamp: String,
-        metadata: String,
-    }
-
-    let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
-        DatabaseBackend::Sqlite,
-        r#"
-        SELECT m.id, m.conversation_id, m.role, m.content, m.timestamp, m.metadata 
-        FROM messages m 
-        JOIN messages_fts fts ON m.id = fts.rowid 
-        WHERE messages_fts MATCH ?1 
-        ORDER BY rank 
-        LIMIT ?2
-        "#,
-        vec![query.into(), (limit as i64).into()],
-    ))
-    .all(&self.db)
-    .await?;
-
-    Ok(results
-        .into_iter()
-        .map(|m| crate::models::Message {
-            id: Uuid::parse_str(&m.id).unwrap(),
-            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
-            role: m.role,
-            content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
-                .unwrap(),
-            embedding_id: None,
-            metadata: serde_json::from_str(&m.metadata).unwrap_or(json!({})),
-        })
-        .collect())
 }
 
 // ============================================

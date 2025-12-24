@@ -52,7 +52,7 @@ fn default_limit() -> usize {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FtsSearchResponse {
-    pub results: Vec<crate::models::Message>,
+    pub results: Vec<crate::models::internal::Message>,
     pub total: usize,
 }
 
@@ -139,20 +139,20 @@ pub struct MemoryQueryResponse {
 }
 
 // Module 5 DTOs
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ContextAssembleRequest {
     pub query: String,
     pub preferred_labels: Vec<String>,
     pub context_budget: usize,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct SummarizeRequest {
     pub conversation_id: Uuid,
     pub level: String, // "daily", "weekly", "monthly"
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SummaryResponse {
     pub conversation_id: Uuid,
     pub level: String,
@@ -160,18 +160,18 @@ pub struct SummaryResponse {
     pub generated_at: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct PruneRequest {
     pub threshold_days: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PruneResponse {
     pub suggestions: Vec<PruningSuggestionDto>,
     pub total: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PruningSuggestionDto {
     pub conversation_id: Uuid,
     pub conversation_label: String,
@@ -183,23 +183,23 @@ pub struct PruningSuggestionDto {
     pub recommendation: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ExecutePruneRequest {
     pub conversation_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct LabelSuggestRequest {
     pub conversation_id: Uuid,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LabelSuggestResponse {
     pub conversation_id: Uuid,
     pub suggestions: Vec<LabelSuggestionDto>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LabelSuggestionDto {
     pub label: String,
     pub confidence: f32,

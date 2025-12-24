@@ -75,10 +75,22 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 governor = "0.6"
 
 # Database
-sea-orm = { version = "=2.0.0-rc.20", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
-sea-orm-migration = "=2.0.0-rc.20"
-sea-orm-cli = "=2.0.0-rc.20"
-sea-orm-codegen = "=2.0.0-rc.20"
+sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
+    "sqlx-sqlite",
+    # "sqlx-postgres",  # Disabled for now
+    "runtime-tokio-rustls",
+    "macros",
+    "with-chrono",
+    "with-json", 
+    "with-uuid",
+    "with-bigdecimal",
+    "with-time",
+    # Removed: with-bigdecimal, with-rust_decimal, with-time
+] }
+
+sea-orm-migration = { version = "=2.0.0-rc.22", default-features = false }
+sea-orm-cli = "=2.0.0-rc.22"
+sea-orm-codegen = "=2.0.0-rc.22"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite"] }
 
 # Daemon requirements
@@ -102,12 +114,15 @@ quick-xml = { version = "0.31", optional = true }
 cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
 
+[patch.crates-io]
+sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
+
 [dev-dependencies]
 tempfile = "3.23.0"
 toml = "0.9.8"
 tower-test = "0.4"
 wiremock = "0.6.5"
-sea-orm-cli = "=2.0.0-rc.20"
+sea-orm-cli = "=2.0.0-rc.22"
 
 [[test]]
 name = "integration_test"

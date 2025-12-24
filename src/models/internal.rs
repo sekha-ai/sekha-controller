@@ -1,6 +1,7 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Conversation {
@@ -15,12 +16,13 @@ pub struct Conversation {
     pub updated_at: NaiveDateTime,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Message {
     pub id: Uuid,
     pub conversation_id: Uuid,
     pub role: String,
     pub content: String,
+    #[schema(value_type = String, format = DateTime)]
     pub timestamp: NaiveDateTime,
     pub embedding_id: Option<Uuid>,
     pub metadata: Option<String>,

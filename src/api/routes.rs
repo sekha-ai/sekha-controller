@@ -1,9 +1,14 @@
-use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    routing::{delete, get, post, put},
-    Json, Router,
-};
+use axum::{Router, Json};
+use axum::routing::{get, post, put, delete};
+use axum::extract::{State, Path, Query};
+use serde_json::Value;
+use serde_json::{json, Value};
+use sea_orm::ConnectionTrait;
+use crate::api::dto::*;
+use crate::models::internal::Message;
+use crate::storage::db::get_connection;
+
+use axum::http::StatusCode;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -45,7 +50,7 @@ pub struct FilterParams {
         (status = 400, description = "Invalid request", body = ErrorResponse)
     )
 )]
-async fn create_conversation(
+pub async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
 ) -> Result<(StatusCode, Json<ConversationResponse>), (StatusCode, Json<ErrorResponse>)> {
@@ -121,7 +126,7 @@ async fn create_conversation(
         ("id" = String, Path, description = "Conversation UUID")
     )
 )]
-async fn get_conversation(
+pub async fn get_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConversationResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -179,7 +184,7 @@ async fn get_conversation(
         ("page_size" = Option<u32>, Query, description = "Page size")
     )
 )]
-async fn list_conversations(
+pub async fn list_conversations(
     State(state): State<AppState>,
     Query(params): Query<PaginationParams>,
     Query(filters): Query<FilterParams>,
@@ -256,7 +261,7 @@ async fn list_conversations(
         (status = 404, description = "Not found", body = ErrorResponse)
     )
 )]
-async fn update_conversation_label(
+pub async fn update_conversation_label(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLabelRequest>,
@@ -292,7 +297,7 @@ async fn update_conversation_label(
         ("id" = String, Path, description = "Conversation UUID")
     )
 )]
-async fn delete_conversation(
+pub async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
@@ -322,7 +327,8 @@ async fn delete_conversation(
         ("label" = String, Query, description = "Label to count")
     )
 )]
-async fn count_conversations(
+
+pub async fn count_conversations(
     State(state): State<AppState>,
     Query(label): Query<String>,
 ) -> Json<serde_json::Value> {
@@ -344,7 +350,7 @@ async fn count_conversations(
     )
 )]
 
-async fn semantic_query(
+pub async fn semantic_query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
@@ -400,7 +406,7 @@ async fn semantic_query(
 // ============================================
 // Endpoint 8: GET /health
 // ============================================
-async fn health(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
+pub async fn health(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
     let mut checks = json!({
         "status": "healthy",
         "timestamp": chrono::Utc::now().to_rfc3339(),
@@ -447,7 +453,7 @@ async fn health(State(state): State<AppState>) -> Result<Json<Value>, StatusCode
 // ============================================
 // Endpoint 9: GET /metrics
 // ============================================
-async fn metrics() -> &'static str {
+pub async fn metrics() -> &'static str {
     "# HELP sekha_conversations_total Total number of conversations\n# TYPE sekha_conversations_total gauge\nsekha_conversations_total 0\n"
 }
 

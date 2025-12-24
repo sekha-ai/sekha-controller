@@ -6,6 +6,7 @@ use chrono::Duration;
 use chrono::Utc;
 use sea_orm::EntityTrait;
 use sea_orm::{ColumnTrait, QueryFilter}; // REMOVE EntityTrait from here
+use sea_orm::ActiveModelTrait;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -175,7 +176,7 @@ impl HierarchicalSummarizer {
             conversation_id: Set(conversation_id.to_string()),
             level: Set(level.to_string()),
             summary_text: Set(summary.to_string()),
-            token_count: Set(Some((summary.len() / 4) as i32)), // Estimate tokens
+            token_count: Set(Some((summary.len() / 4) as i64)), // Estimate tokens
             generated_at: Set(now.to_string()),
             ..Default::default()
         };

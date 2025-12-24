@@ -145,7 +145,7 @@ impl ImportWatcher {
                                 if matches!(
                                     path.extension().and_then(|s| s.to_str()),
                                     Some("json") | Some("xml") | Some("md") | Some("txt")
-                                )
+                                ) {
                                     let _ = tx_clone.blocking_send(path);
                                 }
                             }
@@ -303,8 +303,23 @@ impl ImportProcessor {
                 .collect());
         }
 
+        // Try Markdown format (ChatGPT exports) - ADD THIS
+        if path.extension().and_then(|s| s.to_str()) == Some("md") {
+            tracing::info!("📝 Detected Markdown export format");
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            return Ok(vec![self.parse_markdown_export(content, filename)?]);
+        }
+
+        // Try TXT format (custom) - ADD THIS
+        if path.extension().and_then(|s| s.to_str()) == Some("txt") {
+            tracing::info!("📄 Detected TXT export format");
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            return Ok(vec![self.parse_txt_export(content, filename)?]);
+        }
+
         anyhow::bail!("Unknown export format for file: {}", path.display())
     }
+
 
     fn parse_chatgpt_export(&self, export: ChatGptExport) -> Result<ParsedConversation> {
         let title = export
@@ -329,17 +344,17 @@ impl ImportProcessor {
             .create_time
             .map(|ts| {
                 chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
-                    .unwrap_or_else(chrono::Utc::now().naive_utc)
+                    .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
-            .unwrap_or_else(chrono::Utc::now().naive_utc);
+            .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
         let updated_at = export
             .update_time
             .map(|ts| {
                 chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
-                    .unwrap_or_else(chrono::Utc::now().naive_utc)
+                    .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
-            .unwrap_or(created_at);
+            .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
         Ok(ParsedConversation {
             title,
@@ -370,7 +385,7 @@ impl ImportProcessor {
                                 .and_then(|ts| {
                                     chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
                                 })
-                                .unwrap_or_else(chrono::Utc::now().naive_utc);
+                                .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
                             messages.push(ParsedMessage {
                                 role: msg.author.role.clone(),
@@ -429,7 +444,7 @@ impl ImportProcessor {
                     .timestamp
                     .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
                     .map(|dt| dt.naive_utc())
-                    .unwrap_or_else(chrono::Utc::now().naive_utc);
+                    .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
                 ParsedMessage {
                     role: msg.role,
@@ -443,7 +458,7 @@ impl ImportProcessor {
             .created_at
             .and_then(|ts| chrono::DateTime::parse_from_rfc3339(&ts).ok())
             .map(|dt| dt.naive_utc())
-            .unwrap_or_else(chrono::Utc::now().naive_utc);
+            .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
         let updated_at = conv
             .updated_at
@@ -459,21 +474,6 @@ impl ImportProcessor {
             source: ImportSource::Claude,
         })
     }
-
-    // Try Markdown format (ChatGPT exports)
-    if path.extension().and_then(|s| s.to_str()) == Some("md") {
-        tracing::info!("📝 Detected Markdown export format");
-        let filename = path.file_name().unwrap().to_str().unwrap();
-        return Ok(vec![self.parse_markdown_export(content, filename)?]);
-    }
-
-    // Try TXT format (custom)
-    if path.extension().and_then(|s| s.to_str()) == Some("txt") {
-        tracing::info!("📄 Detected TXT export format");
-        let filename = path.file_name().unwrap().to_str().unwrap();
-        return Ok(vec![self.parse_txt_export(content, filename)?]);
-    }
-
 
     fn parse_markdown_export(&self, content: &str, filename: &str) -> Result<ParsedConversation> {
         let mut messages = Vec::new();
