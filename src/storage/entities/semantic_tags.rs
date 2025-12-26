@@ -5,16 +5,14 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "semantic_tags")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
-    #[sea_orm(column_type = "Text")]
     pub conversation_id: String,
     #[sea_orm(column_type = "Text")]
     pub tag: String,
     #[sea_orm(column_type = "Double")]
     pub confidence: f64,
-    #[sea_orm(column_type = "Text")]
-    pub extracted_at: String,
+    pub extracted_at: chrono::NaiveDateTime,  // ✅ FIXED: Use native type
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

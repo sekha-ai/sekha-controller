@@ -49,23 +49,30 @@ async fn create_test_config() -> Arc<RwLock<config::Config>> {
     Arc::new(RwLock::new(config))
 }
 
-async fn setup_test_repo() -> Arc<SeaOrmConversationRepository> {
+async fn setup_test_repo() -> (
+    Arc<SeaOrmConversationRepository>,
+    Arc<ChromaClient>,
+    Arc<EmbeddingService>,
+) {
     let db_conn = storage::init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
-    Arc::new(SeaOrmConversationRepository::new(
+    let repo = Arc::new(SeaOrmConversationRepository::new(
         db_conn,
-        chroma_client,
-        embedding_service,
-    ))
+        chroma_client.clone(),
+        embedding_service.clone(),
+    ));
+    (repo, chroma_client, embedding_service)
 }
 
 async fn create_test_app() -> Router {
-    let repo = setup_test_repo().await;
+    let (repo, chroma_client, embedding_service) = setup_test_repo().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
 
     let state = routes::AppState {
         config: create_test_config().await,
         repo: repo.clone(),
+        chroma_client,
+        embedding_service,
         orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge)),
     };
 
@@ -73,12 +80,14 @@ async fn create_test_app() -> Router {
 }
 
 async fn create_test_mcp_app() -> Router {
-    let repo = setup_test_repo().await;
+    let (repo, chroma_client, embedding_service) = setup_test_repo().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
 
     let state = routes::AppState {
         config: create_test_config().await,
         repo: repo.clone(),
+        chroma_client,
+        embedding_service,
         orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge)),
     };
 

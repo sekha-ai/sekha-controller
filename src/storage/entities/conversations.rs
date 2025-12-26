@@ -5,16 +5,14 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "conversations")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
     #[sea_orm(column_type = "Text")]
     pub label: String,
     #[sea_orm(column_type = "Text")]
     pub folder: String,
-    #[sea_orm(column_type = "Text")]
-    pub created_at: String,
-    #[sea_orm(column_type = "Text")]
-    pub updated_at: String,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
     #[sea_orm(column_type = "Text")]
     pub status: String,
     pub importance_score: i64,

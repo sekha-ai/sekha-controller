@@ -62,6 +62,11 @@ impl Config {
             .set_default("pruning_enabled", true)?
             .set_default("rate_limit_per_minute", 1000)?
             .set_default("cors_enabled", true)?
+            .set_default("mcp_api_key", "dev_default_key_change_me_1234567890")? // ✅ ADD DEFAULT
+            // Load from ./config.toml (project root)
+            .add_source(
+                config::File::with_name("config").required(false),
+            )
             // Load from ~/.sekha/config.toml
             .add_source(
                 config::File::with_name(&format!(

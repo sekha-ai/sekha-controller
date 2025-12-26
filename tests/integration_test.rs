@@ -35,9 +35,13 @@ async fn create_test_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
+        rest_api_key: Some("rest_test_key_123456789012345678901234".to_string()),
         database_url: "sqlite::memory:".to_string(),
         ollama_url: "http://localhost:11434".to_string(),
         chroma_url: "http://localhost:8000".to_string(),
+        additional_api_keys: vec![],
+        cors_enabled: true,
+        rate_limit_per_minute: 60,
         max_connections: 10,
         log_level: "info".to_string(),
         summarization_enabled: true,
@@ -52,8 +56,8 @@ async fn create_test_app() -> Router {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db.clone(),
-        chroma_client,
-        embedding_service,
+        chroma_client.clone(),
+        embedding_service.clone(),
     ));
 
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
@@ -61,6 +65,8 @@ async fn create_test_app() -> Router {
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
+        chroma_client,
+        embedding_service,
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
             repo, llm_bridge,
         )),
@@ -74,8 +80,8 @@ async fn create_test_mcp_app() -> Router {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db.clone(),
-        chroma_client,
-        embedding_service,
+        chroma_client.clone(),     // Add clone
+        embedding_service.clone(), // Add clone
     ));
 
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
@@ -83,6 +89,8 @@ async fn create_test_mcp_app() -> Router {
     let state = AppState {
         config: create_test_config().await,
         repo: repo.clone(),
+        chroma_client,     // ADD THIS
+        embedding_service, // ADD THIS
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
             repo, llm_bridge,
         )),

@@ -135,8 +135,8 @@ impl ConversationRepository for SeaOrmConversationRepository {
             importance_score: Set(conv.importance_score as i64),
             word_count: Set(conv.word_count as i64),
             session_count: Set(conv.session_count as i64),
-            created_at: Set(conv.created_at.to_string()),
-            updated_at: Set(conv.updated_at.to_string()),
+            created_at: Set(conv.created_at),
+            updated_at: Set(conv.updated_at),
         };
 
         let result = active_model.insert(&self.db).await?;
@@ -145,24 +145,36 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
         let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);
-        let now = chrono::Utc::now().naive_utc();
 
         let word_count: i64 = conv.messages.iter().map(|m| m.content.len() as i64).sum();
 
-        // Store conversation in SQLite
+        eprintln!("DEBUG: created_at = '{}'", conv.created_at);
+        eprintln!("DEBUG: updated_at = '{}'", conv.updated_at);
+        eprintln!("DEBUG: status = '{}'", conv.status);
+        eprintln!(
+            "DEBUG: importance_score = {}",
+            conv.importance_score.unwrap_or(5)
+        );
+        eprintln!("DEBUG: word_count = {}", word_count);
+        eprintln!("DEBUG: session_count = {}", conv.session_count.unwrap_or(1));
+
+        // Store conversation in SQLite - USE INPUT VALUES
         let conversation = conversations::ActiveModel {
             id: Set(conv_id.to_string()),
             label: Set(conv.label.clone()),
             folder: Set(conv.folder.clone()),
-            status: Set("active".to_string()),
-            importance_score: Set(5i64),
+            status: Set(conv.status), // FIX: Use input value
+            importance_score: Set(conv.importance_score.unwrap_or(5) as i64), // FIX: Use input value
             word_count: Set(word_count),
             session_count: Set(conv.session_count.unwrap_or(1) as i64),
-            created_at: Set(now.to_string()),
-            updated_at: Set(now.to_string()),
+            created_at: Set(conv.created_at), // Direct assignment
+            updated_at: Set(conv.updated_at), // Direct assignment
         };
 
-        conversation.insert(&self.db).await?;
+        conversation.insert(&self.db).await.map_err(|e| {
+            tracing::error!("Failed to insert conversation: {:?}", e);
+            e
+        })?;
         tracing::info!("Created conversation: {}", conv_id);
 
         // Store messages with embeddings
@@ -239,7 +251,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(models.into_iter().map(Conversation::from).collect())
     }
 
-    // NEW: Find with filters (implementation)
     async fn find_with_filters(
         &self,
         filter: Option<String>,
@@ -282,7 +293,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         let mut active_model: conversations::ActiveModel = model.into();
         active_model.label = Set(new_label.to_string());
         active_model.folder = Set(new_folder.to_string());
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -335,7 +346,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(models.into_iter().map(Message::from).collect())
     }
 
-    // NEW: Update status
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
         let model = conversations::Entity::find_by_id(id.to_string())
             .one(&self.db)
@@ -344,13 +354,12 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let mut active_model: conversations::ActiveModel = model.into();
         active_model.status = Set(status.to_string());
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
     }
 
-    // NEW: Update importance
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError> {
         let model = conversations::Entity::find_by_id(id.to_string())
             .one(&self.db)
@@ -359,13 +368,12 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let mut active_model: conversations::ActiveModel = model.into();
         active_model.importance_score = Set(score as i64);
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc().to_string());
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
     }
 
-    // NEW: Count messages in conversation
     async fn count_messages_in_conversation(
         &self,
         conversation_id: Uuid,
@@ -461,11 +469,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                             metadata: scored.metadata,
                             label: conversation.label,
                             folder: conversation.folder,
-                            timestamp: chrono::NaiveDateTime::parse_from_str(
-                                &message.timestamp,
-                                "%Y-%m-%d %H:%M:%S%.f",
-                            )
-                            .unwrap(),
+                            timestamp: message.timestamp,
                         });
                     }
                 }
@@ -498,7 +502,7 @@ impl SeaOrmConversationRepository {
                 serde_json::json!({
                     "role": new_msg.role.clone(),
                     "conversation_id": conversation_id.to_string(),
-                    "timestamp": now.to_string(),
+                    "timestamp": now,
                 }),
             )
             .await
@@ -518,12 +522,15 @@ impl SeaOrmConversationRepository {
             conversation_id: Set(conversation_id.to_string()),
             role: Set(new_msg.role),
             content: Set(new_msg.content),
-            timestamp: Set(now.to_string()),
-            embedding_id: Set(embedding_id),
+            timestamp: Set(new_msg.timestamp),
+            embedding_id: Set(embedding_id.map(|id| format!("{}", id))),
             metadata: Set(Some(new_msg.metadata.to_string())),
         };
 
-        message.insert(&self.db).await?;
+        message.insert(&self.db).await.map_err(|e| {
+            tracing::error!("Failed to insert message: {:?}", e);
+            e
+        })?;
         tracing::debug!(
             "Stored message{}: {}",
             if has_embedding { " with embedding" } else { "" },
@@ -564,16 +571,8 @@ impl From<conversations::Model> for Conversation {
             importance_score: model.importance_score as i32,
             word_count: model.word_count as i32,
             session_count: model.session_count as i32,
-            created_at: chrono::NaiveDateTime::parse_from_str(
-                &model.created_at,
-                "%Y-%m-%d %H:%M:%S%.f",
-            )
-            .unwrap(),
-            updated_at: chrono::NaiveDateTime::parse_from_str(
-                &model.updated_at,
-                "%Y-%m-%d %H:%M:%S%.f",
-            )
-            .unwrap(),
+            created_at: model.created_at,
+            updated_at: model.updated_at,
         }
     }
 }
@@ -585,11 +584,7 @@ impl From<messages::Model> for Message {
             conversation_id: Uuid::parse_str(&model.conversation_id).unwrap(),
             role: model.role,
             content: model.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(
-                &model.timestamp,
-                "%Y-%m-%d %H:%M:%S%.f",
-            )
-            .unwrap(),
+            timestamp: model.timestamp,
             embedding_id: model.embedding_id.map(|id| Uuid::parse_str(&id).unwrap()),
             metadata: model.metadata,
         }

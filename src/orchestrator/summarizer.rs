@@ -121,11 +121,7 @@ impl HierarchicalSummarizer {
                 conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
                 role: m.role,
                 content: m.content,
-                timestamp: chrono::NaiveDateTime::parse_from_str(
-                    &m.timestamp,
-                    "%Y-%m-%d %H:%M:%S%.f",
-                )
-                .unwrap(),
+                timestamp: m.timestamp,
                 embedding_id: m
                     .embedding_id
                     .as_ref()
@@ -177,7 +173,7 @@ impl HierarchicalSummarizer {
             level: Set(level.to_string()),
             summary_text: Set(summary.to_string()),
             token_count: Set(Some((summary.len() / 4) as i64)), // Estimate tokens
-            generated_at: Set(now.to_string()),
+            generated_at: Set(now),
             ..Default::default()
         };
 

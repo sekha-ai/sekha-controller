@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::mpsc;
+use tokio::task::spawn_blocking;
+
 use uuid::Uuid;
 
 use crate::models::internal::{NewConversation, NewMessage};
@@ -131,39 +133,45 @@ impl ImportWatcher {
         // Clone for async move
         let processor = self.processor.clone();
 
-        // Spawn watcher on separate thread (notify requires blocking)
+        // ✅ CORRECT: Spawn as Tokio task, not std::thread
         let watch_path = self.watch_path.clone();
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Handle::current();
+        tokio::spawn(async move {
             let tx_clone = tx.clone();
-
-            let mut watcher: RecommendedWatcher = Watcher::new(
-                move |res: Result<Event, notify::Error>| {
-                    if let Ok(event) = res {
-                        if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
-                            for path in event.paths {
-                                if matches!(
-                                    path.extension().and_then(|s| s.to_str()),
-                                    Some("json") | Some("xml") | Some("md") | Some("txt")
-                                ) {
-                                    let _ = tx_clone.blocking_send(path);
+            
+            // Use spawn_blocking for the watcher setup (truly blocking operation)
+            let watcher_handle = tokio::task::spawn_blocking(move || {
+                let mut watcher: RecommendedWatcher = Watcher::new(
+                    move |res: Result<Event, notify::Error>| {
+                        if let Ok(event) = res {
+                            if matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
+                                for path in event.paths {
+                                    if matches!(
+                                        path.extension().and_then(|s| s.to_str()),
+                                        Some("json") | Some("xml") | Some("md") | Some("txt")
+                                    ) {
+                                        // blocking_send works in any context
+                                        let _ = tx_clone.blocking_send(path);
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-                notify::Config::default(),
-            )
-            .expect("Failed to create watcher");
+                    },
+                    notify::Config::default(),
+                )
+                .expect("Failed to create watcher");
 
-            watcher
-                .watch(&watch_path, RecursiveMode::NonRecursive)
-                .expect("Failed to watch directory");
+                watcher
+                    .watch(&watch_path, RecursiveMode::NonRecursive)
+                    .expect("Failed to watch directory");
 
-            tracing::info!("📁 Watching for imports in: {}", watch_path.display());
+                tracing::info!("📁 Watching for imports in: {}", watch_path.display());
 
-            // Keep watcher alive
-            std::thread::park();
+                // Keep blocking task alive
+                std::thread::park();
+            });
+
+            // Wait for the blocking task to complete (it won't, by design)
+            let _ = watcher_handle.await;
         });
 
         // Process initial files already in directory
@@ -342,7 +350,7 @@ impl ImportProcessor {
         let created_at = export
             .create_time
             .map(|ts| {
-                chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
                     .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
             .unwrap_or_else(|| chrono::Utc::now().naive_utc());
@@ -350,7 +358,7 @@ impl ImportProcessor {
         let updated_at = export
             .update_time
             .map(|ts| {
-                chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
                     .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
             .unwrap_or_else(|| chrono::Utc::now().naive_utc());
@@ -382,7 +390,7 @@ impl ImportProcessor {
                             let timestamp = msg
                                 .create_time
                                 .and_then(|ts| {
-                                    chrono::NaiveDateTime::from_timestamp_opt(ts as i64, 0)
+                                    chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
                                 })
                                 .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 
@@ -776,7 +784,10 @@ mod tests {
             Ok(Uuid::new_v4())
         }
 
-        async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
+        async fn create_with_messages(
+            &self,
+            conv: NewConversation,
+        ) -> Result<Uuid, RepositoryError> {
             Ok(conv.id.unwrap_or_else(Uuid::new_v4))
         }
 
@@ -792,11 +803,19 @@ mod tests {
             Ok(None)
         }
 
-        async fn find_by_label(&self, _label: &str, _limit: u64, _offset: u64) -> Result<Vec<Conversation>, RepositoryError> {
+        async fn find_by_label(
+            &self,
+            _label: &str,
+            _limit: u64,
+            _offset: u64,
+        ) -> Result<Vec<Conversation>, RepositoryError> {
             Ok(Vec::new())
         }
 
-        async fn get_conversation_messages(&self, _conversation_id: Uuid) -> Result<Vec<Message>, RepositoryError> {
+        async fn get_conversation_messages(
+            &self,
+            _conversation_id: Uuid,
+        ) -> Result<Vec<Message>, RepositoryError> {
             Ok(Vec::new())
         }
 
@@ -804,15 +823,29 @@ mod tests {
             Ok(None)
         }
 
-        async fn find_recent_messages(&self, _conversation_id: Uuid, _limit: usize) -> Result<Vec<Message>, RepositoryError> {
+        async fn find_recent_messages(
+            &self,
+            _conversation_id: Uuid,
+            _limit: usize,
+        ) -> Result<Vec<Message>, RepositoryError> {
             Ok(Vec::new())
         }
 
-        async fn find_with_filters(&self, _filter: Option<String>, _limit: usize, _offset: u32) -> Result<(Vec<Conversation>, u64), RepositoryError> {
+        async fn find_with_filters(
+            &self,
+            _filter: Option<String>,
+            _limit: usize,
+            _offset: u32,
+        ) -> Result<(Vec<Conversation>, u64), RepositoryError> {
             Ok((Vec::new(), 0))
         }
 
-        async fn update_label(&self, _id: Uuid, _new_label: &str, _new_folder: &str) -> Result<(), RepositoryError> {
+        async fn update_label(
+            &self,
+            _id: Uuid,
+            _new_label: &str,
+            _new_folder: &str,
+        ) -> Result<(), RepositoryError> {
             Ok(())
         }
 
@@ -824,15 +857,27 @@ mod tests {
             Ok(())
         }
 
-        async fn count_messages_in_conversation(&self, _conversation_id: Uuid) -> Result<u64, RepositoryError> {
+        async fn count_messages_in_conversation(
+            &self,
+            _conversation_id: Uuid,
+        ) -> Result<u64, RepositoryError> {
             Ok(0)
         }
 
-        async fn full_text_search(&self, _query: &str, _limit: usize) -> Result<Vec<Message>, RepositoryError> {
+        async fn full_text_search(
+            &self,
+            _query: &str,
+            _limit: usize,
+        ) -> Result<Vec<Message>, RepositoryError> {
             Ok(Vec::new())
         }
 
-        async fn semantic_search(&self, _query: &str, _limit: usize, _filters: Option<Value>) -> Result<Vec<SearchResult>, RepositoryError> {
+        async fn semantic_search(
+            &self,
+            _query: &str,
+            _limit: usize,
+            _filters: Option<Value>,
+        ) -> Result<Vec<SearchResult>, RepositoryError> {
             Ok(Vec::new())
         }
 
@@ -845,4 +890,3 @@ mod tests {
         }
     }
 }
-

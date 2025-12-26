@@ -43,14 +43,16 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
 
-    // Check and apply migrations
-    let result = db
-        .execute_unprepared(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
-        )
-        .await?;
+    // Check and apply migrations if needed
+    let needs_migration = match db
+        .execute_unprepared("SELECT 1 FROM conversations LIMIT 1")
+        .await
+    {
+        Ok(_) => false, // Table exists
+        Err(_) => true, // Table doesn't exist
+    };
 
-    if result.rows_affected() == 0 {
+    if needs_migration {
         tracing::info!("Database empty, applying migrations...");
 
         let migrations = [

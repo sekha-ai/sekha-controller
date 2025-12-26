@@ -5,19 +5,17 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel)]
 #[sea_orm(table_name = "hierarchical_summaries")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub id: String,
-    #[sea_orm(column_type = "Text")]
     pub conversation_id: String,
     #[sea_orm(column_type = "Text")]
     pub level: String,
     #[sea_orm(column_type = "Text")]
     pub summary_text: String,
     #[sea_orm(column_type = "Text")]
-    pub timestamp_range: String,
-    #[sea_orm(column_type = "Text")]
-    pub generated_at: String,
-    #[sea_orm(column_type = "Text", nullable)]
+    pub timestamp_range: String,  // This might need to stay String (range format)
+    pub generated_at: chrono::NaiveDateTime,  // ✅ FIXED: Use native type
+    #[sea_orm(nullable)]
     pub model_used: Option<String>,
     pub token_count: Option<i64>,
 }

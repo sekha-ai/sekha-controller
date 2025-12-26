@@ -55,6 +55,13 @@ mod tests {
 
         let result = repo.create_with_messages(new_conv).await;
 
+        match &result {
+            Ok(id) => eprintln!("SUCCESS: Created conversation {}", id),
+            Err(e) => {
+                eprintln!("FAILED: {:?}", e);
+                eprintln!("Full error chain: {:#?}", e);
+            }
+        }
         assert!(result.is_ok());
 
         // Verify conversation exists
@@ -116,6 +123,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // Requires Chroma running on localhost:8000
     async fn test_chroma_upsert_and_query() {
         let chroma = ChromaClient::new("http://localhost:8000".to_string());
         let id = format!("test-{}", Uuid::new_v4());

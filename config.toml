@@ -20,6 +20,17 @@ collection_name = "sekha_conversations"
 url = "http://localhost:5001"
 timeout_secs = 30
 
+# API Configuration - ROOT LEVEL (not under [api])
+mcp_api_key = "dev_api_key_12345678901234567890123456789012"
+rest_api_key = "rest_key_xyz7890123456789xyz7890123456789"
+# Additional API keys for multi-user access
+additional_api_keys = [
+    "team_key_111222333444555666777888999000",
+    "service_key_aabbccddeeaabbccddeeaabbccdd",
+]
+rate_limit_per_minute = 1000
+cors_enabled = true
+
 # API Configuration
 [api]
 # API keys for Bearer token authentication
@@ -27,16 +38,6 @@ timeout_secs = 30
 api_keys = [
     "test_key_12345678901234567890123456789012",
     "sk-sekha-prod1234567890123456789012",
-]
-mcp_api_key = "test_key_12345678901234567890123456789012"
-
-# Optional: Separate REST API key (falls back to mcp_api_key if not set)
-rest_api_key = "rest_key_xyz7890123456789xyz7890123456789"
-
-# Additional API keys for multi-user access
-additional_api_keys = [
-    "team_key_111222333444555666777888999000",
-    "service_key_aabbccddeeaabbccddeeaabbccdd",
 ]
 
 # Rate limiting: requests per minute per IP

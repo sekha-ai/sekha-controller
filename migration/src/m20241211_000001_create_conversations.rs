@@ -6,43 +6,107 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Use raw SQL for FTS5 (SeaORM doesn't support it natively)
-        let sql = r#"
-CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
-    label TEXT NOT NULL,
-    folder TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    status TEXT NOT NULL DEFAULT 'active',
-    importance_score INTEGER NOT NULL DEFAULT 5,
-    word_count INTEGER NOT NULL DEFAULT 0,
-    session_count INTEGER NOT NULL DEFAULT 1
-);
+        manager
+            .create_table(
+                Table::create()
+                    .table(Conversations::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(Conversations::Id)
+                            .string_len(36)
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(Conversations::Label).string().not_null())
+                    .col(ColumnDef::new(Conversations::Folder).string().not_null())
+                    .col(
+                        ColumnDef::new(Conversations::CreatedAt)
+                            .timestamp()
+                            .not_null()
+                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
+                    )
+                    .col(
+                        ColumnDef::new(Conversations::UpdatedAt)
+                            .timestamp()
+                            .not_null()
+                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
+                    )
+                    .col(
+                        ColumnDef::new(Conversations::Status)
+                            .string()
+                            .not_null()
+                            .extra("DEFAULT 'active'".to_owned()),
+                    )
+                    .col(
+                        ColumnDef::new(Conversations::ImportanceScore)
+                            .integer()
+                            .not_null()
+                            .extra("DEFAULT 5".to_owned()),
+                    )
+                    .col(
+                        ColumnDef::new(Conversations::WordCount)
+                            .integer()
+                            .not_null()
+                            .extra("DEFAULT 0".to_owned()),
+                    )
+                    .col(
+                        ColumnDef::new(Conversations::SessionCount)
+                            .integer()
+                            .not_null()
+                            .extra("DEFAULT 1".to_owned()),
+                    )
+                    .to_owned(),
+            )
+            .await?;
 
-CREATE INDEX idx_conversations_label_status ON conversations(label, status);
-CREATE INDEX idx_conversations_folder_updated ON conversations(folder, updated_at);
+        // Create indexes
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_conversations_label_status")
+                    .table(Conversations::Table)
+                    .col(Conversations::Label)
+                    .col(Conversations::Status)
+                    .to_owned(),
+            )
+            .await?;
 
--- FTS5 virtual table
-CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(content, tokenize = 'porter');
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_conversations_folder_updated")
+                    .table(Conversations::Table)
+                    .col(Conversations::Folder)
+                    .col(Conversations::UpdatedAt)
+                    .to_owned(),
+            )
+            .await?;
 
-CREATE TRIGGER messages_ai AFTER INSERT ON messages
-BEGIN INSERT INTO messages_fts(rowid, content) VALUES (NEW.id, NEW.content); END;
+        // Enable WAL mode
+        manager
+            .execute_unprepared("PRAGMA journal_mode=WAL;")
+            .await?;
 
-CREATE TRIGGER messages_ad AFTER DELETE ON messages
-BEGIN DELETE FROM messages_fts WHERE rowid = OLD.id; END;
-
-CREATE TRIGGER messages_au AFTER UPDATE ON messages
-BEGIN DELETE FROM messages_fts WHERE rowid = OLD.id; INSERT INTO messages_fts(rowid, content) VALUES (NEW.id, NEW.content); END;
-
-PRAGMA journal_mode=WAL;
-"#;
-        manager.get_connection().execute_unprepared(sql).await?;
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager.get_connection().execute_unprepared("DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS messages_fts;").await?;
-        Ok(())
+        manager
+            .drop_table(Table::drop().table(Conversations::Table).to_owned())
+            .await
     }
+}
+
+#[derive(DeriveIden)]
+enum Conversations {
+    Table,
+    Id,
+    Label,
+    Folder,
+    CreatedAt,
+    UpdatedAt,
+    Status,
+    ImportanceScore,
+    WordCount,
+    SessionCount,
 }
