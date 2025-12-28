@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, DatabaseBackend, QueryFilter, QueryOrder, QuerySelect, Statement, Value,
+    prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set, Statement, Value,
 };
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
@@ -153,25 +153,30 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
         let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);
-        let created_at_str = format!("{}", conv.created_at.format("%Y-%m-%d %H:%M:%S%.3f"));
-        let updated_at_str = format!("{}", conv.updated_at.format("%Y-%m-%d %H:%M:%S%.3f"));
         let word_count_calc: i64 = conv.messages.iter().map(|m| m.content.len() as i64).sum();
 
+        // Keep debug logging
+        let created_at_str = format!("{}", conv.created_at.format("%Y-%m-%d %H:%M:%S%.3f"));
+        let updated_at_str = format!("{}", conv.updated_at.format("%Y-%m-%d %H:%M:%S%.3f"));
         eprintln!("DEBUG: created_at = '{}'", created_at_str);
         eprintln!("DEBUG: updated_at = '{}'", updated_at_str);
         eprintln!("DEBUG: word_count = {}", word_count_calc);
-        eprintln!(
-            "DEBUG: importance_score = {}",
-            conv.importance_score.unwrap_or(5)
-        );
+        eprintln!("DEBUG: importance_score = {}", conv.importance_score.unwrap_or(5));
 
-        // WORKING PATTERN: execute_unprepared with format!() string
-        let insert_sql = format!(
-            "INSERT INTO conversations (id, label, folder, status, importance_score, word_count, session_count, created_at, updated_at) VALUES ('{}', '{}', '{}', '{}', {}, {}, {}, '{}', '{}')",
-            conv_id, conv.label, conv.folder, conv.status, conv.importance_score.unwrap_or(5), word_count_calc, conv.session_count.unwrap_or(1), created_at_str, updated_at_str
-        );
+        // FIX: Use ActiveModel for type-safe insertion (prevents SQL injection)
+        let conversation = conversations::ActiveModel {
+            id: Set(conv_id.to_string()),
+            label: Set(conv.label),
+            folder: Set(conv.folder),
+            status: Set(conv.status),
+            importance_score: Set(conv.importance_score.unwrap_or(5) as i64), // FIX: Cast to i64 for SQLite
+            word_count: Set(word_count_calc),
+            session_count: Set(conv.session_count.unwrap_or(1) as i64), // FIX: Cast to i64 for SQLite
+            created_at: Set(created_at_str),
+            updated_at: Set(updated_at_str),
+        };
 
-        self.db.execute_unprepared(&insert_sql).await.map_err(|e| {
+        conversation.insert(&self.db).await.map_err(|e| {
             tracing::error!("Failed to insert conversation: {:?}", e);
             RepositoryError::DbError(e)
         })?;
@@ -279,27 +284,22 @@ impl ConversationRepository for SeaOrmConversationRepository {
         new_label: &str,
         new_folder: &str,
     ) -> Result<(), RepositoryError> {
-        let sql = r#"
-            UPDATE conversations 
-            SET label = ?, folder = ?, updated_at = ?
-            WHERE id = ?
-        "#;
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", id)))?;
 
-        let values = vec![
-            Value::String(Some(new_label.to_string())),
-            Value::String(Some(new_folder.to_string())),
-            Value::String(Some(
-                chrono::Utc::now()
-                    .naive_utc()
-                    .format("%Y-%m-%d %H:%M:%S%.3f")
-                    .to_string(),
-            )),
-            Value::String(Some(id.to_string())),
-        ];
+        let mut active_model: conversations::ActiveModel = model.into_active_model();
+        active_model.label = Set(new_label.to_string());
+        active_model.folder = Set(new_folder.to_string());
+        active_model.updated_at = Set(
+            chrono::Utc::now()
+                .naive_utc()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string()
+        );
 
-        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
-
-        self.db.execute_raw(stmt).await?;
+        active_model.update(&self.db).await?;
         Ok(())
     }
 
@@ -345,50 +345,40 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
-        let sql = r#"
-            UPDATE conversations 
-            SET status = ?, updated_at = ?
-            WHERE id = ?
-        "#;
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", id)))?;
 
-        let values = vec![
-            Value::String(Some(status.to_string())),
-            Value::String(Some(
-                chrono::Utc::now()
-                    .naive_utc()
-                    .format("%Y-%m-%d %H:%M:%S%.3f")
-                    .to_string(),
-            )),
-            Value::String(Some(id.to_string())),
-        ];
+        let mut active_model: conversations::ActiveModel = model.into_active_model();
+        active_model.status = Set(status.to_string());
+        active_model.updated_at = Set(
+            chrono::Utc::now()
+                .naive_utc()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string()
+        );
 
-        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
-
-        self.db.execute_raw(stmt).await?;
+        active_model.update(&self.db).await?;
         Ok(())
     }
 
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError> {
-        let sql = r#"
-            UPDATE conversations 
-            SET importance_score = ?, updated_at = ?
-            WHERE id = ?
-        "#;
+        let model = conversations::Entity::find_by_id(id.to_string())
+            .one(&self.db)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", id)))?;
 
-        let values = vec![
-            Value::BigInt(Some(score as i64)),
-            Value::String(Some(
-                chrono::Utc::now()
-                    .naive_utc()
-                    .format("%Y-%m-%d %H:%M:%S%.3f")
-                    .to_string(),
-            )),
-            Value::String(Some(id.to_string())),
-        ];
+        let mut active_model: conversations::ActiveModel = model.into_active_model();
+        active_model.importance_score = Set(score as i64); // FIX: Cast to i64 for SQLite
+        active_model.updated_at = Set(
+            chrono::Utc::now()
+                .naive_utc()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string()
+        );
 
-        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
-
-        self.db.execute_raw(stmt).await?;
+        active_model.update(&self.db).await?;
         Ok(())
     }
 
@@ -546,34 +536,37 @@ impl SeaOrmConversationRepository {
 
         let has_embedding = embedding_id.is_some();
 
-        let embedding_id_str: Option<String> = embedding_id.map(|id| ToString::to_string(&id));
-        let metadata_str: Option<String> = if new_msg.metadata.is_null() {
+        // FIX: Clone content before moving it
+        let content_for_fts = new_msg.content.clone();
+        
+        // FIX: Explicit type conversion for metadata
+        let metadata_json_str = if new_msg.metadata.is_null() {
             None
         } else {
-            Some(ToString::to_string(&new_msg.metadata))
+            Some(serde_json::to_string(&new_msg.metadata).unwrap())
         };
 
-        // WORKING PATTERN: execute_unprepared with format!() string
-        let insert_sql = format!(
-            "INSERT INTO messages (id, conversation_id, role, content, timestamp, embedding_id, metadata) VALUES ('{}', '{}', '{}', '{}', '{}', {}, {})",
-            msg_id,
-            conversation_id,
-            new_msg.role,
-            new_msg.content,
-            new_msg.timestamp.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
-            embedding_id_str.as_ref().map_or("NULL".to_string(), |id| format!("'{}'", id)),
-            metadata_str.as_ref().map_or("NULL".to_string(), |m| format!("'{}'", m))
-        );
+        // FIX: Use ActiveModel for type-safe insertion
+        let message = messages::ActiveModel {
+            id: Set(msg_id.to_string()),
+            conversation_id: Set(conversation_id.to_string()),
+            role: Set(new_msg.role),
+            content: Set(new_msg.content), // ← Content moved here
+            timestamp: Set(new_msg.timestamp.format("%Y-%m-%d %H:%M:%S%.3f").to_string()),
+            embedding_id: Set(embedding_id.map(|id| ToString::to_string(&id))), // FIX: Explicit disambiguation
+            metadata: Set(metadata_json_str),
+        };
 
-        self.db.execute_unprepared(&insert_sql).await.map_err(|e| {
+        message.insert(&self.db).await.map_err(|e| {
             tracing::error!("Failed to insert message: {:?}", e);
-            e
+            RepositoryError::DbError(e)
         })?;
 
+        // FIX: Use cloned content here
         let fts_sql = format!(
             "INSERT INTO messages_fts(rowid, content) VALUES ((SELECT rowid FROM messages WHERE id = '{}'), '{}')",
             msg_id,
-            new_msg.content.replace("'", "''")
+            content_for_fts.replace("'", "''")
         );
 
         let _ = self.db.execute_unprepared(&fts_sql).await;
