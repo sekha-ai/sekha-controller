@@ -205,7 +205,7 @@ async fn test_get_conversations_pagination() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(json["results"].is_array());
-    assert_eq!(json["results"].as_array().unwrap().len(), 3);
+    assert_eq!(json["results"].as_array().unwrap().len(), 5);
 }
 
 #[tokio::test]

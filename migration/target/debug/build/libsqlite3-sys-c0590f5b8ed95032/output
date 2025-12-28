@@ -5,7 +5,7 @@ cargo:rerun-if-env-changed=SQLITE_MAX_VARIABLE_NUMBER
 cargo:rerun-if-env-changed=SQLITE_MAX_EXPR_DEPTH
 cargo:rerun-if-env-changed=SQLITE_MAX_COLUMN
 cargo:rerun-if-env-changed=LIBSQLITE3_FLAGS
-OUT_DIR = Some(/home/jefft/sekha/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out)
+OUT_DIR = Some(/home/jefft/sekha/workspace/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out)
 OPT_LEVEL = Some(0)
 TARGET = Some(x86_64-unknown-linux-gnu)
 CARGO_ENCODED_RUSTFLAGS = Some()
@@ -49,5 +49,5 @@ ARFLAGS_x86_64_unknown_linux_gnu = None
 cargo:rerun-if-env-changed=ARFLAGS_x86_64-unknown-linux-gnu
 ARFLAGS_x86_64-unknown-linux-gnu = None
 cargo:rustc-link-lib=static=sqlite3
-cargo:rustc-link-search=native=/home/jefft/sekha/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out
-cargo:lib_dir=/home/jefft/sekha/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out
+cargo:rustc-link-search=native=/home/jefft/sekha/workspace/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out
+cargo:lib_dir=/home/jefft/sekha/workspace/sekha-controller/migration/target/debug/build/libsqlite3-sys-c0590f5b8ed95032/out
