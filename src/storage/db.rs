@@ -43,7 +43,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Apply migrations if needed
     tracing::info!("Applying migrations...");
     let schema_manager = SchemaManager::new(&db);
-    
+
     let migrations_need_setup = schema_manager
         .has_table("seaql_migrations")
         .await
@@ -51,7 +51,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     if !migrations_need_setup {
         tracing::info!("First run: executing all migration SQL files");
-        
+
         // FIX: Removed migration 007 from this list - it's now handled separately below
         let migrations = [
             include_str!("../../migrations/001_create_conversations.sql"),
@@ -66,21 +66,23 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             db.execute_unprepared(sql).await?;
             tracing::info!("Applied migration {}", i + 1);
         }
-        
+
         db.execute_unprepared(
             r#"
             CREATE TABLE IF NOT EXISTS seaql_migrations (
                 version TEXT PRIMARY KEY,
                 applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-            "#
-        ).await?;
-        
+            "#,
+        )
+        .await?;
+
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
                 "INSERT INTO seaql_migrations (version) VALUES ('{}')",
                 format!("m20241211_{:08}", i * 100000)
-            )).await?;
+            ))
+            .await?;
         }
     } else {
         tracing::info!("Migrations already applied, skipping");
@@ -94,8 +96,9 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             content,
             tokenize='porter'
         );
-        "#
-    ).await?;
+        "#,
+    )
+    .await?;
 
     // Store connection
     let mut conn = DB_CONN.lock().await;
@@ -126,7 +129,9 @@ mod tests {
 
         // Verify migrations table was created (proves migrations ran)
         let result = db
-            .execute_unprepared("SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'")
+            .execute_unprepared(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
+            )
             .await
             .unwrap();
 
