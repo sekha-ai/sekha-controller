@@ -136,7 +136,7 @@ impl ImportWatcher {
         let watch_path = self.watch_path.clone();
         tokio::spawn(async move {
             let tx_clone = tx.clone();
-            
+
             // Use spawn_blocking for the watcher setup (truly blocking operation)
             let watcher_handle = tokio::task::spawn_blocking(move || {
                 let mut watcher: RecommendedWatcher = Watcher::new(
@@ -349,7 +349,8 @@ impl ImportProcessor {
         let created_at = export
             .create_time
             .map(|ts| {
-                chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
+                chrono::DateTime::from_timestamp(ts as i64, 0)
+                    .map(|dt| dt.naive_utc())
                     .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
             .unwrap_or_else(|| chrono::Utc::now().naive_utc());
@@ -357,7 +358,8 @@ impl ImportProcessor {
         let updated_at = export
             .update_time
             .map(|ts| {
-                chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
+                chrono::DateTime::from_timestamp(ts as i64, 0)
+                    .map(|dt| dt.naive_utc())
                     .unwrap_or_else(|| chrono::Utc::now().naive_utc())
             })
             .unwrap_or_else(|| chrono::Utc::now().naive_utc());
@@ -389,7 +391,8 @@ impl ImportProcessor {
                             let timestamp = msg
                                 .create_time
                                 .and_then(|ts| {
-                                    chrono::DateTime::from_timestamp(ts as i64, 0).map(|dt| dt.naive_utc())
+                                    chrono::DateTime::from_timestamp(ts as i64, 0)
+                                        .map(|dt| dt.naive_utc())
                                 })
                                 .unwrap_or_else(|| chrono::Utc::now().naive_utc());
 

@@ -121,7 +121,11 @@ impl HierarchicalSummarizer {
                 conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
                 role: m.role,
                 content: m.content,
-                timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+                timestamp: chrono::NaiveDateTime::parse_from_str(
+                    &m.timestamp,
+                    "%Y-%m-%d %H:%M:%S%.f",
+                )
+                .unwrap(),
                 embedding_id: m
                     .embedding_id
                     .as_ref()

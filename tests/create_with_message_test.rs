@@ -1,15 +1,15 @@
-use sea_orm::{Database, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait};
-use uuid::Uuid;
-use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+use sea_orm::{ColumnTrait, ConnectionTrait, Database, EntityTrait, QueryFilter};
 use sekha_controller::storage::entities::{conversations, messages};
+use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
 use sekha_controller::{ChromaClient, EmbeddingService};
-use std::sync::Arc;
 use serde_json;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_create_with_messages_directly() {
     let db = Database::connect("sqlite::memory:").await.unwrap();
-    
+
     // Create both tables with exact schema from migrations
     db.execute_unprepared(
         r#"
@@ -35,8 +35,10 @@ async fn test_create_with_messages_directly() {
             metadata TEXT,
             FOREIGN KEY (conversation_id) REFERENCES conversations (id)
         );
-        "#
-    ).await.unwrap();
+        "#,
+    )
+    .await
+    .unwrap();
 
     // Mock services (won't be called due to error handling)
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
@@ -79,7 +81,7 @@ async fn test_create_with_messages_directly() {
     match result {
         Ok(id) => {
             eprintln!("SUCCESS: create_with_messages worked, conv_id = {}", id);
-            
+
             // Verify conversation exists
             let conv = conversations::Entity::find_by_id(id.to_string())
                 .one(repo.get_db())
@@ -87,7 +89,7 @@ async fn test_create_with_messages_directly() {
                 .unwrap()
                 .unwrap();
             assert_eq!(conv.label, "test_label");
-            
+
             // Verify messages exist
             let msgs = messages::Entity::find()
                 .filter(messages::Column::ConversationId.eq(id.to_string()))
@@ -95,9 +97,9 @@ async fn test_create_with_messages_directly() {
                 .await
                 .unwrap();
             assert_eq!(msgs.len(), 2);
-            
+
             eprintln!("Verified: conversation and 2 messages created");
-        },
+        }
         Err(e) => {
             panic!("create_with_messages failed: {:?}", e);
         }

@@ -12,7 +12,7 @@ pub struct Model {
     pub level: String,
     #[sea_orm(column_type = "Text")]
     pub summary_text: String,
-    pub timestamp_range: String,  // This might need to stay String (range format)
+    pub timestamp_range: String, // This might need to stay String (range format)
     pub generated_at: String,
     #[sea_orm(nullable)]
     pub model_used: Option<String>,

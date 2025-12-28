@@ -1,15 +1,15 @@
-use sea_orm::{Database, ConnectionTrait, EntityTrait};
-use uuid::Uuid;
-use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+use sea_orm::{ConnectionTrait, Database, EntityTrait};
+use sekha_controller::models::internal::Conversation;
 use sekha_controller::storage::entities::conversations;
+use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
 use sekha_controller::{ChromaClient, EmbeddingService};
 use std::sync::Arc;
-use sekha_controller::models::internal::Conversation;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_repository_create_directly() {
     let db = Database::connect("sqlite::memory:").await.unwrap();
-    
+
     // Create schema
     db.execute_unprepared(
         r#"
@@ -24,8 +24,10 @@ async fn test_repository_create_directly() {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
-        "#
-    ).await.unwrap();
+        "#,
+    )
+    .await
+    .unwrap();
 
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let embedding_service = Arc::new(EmbeddingService::new(
@@ -49,21 +51,24 @@ async fn test_repository_create_directly() {
 
     // Test the repository's create method directly
     let result = repo.create(conv).await;
-    
+
     match result {
         Ok(id) => {
             eprintln!("SUCCESS: Repository::create worked, id = {}", id);
-            
+
             // Verify it exists
             let found = conversations::Entity::find_by_id(id.to_string())
                 .one(repo.get_db())
                 .await
                 .unwrap()
                 .unwrap();
-            
+
             assert_eq!(found.label, "test_label");
-            eprintln!("Verified: conversation {} exists with label '{}'", id, found.label);
-        },
+            eprintln!(
+                "Verified: conversation {} exists with label '{}'",
+                id, found.label
+            );
+        }
         Err(e) => {
             panic!("Repository::create failed: {:?}", e);
         }

@@ -1,16 +1,16 @@
-use sea_orm::{Database, ConnectionTrait, EntityTrait, QueryFilter, ColumnTrait};
-use uuid::Uuid;
-use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+use sea_orm::{ColumnTrait, ConnectionTrait, Database, EntityTrait, QueryFilter};
 use sekha_controller::storage::entities::{conversations, messages};
+use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
 use sekha_controller::{ChromaClient, EmbeddingService};
-use std::sync::Arc;
 use serde_json;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_create_message_directly() {
     // Create in-memory database
     let db = Database::connect("sqlite::memory:").await.unwrap();
-    
+
     // Create both tables with exact schema
     db.execute_unprepared(
         r#"
@@ -36,8 +36,10 @@ async fn test_create_message_directly() {
             metadata TEXT,
             FOREIGN KEY (conversation_id) REFERENCES conversations (id)
         );
-        "#
-    ).await.unwrap();
+        "#,
+    )
+    .await
+    .unwrap();
 
     // Mock services (they won't be called in this test)
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
@@ -75,21 +77,24 @@ async fn test_create_message_directly() {
 
     // This will call the create_message method in the repository
     let result = repo.create_message(conv_id, new_msg).await;
-    
+
     match result {
         Ok(msg_id) => {
             eprintln!("SUCCESS: create_message worked, msg_id = {}", msg_id);
-            
+
             // Verify message exists in database
             let found = messages::Entity::find_by_id(msg_id.to_string())
                 .one(repo.get_db())
                 .await
                 .unwrap()
                 .unwrap();
-            
+
             assert_eq!(found.content, "Test message content");
-            eprintln!("Verified: message {} exists with content '{}'", msg_id, found.content);
-        },
+            eprintln!(
+                "Verified: message {} exists with content '{}'",
+                msg_id, found.content
+            );
+        }
         Err(e) => {
             panic!("create_message failed: {:?}", e);
         }

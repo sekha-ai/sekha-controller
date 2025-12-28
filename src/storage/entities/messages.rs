@@ -6,15 +6,15 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "messages")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: String,  // Keep String for UUID
-    pub conversation_id: String,  // Keep String for UUID
+    pub id: String, // Keep String for UUID
+    pub conversation_id: String, // Keep String for UUID
     #[sea_orm(column_type = "Text")]
     pub role: String,
     #[sea_orm(column_type = "Text")]
     pub content: String,
     pub timestamp: String,
     #[sea_orm(nullable)]
-    pub embedding_id: Option<String>,  // Keep String for UUID
+    pub embedding_id: Option<String>, // Keep String for UUID
     #[sea_orm(column_type = "Text", nullable)]
     pub metadata: Option<String>,
 }

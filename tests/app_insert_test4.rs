@@ -1,16 +1,19 @@
-use sea_orm::{Database, DatabaseBackend, EntityTrait, Statement, Value, QueryFilter, ColumnTrait, ConnectionTrait};
-use uuid::Uuid;
-use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, Database, DatabaseBackend, EntityTrait, QueryFilter, Statement,
+    Value,
+};
+use sekha_controller::models::internal::{NewConversation, NewMessage};
 use sekha_controller::storage::entities::{conversations, messages};
+use sekha_controller::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
 use sekha_controller::{ChromaClient, EmbeddingService};
-use sekha_controller::models::internal::{NewMessage, NewConversation};
-use std::sync::Arc;
 use serde_json;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_create_with_messages_messages_only() {
     let db = Database::connect("sqlite::memory:").await.unwrap();
-    
+
     // Create both tables
     db.execute_unprepared(
         r#"
@@ -36,8 +39,10 @@ async fn test_create_with_messages_messages_only() {
             metadata TEXT,
             FOREIGN KEY (conversation_id) REFERENCES conversations (id)
         );
-        "#
-    ).await.unwrap();
+        "#,
+    )
+    .await
+    .unwrap();
 
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let embedding_service = Arc::new(EmbeddingService::new(
@@ -58,32 +63,30 @@ async fn test_create_with_messages_messages_only() {
         session_count: Some(1),
         created_at: chrono::Utc::now().naive_utc(),
         updated_at: chrono::Utc::now().naive_utc(),
-        messages: vec![
-            NewMessage {
-                content: "Test message content".to_string(),
-                role: "user".to_string(),
-                metadata: serde_json::json!({"test": "metadata"}),
-                timestamp: chrono::Utc::now().naive_utc(),
-            }
-        ],
+        messages: vec![NewMessage {
+            content: "Test message content".to_string(),
+            role: "user".to_string(),
+            metadata: serde_json::json!({"test": "metadata"}),
+            timestamp: chrono::Utc::now().naive_utc(),
+        }],
     };
 
     let result = repo.create_with_messages(conv).await;
-    
+
     match result {
         Ok(id) => {
             eprintln!("SUCCESS: create_with_messages worked, conv_id = {}", id);
-            
+
             let found_msgs = messages::Entity::find()
                 .filter(messages::Column::ConversationId.eq(id.to_string()))
                 .all(repo.get_db())
                 .await
                 .unwrap();
-            
+
             assert_eq!(found_msgs.len(), 1);
             assert_eq!(found_msgs[0].content, "Test message content");
             eprintln!("Verified: 1 message exists with correct content");
-        },
+        }
         Err(e) => {
             panic!("create_with_messages failed: {:?}", e);
         }

@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use sea_orm::{prelude::*, QueryOrder, QuerySelect, Statement, QueryFilter, DatabaseBackend, Value};
+use sea_orm::{
+    prelude::*, DatabaseBackend, QueryFilter, QueryOrder, QuerySelect, Statement, Value,
+};
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -126,7 +128,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             INSERT INTO conversations (id, label, folder, status, importance_score, word_count, session_count, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#;
-        
+
         let values = vec![
             Value::String(Some(conv.id.to_string())),
             Value::String(Some(conv.label)),
@@ -135,16 +137,16 @@ impl ConversationRepository for SeaOrmConversationRepository {
             Value::BigInt(Some(conv.importance_score as i64)),
             Value::BigInt(Some(conv.word_count as i64)),
             Value::BigInt(Some(conv.session_count as i64)),
-            Value::String(Some(conv.created_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string())),
-            Value::String(Some(conv.updated_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string())),
+            Value::String(Some(
+                conv.created_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            )),
+            Value::String(Some(
+                conv.updated_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+            )),
         ];
-        
-        let stmt = Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            sql,
-            values,
-        );
-        
+
+        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
+
         self.db.execute_raw(stmt).await?;
         Ok(conv.id)
     }
@@ -158,19 +160,22 @@ impl ConversationRepository for SeaOrmConversationRepository {
         eprintln!("DEBUG: created_at = '{}'", created_at_str);
         eprintln!("DEBUG: updated_at = '{}'", updated_at_str);
         eprintln!("DEBUG: word_count = {}", word_count_calc);
-        eprintln!("DEBUG: importance_score = {}", conv.importance_score.unwrap_or(5));
+        eprintln!(
+            "DEBUG: importance_score = {}",
+            conv.importance_score.unwrap_or(5)
+        );
 
         // WORKING PATTERN: execute_unprepared with format!() string
         let insert_sql = format!(
             "INSERT INTO conversations (id, label, folder, status, importance_score, word_count, session_count, created_at, updated_at) VALUES ('{}', '{}', '{}', '{}', {}, {}, {}, '{}', '{}')",
             conv_id, conv.label, conv.folder, conv.status, conv.importance_score.unwrap_or(5), word_count_calc, conv.session_count.unwrap_or(1), created_at_str, updated_at_str
         );
-        
+
         self.db.execute_unprepared(&insert_sql).await.map_err(|e| {
             tracing::error!("Failed to insert conversation: {:?}", e);
             RepositoryError::DbError(e)
         })?;
-        
+
         tracing::info!("Created conversation: {}", conv_id);
 
         for msg in conv.messages {
@@ -279,20 +284,21 @@ impl ConversationRepository for SeaOrmConversationRepository {
             SET label = ?, folder = ?, updated_at = ?
             WHERE id = ?
         "#;
-        
+
         let values = vec![
             Value::String(Some(new_label.to_string())),
             Value::String(Some(new_folder.to_string())),
-            Value::String(Some(chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S%.3f").to_string())),
+            Value::String(Some(
+                chrono::Utc::now()
+                    .naive_utc()
+                    .format("%Y-%m-%d %H:%M:%S%.3f")
+                    .to_string(),
+            )),
             Value::String(Some(id.to_string())),
         ];
-        
-        let stmt = Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            sql,
-            values,
-        );
-        
+
+        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
+
         self.db.execute_raw(stmt).await?;
         Ok(())
     }
@@ -344,19 +350,20 @@ impl ConversationRepository for SeaOrmConversationRepository {
             SET status = ?, updated_at = ?
             WHERE id = ?
         "#;
-        
+
         let values = vec![
             Value::String(Some(status.to_string())),
-            Value::String(Some(chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S%.3f").to_string())),
+            Value::String(Some(
+                chrono::Utc::now()
+                    .naive_utc()
+                    .format("%Y-%m-%d %H:%M:%S%.3f")
+                    .to_string(),
+            )),
             Value::String(Some(id.to_string())),
         ];
-        
-        let stmt = Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            sql,
-            values,
-        );
-        
+
+        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
+
         self.db.execute_raw(stmt).await?;
         Ok(())
     }
@@ -367,19 +374,20 @@ impl ConversationRepository for SeaOrmConversationRepository {
             SET importance_score = ?, updated_at = ?
             WHERE id = ?
         "#;
-        
+
         let values = vec![
             Value::BigInt(Some(score as i64)),
-            Value::String(Some(chrono::Utc::now().naive_utc().format("%Y-%m-%d %H:%M:%S%.3f").to_string())),
+            Value::String(Some(
+                chrono::Utc::now()
+                    .naive_utc()
+                    .format("%Y-%m-%d %H:%M:%S%.3f")
+                    .to_string(),
+            )),
             Value::String(Some(id.to_string())),
         ];
-        
-        let stmt = Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            sql,
-            values,
-        );
-        
+
+        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
+
         self.db.execute_raw(stmt).await?;
         Ok(())
     }
@@ -422,7 +430,10 @@ impl ConversationRepository for SeaOrmConversationRepository {
         ORDER BY rank 
         LIMIT ?2
         "#,
-            vec![Value::String(Some(query.to_string())), Value::BigInt(Some(limit as i64))],
+            vec![
+                Value::String(Some(query.to_string())),
+                Value::BigInt(Some(limit as i64)),
+            ],
         ))
         .all(&self.db)
         .await?;
@@ -478,7 +489,11 @@ impl ConversationRepository for SeaOrmConversationRepository {
                             metadata: scored.metadata,
                             label: conversation.label,
                             folder: conversation.folder,
-                            timestamp: chrono::NaiveDateTime::parse_from_str(&message.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+                            timestamp: chrono::NaiveDateTime::parse_from_str(
+                                &message.timestamp,
+                                "%Y-%m-%d %H:%M:%S%.f",
+                            )
+                            .unwrap(),
                         });
                     }
                 }
@@ -542,12 +557,12 @@ impl SeaOrmConversationRepository {
             embedding_id_str.as_ref().map_or("NULL".to_string(), |id| format!("'{}'", id)),
             metadata_str.as_ref().map_or("NULL".to_string(), |m| format!("'{}'", m))
         );
-        
+
         self.db.execute_unprepared(&insert_sql).await.map_err(|e| {
             tracing::error!("Failed to insert message: {:?}", e);
             e
         })?;
-        
+
         tracing::debug!(
             "Stored message{}: {}",
             if has_embedding { " with embedding" } else { "" },
@@ -588,8 +603,16 @@ impl From<conversations::Model> for Conversation {
             importance_score: model.importance_score as i32,
             word_count: model.word_count as i32,
             session_count: model.session_count as i32,
-            created_at: chrono::NaiveDateTime::parse_from_str(&model.created_at, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
-            updated_at: chrono::NaiveDateTime::parse_from_str(&model.updated_at, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            created_at: chrono::NaiveDateTime::parse_from_str(
+                &model.created_at,
+                "%Y-%m-%d %H:%M:%S%.f",
+            )
+            .unwrap(),
+            updated_at: chrono::NaiveDateTime::parse_from_str(
+                &model.updated_at,
+                "%Y-%m-%d %H:%M:%S%.f",
+            )
+            .unwrap(),
         }
     }
 }
@@ -601,7 +624,11 @@ impl From<messages::Model> for Message {
             conversation_id: Uuid::parse_str(&model.conversation_id).unwrap(),
             role: model.role,
             content: model.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&model.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            timestamp: chrono::NaiveDateTime::parse_from_str(
+                &model.timestamp,
+                "%Y-%m-%d %H:%M:%S%.f",
+            )
+            .unwrap(),
             embedding_id: model.embedding_id.map(|id| Uuid::parse_str(&id).unwrap()),
             metadata: model.metadata,
         }
