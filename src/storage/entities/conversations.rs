@@ -11,8 +11,8 @@ pub struct Model {
     pub label: String,
     #[sea_orm(column_type = "Text")]
     pub folder: String,
-    pub created_at: chrono::NaiveDateTime,
-    pub updated_at: chrono::NaiveDateTime,
+    pub created_at: String,
+    pub updated_at: String,
     #[sea_orm(column_type = "Text")]
     pub status: String,
     pub importance_score: i64,

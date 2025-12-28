@@ -109,7 +109,7 @@ impl HierarchicalSummarizer {
 
         let models = message_entity::Entity::find()
             .filter(message_entity::Column::ConversationId.eq(conversation_id.to_string()))
-            .filter(message_entity::Column::Timestamp.gte(cutoff.to_string()))
+            .filter(message_entity::Column::Timestamp.gte(cutoff))
             .all(self.repo.get_db())
             .await
             .map_err(RepositoryError::DbError)?;
@@ -121,7 +121,7 @@ impl HierarchicalSummarizer {
                 conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
                 role: m.role,
                 content: m.content,
-                timestamp: m.timestamp,
+                timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
                 embedding_id: m
                     .embedding_id
                     .as_ref()
@@ -148,7 +148,7 @@ impl HierarchicalSummarizer {
         let models = hierarchical_summaries::Entity::find()
             .filter(hierarchical_summaries::Column::ConversationId.eq(conversation_id.to_string()))
             .filter(hierarchical_summaries::Column::Level.eq(level))
-            .filter(hierarchical_summaries::Column::GeneratedAt.gte(cutoff.to_string()))
+            .filter(hierarchical_summaries::Column::GeneratedAt.gte(cutoff))
             .all(self.repo.get_db())
             .await
             .map_err(RepositoryError::DbError)?;
@@ -173,7 +173,7 @@ impl HierarchicalSummarizer {
             level: Set(level.to_string()),
             summary_text: Set(summary.to_string()),
             token_count: Set(Some((summary.len() / 4) as i64)), // Estimate tokens
-            generated_at: Set(now),
+            generated_at: Set(now.to_string()),
             ..Default::default()
         };
 

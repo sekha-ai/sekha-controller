@@ -12,7 +12,7 @@ pub struct Model {
     pub tag: String,
     #[sea_orm(column_type = "Double")]
     pub confidence: f64,
-    pub extracted_at: chrono::NaiveDateTime,  // ✅ FIXED: Use native type
+    pub extracted_at: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

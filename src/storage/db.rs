@@ -61,8 +61,9 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             include_str!("../../migrations/003_create_semantic_tags.sql"),
             include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
             include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
-            include_str!("../../migrations/006_add_updated_at_triggers.sql"),
-            include_str!("../../migrations/007_create_fts.sql"),
+            // REVIEW: FTS and triggers disabled for MVP - re-enable in Module 9-12
+            // include_str!("../../migrations/006_add_updated_at_triggers.sql"),
+            // include_str!("../../migrations/007_create_fts.sql"),
         ];
 
         for (i, sql) in migrations.iter().enumerate() {

@@ -39,9 +39,8 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(HierarchicalSummaries::GeneratedAt)
-                            .timestamp()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
+                            .string()
+                            .not_null(),
                     )
                     .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).string())
                     .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer())

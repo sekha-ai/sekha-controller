@@ -34,9 +34,8 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(SemanticTags::ExtractedAt)
-                            .timestamp()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
+                            .string()
+                            .not_null(),
                     )
                     .foreign_key(
                         ForeignKey::create()

@@ -50,7 +50,7 @@ impl PruningEngine {
         use sea_orm::{ColumnTrait, QueryFilter};
 
         let models = conversations::Entity::find()
-            .filter(conversations::Column::UpdatedAt.lt(cutoff.to_string()))
+            .filter(conversations::Column::UpdatedAt.lt(cutoff))
             .filter(conversations::Column::Status.eq("active"))
             .all(self.repo.get_db())
             .await

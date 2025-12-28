@@ -13,7 +13,7 @@ pub struct Model {
     pub object_id: String,
     #[sea_orm(primary_key, auto_increment = false)]
     pub conversation_id: String,
-    pub extracted_at: chrono::NaiveDateTime,  // ✅ FIXED: Use native type
+    pub extracted_at: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

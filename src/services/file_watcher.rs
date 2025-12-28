@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::sync::mpsc;
-use tokio::task::spawn_blocking;
 
 use uuid::Uuid;
 

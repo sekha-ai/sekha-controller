@@ -12,7 +12,7 @@ pub struct Model {
     pub role: String,
     #[sea_orm(column_type = "Text")]
     pub content: String,
-    pub timestamp: chrono::NaiveDateTime,  // ✅ FIXED: Use native type
+    pub timestamp: String,
     #[sea_orm(nullable)]
     pub embedding_id: Option<String>,  // Keep String for UUID
     #[sea_orm(column_type = "Text", nullable)]

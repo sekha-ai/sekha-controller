@@ -33,9 +33,8 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(KnowledgeGraphEdges::ExtractedAt)
-                            .timestamp()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
+                            .string()
+                            .not_null(),
                     )
                     .primary_key(
                         Index::create()

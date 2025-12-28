@@ -11,50 +11,15 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Conversations::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Conversations::Id)
-                            .string_len(36)
-                            .not_null()
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Conversations::Id).string_len(36).not_null().primary_key())
                     .col(ColumnDef::new(Conversations::Label).string().not_null())
                     .col(ColumnDef::new(Conversations::Folder).string().not_null())
-                    .col(
-                        ColumnDef::new(Conversations::CreatedAt)
-                            .timestamp()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
-                    )
-                    .col(
-                        ColumnDef::new(Conversations::UpdatedAt)
-                            .timestamp()
-                            .not_null()
-                            .extra("DEFAULT CURRENT_TIMESTAMP".to_owned()),
-                    )
-                    .col(
-                        ColumnDef::new(Conversations::Status)
-                            .string()
-                            .not_null()
-                            .extra("DEFAULT 'active'".to_owned()),
-                    )
-                    .col(
-                        ColumnDef::new(Conversations::ImportanceScore)
-                            .integer()
-                            .not_null()
-                            .extra("DEFAULT 5".to_owned()),
-                    )
-                    .col(
-                        ColumnDef::new(Conversations::WordCount)
-                            .integer()
-                            .not_null()
-                            .extra("DEFAULT 0".to_owned()),
-                    )
-                    .col(
-                        ColumnDef::new(Conversations::SessionCount)
-                            .integer()
-                            .not_null()
-                            .extra("DEFAULT 1".to_owned()),
-                    )
+                    .col(ColumnDef::new(Conversations::Status).string().not_null().extra("DEFAULT 'active'".to_owned()))
+                    .col(ColumnDef::new(Conversations::ImportanceScore).integer().not_null().extra("DEFAULT 5".to_owned()))
+                    .col(ColumnDef::new(Conversations::WordCount).integer().not_null().extra("DEFAULT 0".to_owned()))
+                    .col(ColumnDef::new(Conversations::SessionCount).integer().not_null().extra("DEFAULT 1".to_owned()))
+                    .col(ColumnDef::new(Conversations::CreatedAt).string().not_null())
+                    .col(ColumnDef::new(Conversations::UpdatedAt).string().not_null())
                     .to_owned(),
             )
             .await?;

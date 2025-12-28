@@ -48,5 +48,5 @@ pub struct NewMessage {
     pub role: String,
     pub content: String,
     pub metadata: serde_json::Value,
-    pub timestamp: chrono::NaiveDateTime,
+    pub timestamp: NaiveDateTime,
 }

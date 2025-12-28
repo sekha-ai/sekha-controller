@@ -1,5 +1,4 @@
 // use async_trait::async_trait;
-use crate::services::embedding_service::EmbeddingError;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

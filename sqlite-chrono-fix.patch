@@ -1,0 +1,9 @@
+--- a/src/driver/sqlx_sqlite.rs
++++ b/src/driver/sqlx_sqlite.rs
+@@ -147,0 +148,6 @@
++        // PATCH: Force TEXT binding for chrono types in SQLite
++        if let sea_orm::Value::DateTime(dt) = value {
++            return Ok(sqlx::sqlite::SqliteArgumentValue::Text(
++                dt.format("%Y-%m-%d %H:%M:%S%.f").to_string().into()
++            ));
++        }

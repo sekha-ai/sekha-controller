@@ -26,7 +26,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Messages::Content).text().not_null())
                     .col(
                         ColumnDef::new(Messages::Timestamp)
-                            .timestamp()  // CHANGED
+                            .string()
                             .not_null(),
                     )
                     .col(ColumnDef::new(Messages::EmbeddingId).string_len(36).null())

@@ -195,8 +195,8 @@ impl ContextAssembler {
                 candidates.push(CandidateMessage {
                     message_id: Uuid::parse_str(&msg.id).unwrap(),
                     conversation_id: conv_id,
-                    score: 10.0, // Max score for pinned
-                    timestamp: msg.timestamp,
+                    score: 10.0,
+                    timestamp: chrono::NaiveDateTime::parse_from_str(&msg.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
                     label: conv.label.clone(),
                     is_pinned: true,
                     importance: 10.0,
@@ -244,8 +244,8 @@ impl ContextAssembler {
                     candidates.push(CandidateMessage {
                         message_id: Uuid::parse_str(&msg.id).unwrap(),
                         conversation_id: conv_id,
-                        score: 5.0, // Default, will be refined
-                        timestamp: msg.timestamp,
+                        score: 5.0,
+                        timestamp: chrono::NaiveDateTime::parse_from_str(&msg.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
                         label: conv.label.clone(),
                         is_pinned: false,
                         importance: conv.importance_score as f32,
@@ -270,8 +270,8 @@ impl ContextAssembler {
             conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
             role: m.role,
             content: m.content,
-            timestamp: m.timestamp,
-            embedding_id: m.embedding_id.and_then(|id| Uuid::parse_str(&id).ok()),
+            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f").unwrap(),
+            embedding_id: None,
             metadata: m.metadata,
         }))
     }
