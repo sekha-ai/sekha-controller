@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set, Statement, TransactionTrait, Value,
+    prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
+    Statement, TransactionTrait, Value,
 };
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
@@ -151,63 +152,63 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(conv.id)
     }
 
-async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
-    let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);
-    let word_count_calc: i32 = conv.messages.iter().map(|m| m.content.len() as i32).sum();
+    async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
+        let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);
+        let word_count_calc: i32 = conv.messages.iter().map(|m| m.content.len() as i32).sum();
 
-    // Extract fields before moving conv
-    let importance_score = conv.importance_score.unwrap_or(5);
-    let session_count = conv.session_count.unwrap_or(1);
-    let created_at = conv.created_at;
-    let updated_at = conv.updated_at;
-    let label = conv.label;
-    let folder = conv.folder;
-    let status = conv.status;
-    let messages = conv.messages; // Move messages here
+        // Extract fields before moving conv
+        let importance_score = conv.importance_score.unwrap_or(5);
+        let session_count = conv.session_count.unwrap_or(1);
+        let created_at = conv.created_at;
+        let updated_at = conv.updated_at;
+        let label = conv.label;
+        let folder = conv.folder;
+        let status = conv.status;
+        let messages = conv.messages; // Move messages here
 
-    let conversation = conversations::ActiveModel {
-        id: Set(conv_id),
-        label: Set(label),
-        folder: Set(folder),
-        status: Set(status),
-        importance_score: Set(importance_score as i32),
-        word_count: Set(word_count_calc),
-        session_count: Set(session_count),
-        created_at: Set(created_at),
-        updated_at: Set(updated_at),
-    };
-
-    conversation.insert(&self.db).await.map_err(|e| {
-        tracing::error!("Failed to insert conversation: {:?}", e);
-        RepositoryError::DbError(e)
-    })?;
-
-    tracing::info!("Created conversation: {}", conv_id);
-
-    // Process messages with explicit error handling
-    for (idx, msg) in messages.into_iter().enumerate() {
-        let msg_id = Uuid::new_v4();
-        
-        let message = messages::ActiveModel {
-            id: Set(msg_id),
-            conversation_id: Set(conv_id),
-            role: Set(msg.role),
-            content: Set(msg.content),
-            timestamp: Set(msg.timestamp),
-            embedding_id: Set(None),
-            metadata: Set(Some(msg.metadata)),
+        let conversation = conversations::ActiveModel {
+            id: Set(conv_id),
+            label: Set(label),
+            folder: Set(folder),
+            status: Set(status),
+            importance_score: Set(importance_score as i32),
+            word_count: Set(word_count_calc),
+            session_count: Set(session_count),
+            created_at: Set(created_at),
+            updated_at: Set(updated_at),
         };
-        
-        message.insert(&self.db).await.map_err(|e| {
-            tracing::error!("Failed to insert message {}: {:?}", idx, e);
+
+        conversation.insert(&self.db).await.map_err(|e| {
+            tracing::error!("Failed to insert conversation: {:?}", e);
             RepositoryError::DbError(e)
         })?;
-        
-        tracing::debug!("Inserted message {} for conversation {}", msg_id, conv_id);
-    }
 
-    Ok(conv_id)
-}
+        tracing::info!("Created conversation: {}", conv_id);
+
+        // Process messages with explicit error handling
+        for (idx, msg) in messages.into_iter().enumerate() {
+            let msg_id = Uuid::new_v4();
+
+            let message = messages::ActiveModel {
+                id: Set(msg_id),
+                conversation_id: Set(conv_id),
+                role: Set(msg.role),
+                content: Set(msg.content),
+                timestamp: Set(msg.timestamp),
+                embedding_id: Set(None),
+                metadata: Set(Some(msg.metadata)),
+            };
+
+            message.insert(&self.db).await.map_err(|e| {
+                tracing::error!("Failed to insert message {}: {:?}", idx, e);
+                RepositoryError::DbError(e)
+            })?;
+
+            tracing::debug!("Inserted message {} for conversation {}", msg_id, conv_id);
+        }
+
+        Ok(conv_id)
+    }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         if let Ok(Some(_conv)) = self.find_by_id(id).await {
@@ -241,17 +242,13 @@ async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, Repo
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Conversation>, RepositoryError> {
-        let model = conversations::Entity::find_by_id(id)
-            .one(&self.db)
-            .await?;
+        let model = conversations::Entity::find_by_id(id).one(&self.db).await?;
 
         Ok(model.map(Conversation::from))
     }
 
     async fn find_message_by_id(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
-        let model = messages::Entity::find_by_id(id)
-            .one(&self.db)
-            .await?;
+        let model = messages::Entity::find_by_id(id).one(&self.db).await?;
 
         Ok(model.map(Message::from))
     }
@@ -311,10 +308,7 @@ async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, Repo
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.label = Set(new_label.to_string());
         active_model.folder = Set(new_folder.to_string());
-        active_model.updated_at = Set(
-            chrono::Utc::now()
-                .naive_utc()
-        );
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -369,10 +363,7 @@ async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, Repo
 
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.status = Set(status.to_string());
-        active_model.updated_at = Set(
-            chrono::Utc::now()
-                .naive_utc()
-        );
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -386,10 +377,7 @@ async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, Repo
 
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.importance_score = Set(score as i32);
-        active_model.updated_at = Set(
-            chrono::Utc::now()
-                .naive_utc()
-        );
+        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -482,10 +470,7 @@ async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, Repo
 
         for scored in chroma_results {
             if let Ok(msg_id) = Uuid::parse_str(&scored.id) {
-                if let Some(message) = messages::Entity::find_by_id(msg_id)
-                    .one(&self.db)
-                    .await?
-                {
+                if let Some(message) = messages::Entity::find_by_id(msg_id).one(&self.db).await? {
                     if let Some(conversation) =
                         conversations::Entity::find_by_id(message.conversation_id.clone())
                             .one(&self.db)
@@ -547,7 +532,7 @@ impl SeaOrmConversationRepository {
 
         // FIX: Clone content before moving it
         let content_for_fts = new_msg.content.clone();
-        
+
         // FIX: Pass metadata directly as JsonValue
         let metadata_value = if new_msg.metadata.is_null() {
             None

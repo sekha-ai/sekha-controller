@@ -266,13 +266,13 @@ impl ContextAssembler {
             .map_err(RepositoryError::DbError)?;
 
         Ok(model.map(|m| Message {
-            id: m.id, // CHANGED: Remove parse_str
+            id: m.id,                           // CHANGED: Remove parse_str
             conversation_id: m.conversation_id, // CHANGED: Remove parse_str
             role: m.role,
             content: m.content,
             timestamp: m.timestamp, // CHANGED: Direct use
-            embedding_id: None, // TODO: populate from model.embedding_id if needed
-            metadata: m.metadata, // CHANGED: Direct use, already Option<Value>
+            embedding_id: None,     // TODO: populate from model.embedding_id if needed
+            metadata: m.metadata,   // CHANGED: Direct use, already Option<Value>
         }))
     }
 }
