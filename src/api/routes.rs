@@ -110,7 +110,7 @@ pub async fn create_conversation(
             folder: req.folder,
             status: "active".to_string(),
             message_count,
-            created_at: now.to_string(),
+            created_at: now, // CHANGED: Remove .to_string()
         }),
     ))
 }
@@ -156,7 +156,7 @@ pub async fn get_conversation(
                 folder: c.folder,
                 status: c.status,
                 message_count: message_count.try_into().unwrap(),
-                created_at: c.created_at.to_string(),
+                created_at: c.created_at, // CHANGED: Remove .to_string()
             }))
         }
         None => Err((
@@ -240,7 +240,7 @@ pub async fn list_conversations(
             }),
             label: c.label,
             folder: c.folder,
-            timestamp: c.updated_at.to_string(),
+            timestamp: c.updated_at, // CHANGED: Remove .to_string()
         })
         .collect();
 
@@ -394,7 +394,7 @@ pub async fn semantic_query(
             metadata: r.metadata.clone(),
             label: r.label.clone(),
             folder: r.folder.clone(),
-            timestamp: r.timestamp.to_string(),
+            timestamp: r.timestamp, // CHANGED: Remove .to_string()
         })
         .collect();
 
@@ -728,7 +728,7 @@ async fn generate_summary(
         conversation_id: req.conversation_id,
         level: req.level,
         summary,
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: chrono::Utc::now().naive_utc(), // CHANGED: Remove .to_rfc3339()
     }))
 }
 
@@ -768,7 +768,7 @@ async fn prune_dry_run(
             .map(|s| PruningSuggestionDto {
                 conversation_id: s.conversation_id,
                 conversation_label: s.conversation_label,
-                last_accessed: s.last_accessed.to_string(),
+                last_accessed: s.last_accessed, // CHANGED: Remove .to_string()
                 message_count: s.message_count,
                 token_estimate: s.token_estimate,
                 importance_score: s.importance_score,

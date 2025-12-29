@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -65,7 +66,8 @@ pub struct ConversationResponse {
     pub folder: String,
     pub status: String,
     pub message_count: usize,
-    pub created_at: String,
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: NaiveDateTime, // CHANGED: String → NaiveDateTime
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -85,7 +87,8 @@ pub struct SearchResultDto {
     pub metadata: serde_json::Value,
     pub label: String,
     pub folder: String,
-    pub timestamp: String,
+    #[schema(value_type = String, format = DateTime)]
+    pub timestamp: NaiveDateTime, // CHANGED: String → NaiveDateTime
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -157,7 +160,8 @@ pub struct SummaryResponse {
     pub conversation_id: Uuid,
     pub level: String,
     pub summary: String,
-    pub generated_at: String,
+    #[schema(value_type = String, format = DateTime)]
+    pub generated_at: NaiveDateTime, // CHANGED: String → NaiveDateTime
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -175,7 +179,8 @@ pub struct PruneResponse {
 pub struct PruningSuggestionDto {
     pub conversation_id: Uuid,
     pub conversation_label: String,
-    pub last_accessed: String,
+    #[schema(value_type = String, format = DateTime)]
+    pub last_accessed: NaiveDateTime, // CHANGED: String → NaiveDateTime
     pub message_count: u64,
     pub token_estimate: u32,
     pub importance_score: f32,

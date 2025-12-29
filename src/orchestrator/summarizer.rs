@@ -6,7 +6,7 @@ use chrono::Duration;
 use chrono::Utc;
 use sea_orm::ActiveModelTrait;
 use sea_orm::EntityTrait;
-use sea_orm::{ColumnTrait, QueryFilter}; // REMOVE EntityTrait from here
+use sea_orm::{ColumnTrait, QueryFilter};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -108,7 +108,7 @@ impl HierarchicalSummarizer {
         let cutoff = Utc::now().naive_utc() - Duration::days(days);
 
         let models = message_entity::Entity::find()
-            .filter(message_entity::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(message_entity::Column::ConversationId.eq(conversation_id))
             .filter(message_entity::Column::Timestamp.gte(cutoff))
             .all(self.repo.get_db())
             .await
@@ -117,23 +117,13 @@ impl HierarchicalSummarizer {
         Ok(models
             .into_iter()
             .map(|m| Message {
-                id: Uuid::parse_str(&m.id).unwrap(),
-                conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+                id: m.id,
+                conversation_id: m.conversation_id,
                 role: m.role,
                 content: m.content,
-                timestamp: chrono::NaiveDateTime::parse_from_str(
-                    &m.timestamp,
-                    "%Y-%m-%d %H:%M:%S%.f",
-                )
-                .unwrap(),
-                embedding_id: m
-                    .embedding_id
-                    .as_ref()
-                    .and_then(|id| Uuid::parse_str(id).ok()),
-                metadata: m
-                    .metadata
-                    .as_ref()
-                    .and_then(|meta| serde_json::from_str(meta).ok()),
+                timestamp: m.timestamp,
+                embedding_id: m.embedding_id,
+                metadata: m.metadata,
             })
             .collect())
     }
@@ -145,12 +135,12 @@ impl HierarchicalSummarizer {
         level: &str,
     ) -> Result<Vec<String>, RepositoryError> {
         use crate::storage::entities::hierarchical_summaries;
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+        use sea_orm::{ColumnTrait, QueryFilter};
 
         let cutoff = Utc::now().naive_utc() - Duration::days(days);
 
         let models = hierarchical_summaries::Entity::find()
-            .filter(hierarchical_summaries::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(hierarchical_summaries::Column::ConversationId.eq(conversation_id))
             .filter(hierarchical_summaries::Column::Level.eq(level))
             .filter(hierarchical_summaries::Column::GeneratedAt.gte(cutoff))
             .all(self.repo.get_db())
@@ -172,12 +162,12 @@ impl HierarchicalSummarizer {
         let now = chrono::Utc::now().naive_utc();
 
         let new_summary = hierarchical_summaries::ActiveModel {
-            id: Set(Uuid::new_v4().to_string()),
-            conversation_id: Set(conversation_id.to_string()),
+            id: Set(Uuid::new_v4()),
+            conversation_id: Set(conversation_id),
             level: Set(level.to_string()),
             summary_text: Set(summary.to_string()),
-            token_count: Set(Some((summary.len() / 4) as i64)), // Estimate tokens
-            generated_at: Set(now.to_string()),
+            token_count: Set(Some((summary.len() / 4) as i32)),
+            generated_at: Set(now),
             ..Default::default()
         };
 

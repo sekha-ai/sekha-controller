@@ -13,13 +13,13 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(SemanticTags::Id)
-                            .string()
+                            .uuid()
                             .not_null()
                             .primary_key(),
                     )
                     .col(
                         ColumnDef::new(SemanticTags::ConversationId)
-                            .string()
+                            .uuid()
                             .not_null(),
                     )
                     .col(
@@ -34,7 +34,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(SemanticTags::ExtractedAt)
-                            .string()
+                            .timestamp()
                             .not_null(),
                     )
                     .foreign_key(

@@ -13,23 +13,23 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(Messages::Id)
-                            .string_len(36)
+                            .uuid()
                             .not_null()
                             .primary_key(),
                     )
                     .col(
                         ColumnDef::new(Messages::ConversationId)
-                            .string_len(36)
+                            .uuid()
                             .not_null(),
                     )
                     .col(ColumnDef::new(Messages::Role).string_len(20).not_null())
                     .col(ColumnDef::new(Messages::Content).text().not_null())
                     .col(
                         ColumnDef::new(Messages::Timestamp)
-                            .string()
+                            .timestamp()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(Messages::EmbeddingId).string_len(36).null())
+                    .col(ColumnDef::new(Messages::EmbeddingId).string().null())
                     .col(ColumnDef::new(Messages::Metadata).json().null())
                     .foreign_key(
                         ForeignKey::create()

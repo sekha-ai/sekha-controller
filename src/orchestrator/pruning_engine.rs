@@ -56,7 +56,7 @@ impl PruningEngine {
             .await
             .map_err(RepositoryError::DbError)?;
 
-        Ok(models.into_iter().map(|m| Conversation::from(m)).collect())
+        Ok(models.into_iter().map(Conversation::from).collect())
     }
 
     async fn generate_suggestion_for_conversation(

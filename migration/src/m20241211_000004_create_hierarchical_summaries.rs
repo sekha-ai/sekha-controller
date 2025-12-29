@@ -13,13 +13,13 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(HierarchicalSummaries::Id)
-                            .string()
+                            .uuid()
                             .not_null()
                             .primary_key(),
                     )
                     .col(
                         ColumnDef::new(HierarchicalSummaries::ConversationId)
-                            .string()
+                            .uuid()
                             .not_null(),
                     )
                     .col(
@@ -39,11 +39,11 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(HierarchicalSummaries::GeneratedAt)
-                            .string()
+                            .timestamp()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).string())
-                    .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer())
+                    .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).string().null())
+                    .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer().null())
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-hierarchical_summaries-conversation_id")

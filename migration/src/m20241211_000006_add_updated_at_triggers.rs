@@ -6,27 +6,14 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Create trigger for conversations
+        // Create trigger for conversations.updated_at
         manager
             .execute_unprepared(
                 r#"
-                CREATE TRIGGER IF NOT EXISTS update_messages_updated_at
-                AFTER UPDATE ON messages
+                CREATE TRIGGER IF NOT EXISTS update_conversations_updated_at
+                AFTER UPDATE ON conversations
                 BEGIN
-                    UPDATE messages SET updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = OLD.id;
-                END;
-                "#,
-            )
-            .await?;
-
-        // Create trigger for messages
-        manager
-            .execute_unprepared(
-                r#"
-                CREATE TRIGGER IF NOT EXISTS update_messages_updated_at
-                AFTER UPDATE ON messages
-                BEGIN
-                    UPDATE messages SET timestamp = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = OLD.id;
+                    UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
                 END;
                 "#,
             )
@@ -38,10 +25,6 @@ impl MigrationTrait for Migration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .execute_unprepared("DROP TRIGGER IF EXISTS update_conversations_updated_at")
-            .await?;
-
-        manager
-            .execute_unprepared("DROP TRIGGER IF EXISTS update_messages_updated_at")
             .await?;
 
         Ok(())

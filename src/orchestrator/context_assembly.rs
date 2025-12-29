@@ -140,11 +140,11 @@ impl ContextAssembler {
         for message in &mut context {
             // Fetch conversation metadata for citation
             if let Some(conversation) = self.repo.find_by_id(message.conversation_id).await? {
-                // Parse existing metadata string to Value
+                // Parse existing metadata Value to Value (no conversion needed)
                 let mut meta: serde_json::Value = message
                     .metadata
                     .as_ref()
-                    .and_then(|s| serde_json::from_str(s).ok())
+                    .cloned() // CHANGED: Clone the Value directly
                     .unwrap_or_else(|| serde_json::json!({}));
 
                 // Insert citation
@@ -154,8 +154,8 @@ impl ContextAssembler {
                     "timestamp": message.timestamp.to_string(),
                 });
 
-                // Convert back to string
-                message.metadata = Some(meta.to_string());
+                // Keep as Value (no string conversion)
+                message.metadata = Some(meta); // CHANGED: Direct assignment
             }
         }
 
@@ -183,24 +183,20 @@ impl ContextAssembler {
         let mut candidates = Vec::new();
 
         for conv in pinned_convs {
-            let conv_id = Uuid::parse_str(&conv.id).unwrap();
+            let conv_id = conv.id; // CHANGED: Remove parse_str, already Uuid
 
             // Get recent messages from pinned conversation
             let messages = messages::Entity::find()
-                .filter(messages::Column::ConversationId.eq(conv.id.clone()))
+                .filter(messages::Column::ConversationId.eq(conv.id)) // CHANGED: Remove .clone()
                 .all(self.repo.get_db())
                 .await?;
 
             for msg in messages {
                 candidates.push(CandidateMessage {
-                    message_id: Uuid::parse_str(&msg.id).unwrap(),
+                    message_id: msg.id, // CHANGED: Remove parse_str, already Uuid
                     conversation_id: conv_id,
                     score: 10.0,
-                    timestamp: chrono::NaiveDateTime::parse_from_str(
-                        &msg.timestamp,
-                        "%Y-%m-%d %H:%M:%S%.f",
-                    )
-                    .unwrap(),
+                    timestamp: msg.timestamp, // CHANGED: Direct use, already NaiveDateTime
                     label: conv.label.clone(),
                     is_pinned: true,
                     importance: 10.0,
@@ -224,7 +220,7 @@ impl ContextAssembler {
             return Ok(Vec::new());
         }
 
-        let cutoff = (chrono::Utc::now().naive_utc() - chrono::Duration::days(days)).to_string();
+        let cutoff = chrono::Utc::now().naive_utc() - chrono::Duration::days(days); // CHANGED: Keep as NaiveDateTime
 
         let mut candidates = Vec::new();
 
@@ -236,24 +232,20 @@ impl ContextAssembler {
                 .await?;
 
             for conv in convs {
-                let conv_id = Uuid::parse_str(&conv.id).unwrap();
+                let conv_id = conv.id; // CHANGED: Remove parse_str
 
                 let messages = messages::Entity::find()
-                    .filter(messages::Column::ConversationId.eq(conv.id.clone()))
-                    .filter(messages::Column::Timestamp.gte(cutoff.clone()))
+                    .filter(messages::Column::ConversationId.eq(conv.id)) // CHANGED: Remove .clone()
+                    .filter(messages::Column::Timestamp.gte(cutoff)) // CHANGED: Direct comparison, no to_string()
                     .all(self.repo.get_db())
                     .await?;
 
                 for msg in messages {
                     candidates.push(CandidateMessage {
-                        message_id: Uuid::parse_str(&msg.id).unwrap(),
+                        message_id: msg.id, // CHANGED: Remove parse_str
                         conversation_id: conv_id,
                         score: 5.0,
-                        timestamp: chrono::NaiveDateTime::parse_from_str(
-                            &msg.timestamp,
-                            "%Y-%m-%d %H:%M:%S%.f",
-                        )
-                        .unwrap(),
+                        timestamp: msg.timestamp, // CHANGED: Direct use
                         label: conv.label.clone(),
                         is_pinned: false,
                         importance: conv.importance_score as f32,
@@ -268,20 +260,19 @@ impl ContextAssembler {
     async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
 
-        let model = message_entity::Entity::find_by_id(id.to_string())
+        let model = message_entity::Entity::find_by_id(id) // CHANGED: Remove .to_string()
             .one(self.repo.get_db())
             .await
             .map_err(RepositoryError::DbError)?;
 
         Ok(model.map(|m| Message {
-            id: Uuid::parse_str(&m.id).unwrap(),
-            conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
+            id: m.id, // CHANGED: Remove parse_str
+            conversation_id: m.conversation_id, // CHANGED: Remove parse_str
             role: m.role,
             content: m.content,
-            timestamp: chrono::NaiveDateTime::parse_from_str(&m.timestamp, "%Y-%m-%d %H:%M:%S%.f")
-                .unwrap(),
-            embedding_id: None,
-            metadata: m.metadata,
+            timestamp: m.timestamp, // CHANGED: Direct use
+            embedding_id: None, // TODO: populate from model.embedding_id if needed
+            metadata: m.metadata, // CHANGED: Direct use, already Option<Value>
         }))
     }
 }

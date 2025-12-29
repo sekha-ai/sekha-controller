@@ -24,8 +24,8 @@ pub struct Message {
     pub content: String,
     #[schema(value_type = String, format = DateTime)]
     pub timestamp: NaiveDateTime,
-    pub embedding_id: Option<Uuid>,
-    pub metadata: Option<String>,
+    pub embedding_id: Option<String>, // CHANGED: Uuid → String (Chroma ID)
+    pub metadata: Option<serde_json::Value>,
 }
 
 // NEW: For creating conversations with messages

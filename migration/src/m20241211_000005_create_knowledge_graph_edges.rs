@@ -13,7 +13,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(KnowledgeGraphEdges::SubjectId)
-                            .string()
+                            .uuid()
                             .not_null(),
                     )
                     .col(
@@ -23,17 +23,17 @@ impl MigrationTrait for Migration {
                     )
                     .col(
                         ColumnDef::new(KnowledgeGraphEdges::ObjectId)
-                            .string()
+                            .uuid()
                             .not_null(),
                     )
                     .col(
                         ColumnDef::new(KnowledgeGraphEdges::ConversationId)
-                            .string()
+                            .uuid()
                             .not_null(),
                     )
                     .col(
                         ColumnDef::new(KnowledgeGraphEdges::ExtractedAt)
-                            .string()
+                            .timestamp()
                             .not_null(),
                     )
                     .primary_key(
