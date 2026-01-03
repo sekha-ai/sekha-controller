@@ -70,6 +70,11 @@ pub trait ConversationRepository: Send + Sync {
         new_folder: &str,
     ) -> Result<(), RepositoryError>;
 
+    async fn get_message_list(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error>>;
+
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError>;
     async fn count_messages_in_conversation(
@@ -325,6 +330,29 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .await?;
 
         Ok(labels)
+    }
+
+    pub async fn get_message_list(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+        use sea_orm::{entity::*, query::*};  // Add these imports
+        
+        let messages = entity::message::Entity::find()
+            .filter(entity::message::Column::ConversationId.eq(conversation_id))
+            .order_by_asc(entity::message::Column::Timestamp)
+            .all(&self.db)
+            .await?;
+
+        Ok(messages.into_iter().map(|msg| {
+            serde_json::json!({
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp,
+                "metadata": msg.metadata,
+            })
+        }).collect())
     }
 
     async fn get_conversation_messages(

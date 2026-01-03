@@ -392,6 +392,146 @@ pub async fn memory_get_context(
     }
 }
 
+// ==================== Tool: memory_export ====================
+
+#[derive(Debug, Deserialize)]
+pub struct MemoryExportArgs {
+    conversation_id: Uuid,
+    #[serde(default)]
+    format: Option<String>,
+    #[serde(default = "default_true")]
+    include_metadata: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+pub async fn memory_export(
+    _auth: McpAuth,
+    State(state): State<AppState>,
+    Json(args): Json<MemoryExportArgs>,
+) -> Result<Json<McpToolResponse>, StatusCode> {
+    // Get conversation metadata
+    let conv = state
+        .repo
+        .find_by_id(args.conversation_id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or_else(|| StatusCode::NOT_FOUND)?;
+
+    // Get messages for this conversation
+    // Assuming you have a get_message_list method on repo
+    let messages = state
+        .repo
+        .get_message_list(args.conversation_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get messages for export: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let format = args.format.unwrap_or_else(|| "json".to_string());
+
+    Ok(Json(McpToolResponse {
+        success: true,
+        data: Some(serde_json::json!({
+            "conversation": {
+                "id": conv.id,
+                "label": conv.label,
+                "folder": conv.folder,
+                "status": conv.status,
+                "importance_score": conv.importance_score,
+                "word_count": conv.word_count,
+                "session_count": conv.session_count,
+                "created_at": conv.created_at.to_string(),
+                "updated_at": conv.updated_at.to_string(),
+            },
+            "messages": messages,
+            "format": format,
+            "include_metadata": args.include_metadata,
+        })),
+        error: None,
+    }))
+}
+
+// ==================== Tool: memory_stats ====================
+
+#[derive(Debug, Deserialize)]
+pub struct MemoryStatsArgs {
+    #[serde(default)]
+    folder: Option<String>,
+}
+
+pub async fn memory_stats(
+    _auth: McpAuth,
+    State(state): State<AppState>,
+    Json(args): Json<MemoryStatsArgs>,
+) -> Result<Json<McpToolResponse>, StatusCode> {
+    let (total, avg_importance, folders) = if let Some(folder) = args.folder {
+        // Stats for specific folder
+        let convs = state
+            .repo
+            .find_with_filters(
+                Some(vec![folder.clone()]),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        let total = convs.len();
+        let avg_importance = if total > 0 {
+            convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total as f32
+        } else {
+            0.0
+        };
+        
+        (total, avg_importance, vec![folder])
+    } else {
+        // Global stats
+        let total = state
+            .repo
+            .count(None, None, None)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? as usize;
+        
+        // Get all conversations for average
+        let convs = state
+            .repo
+            .find_with_filters(None, None, None, None, None)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        let avg_importance = if total > 0 {
+            convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total as f32
+        } else {
+            0.0
+        };
+        
+        // Get folder list
+        let folders = state
+            .repo
+            .get_all_labels()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        (total, avg_importance, folders)
+    };
+
+    Ok(Json(McpToolResponse {
+        success: true,
+        data: Some(serde_json::json!({
+            "total_conversations": total,
+            "average_importance": avg_importance,
+            "folders": folders,
+        })),
+        error: None,
+    }))
+}
+
 // ==================== ROUTER & LEGACY COMPATIBILITY ====================
 
 pub fn create_mcp_router(state: AppState) -> Router {
@@ -401,5 +541,7 @@ pub fn create_mcp_router(state: AppState) -> Router {
         .route("/mcp/tools/memory_update", post(memory_update))
         .route("/mcp/tools/memory_search", post(memory_search))
         .route("/mcp/tools/memory_prune", post(memory_prune))
+        .route("/mcp/tools/memory_export", post(memory_export))
+        .route("/mcp/tools/memory_stats", post(memory_stats))
         .with_state(state)
 }
