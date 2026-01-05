@@ -1,22 +1,22 @@
-use sekha_controller::api::route::create_router;
-use sekha_controller::AppState;
-use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
-use sekha_controller::storage::chroma_client::ChromaClient;
-use sekha_controller::services::embedding_service::EmbeddingService;
-use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
-use sekha_controller::orchestrator::MemoryOrchestrator;
-use sekha_controller::config::Config;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use tower::ServiceExt;
+use sekha_controller::api::route::create_router;
+use sekha_controller::config::Config;
+use sekha_controller::orchestrator::MemoryOrchestrator;
+use sekha_controller::services::embedding_service::EmbeddingService;
+use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+use sekha_controller::storage::chroma_client::ChromaClient;
+use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
+use sekha_controller::AppState;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_router_creation() {
     let state = create_test_app_state().await;
     let router = create_router(state);
-    
+
     // Test that router construction succeeds
     // Test with metrics endpoint instead (less dependency on services)
     let response = router
@@ -28,7 +28,7 @@ async fn test_router_creation() {
         )
         .await
         .unwrap();
-    
+
     // Metrics should respond
     assert!(response.status().is_success() || response.status().is_client_error());
 }
@@ -37,7 +37,7 @@ async fn test_router_creation() {
 async fn test_semantic_query_mock_endpoint() {
     let state = create_test_app_state().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -49,7 +49,7 @@ async fn test_semantic_query_mock_endpoint() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -57,14 +57,14 @@ async fn test_semantic_query_mock_endpoint() {
 async fn test_router_has_all_routes() {
     let state = create_test_app_state().await;
     let router = create_router(state);
-    
+
     // Test that main routes exist
     let routes = vec![
         ("/health", "GET"),
         ("/metrics", "GET"),
         ("/api/v1/query", "POST"),
     ];
-    
+
     // Just verify router construction doesn't panic
     // Actual route testing is in integration tests
 }
@@ -83,7 +83,7 @@ async fn create_test_app_state() -> AppState {
         embedding_service.clone(),
     ));
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
-    
+
     let config = Arc::new(RwLock::new(Config {
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),

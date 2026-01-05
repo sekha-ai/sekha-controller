@@ -25,7 +25,7 @@ async fn test_migration_schema() {
     // Check for TIMESTAMP as a column type (not as part of CURRENT_TIMESTAMP function)
     let lines: Vec<&str> = schema.lines().collect();
     let mut has_timestamp_type = false;
-    
+
     for line in &lines {
         let trimmed = line.trim();
         // Skip trigger definitions and function calls
@@ -33,7 +33,10 @@ async fn test_migration_schema() {
             continue;
         }
         // Check for TIMESTAMP as a type declaration (with space or comma after)
-        if trimmed.contains(" TIMESTAMP ") || trimmed.contains(" TIMESTAMP,") || trimmed.ends_with(" TIMESTAMP") {
+        if trimmed.contains(" TIMESTAMP ")
+            || trimmed.contains(" TIMESTAMP,")
+            || trimmed.ends_with(" TIMESTAMP")
+        {
             has_timestamp_type = true;
             eprintln!("❌ Found TIMESTAMP type in line: {}", trimmed);
         }

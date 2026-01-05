@@ -22,7 +22,7 @@ fn test_llm_bridge_client_custom_port() {
 #[tokio::test]
 async fn test_summarize_with_empty_messages() {
     let client = LlmBridgeClient::new("http://localhost:11434".to_string());
-    
+
     // Test with empty messages vector
     let messages: Vec<String> = vec![];
     let _result = client.summarize(messages, "", None, None).await;
@@ -32,17 +32,19 @@ async fn test_summarize_with_empty_messages() {
 #[tokio::test]
 async fn test_summarize_with_messages() {
     let client = LlmBridgeClient::new("http://localhost:11434".to_string());
-    
+
     // Test with some messages
     let messages = vec!["Hello".to_string(), "How are you?".to_string()];
-    let _result = client.summarize(messages, "test conversation", None, None).await;
+    let _result = client
+        .summarize(messages, "test conversation", None, None)
+        .await;
     // Just verify method signature is correct
 }
 
 #[tokio::test]
 async fn test_score_importance_with_empty_message() {
     let client = LlmBridgeClient::new("http://localhost:11434".to_string());
-    
+
     // Test with empty message
     let _result = client.score_importance("", None, None).await;
     // Should handle gracefully (will error if Ollama not running)
@@ -52,7 +54,7 @@ async fn test_score_importance_with_empty_message() {
 fn test_model_name_validation() {
     // Test that model names follow expected format
     let valid_models = vec!["llama3.1:8b", "llama3.2:3b", "nomic-embed-text:latest"];
-    
+
     for model in valid_models {
         assert!(model.contains(':') || model.contains("latest"));
     }
@@ -66,7 +68,7 @@ fn test_url_construction() {
         "http://127.0.0.1:11434",
         "https://remote:11434",
     ];
-    
+
     for url in urls {
         let _client = LlmBridgeClient::new(url.to_string());
         // Should construct without panic
