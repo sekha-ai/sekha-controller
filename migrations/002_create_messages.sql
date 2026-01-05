@@ -1,11 +1,11 @@
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY,
-    conversation_id UUID NOT NULL,
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     embedding_id TEXT,
-    metadata JSON,
+    metadata TEXT,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 

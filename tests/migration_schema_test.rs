@@ -22,15 +22,52 @@ async fn test_migration_schema() {
     eprintln!("=== ACTUAL SCHEMA FROM MIGRATIONS ===");
     eprintln!("{}", schema);
 
-    // Check for wrong column types
-    if schema.contains("TIMESTAMP") {
+    // Check for TIMESTAMP as a column type (not as part of CURRENT_TIMESTAMP function)
+    let lines: Vec<&str> = schema.lines().collect();
+    let mut has_timestamp_type = false;
+    
+    for line in &lines {
+        let trimmed = line.trim();
+        // Skip trigger definitions and function calls
+        if trimmed.contains("CURRENT_TIMESTAMP") || trimmed.starts_with("--") {
+            continue;
+        }
+        // Check for TIMESTAMP as a type declaration (with space or comma after)
+        if trimmed.contains(" TIMESTAMP ") || trimmed.contains(" TIMESTAMP,") || trimmed.ends_with(" TIMESTAMP") {
+            has_timestamp_type = true;
+            eprintln!("❌ Found TIMESTAMP type in line: {}", trimmed);
+        }
+    }
+
+    if has_timestamp_type {
         panic!(
-            "❌ Migration created TIMESTAMP column(s)!\n\nExpected TEXT for all columns.\n\n{}",
+            "❌ Migration created TIMESTAMP column type(s)!\n\nExpected TEXT for all datetime columns.\n\n{}",
             schema
         );
     }
 
+    // Verify required tables exist
     if !schema.contains("CREATE TABLE conversations") {
         panic!("❌ No conversations table found in schema");
     }
+
+    if !schema.contains("CREATE TABLE messages") {
+        panic!("❌ No messages table found in schema");
+    }
+
+    // Verify FTS table exists
+    if !schema.contains("CREATE VIRTUAL TABLE messages_fts") {
+        panic!("❌ No FTS table found in schema");
+    }
+
+    // Verify triggers exist
+    if !schema.contains("CREATE TRIGGER update_conversations_updated_at") {
+        panic!("❌ Missing update_conversations_updated_at trigger");
+    }
+
+    if !schema.contains("CREATE TRIGGER messages_ai") {
+        panic!("❌ Missing FTS insert trigger");
+    }
+
+    eprintln!("✅ All schema validations passed!");
 }
