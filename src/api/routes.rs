@@ -41,6 +41,17 @@ pub struct FilterParams {
     archived: Option<bool>,
 }
 
+// #[derive(Deserialize)]
+// pub struct CountQuery {
+//     label: String,
+// }
+
+#[derive(Deserialize)]
+pub struct CountParams {
+    label: Option<String>,
+    folder: Option<String>,
+}
+
 // ============================================
 // Endpoint 1: POST /api/v1/conversations
 // ============================================
@@ -56,7 +67,7 @@ pub struct FilterParams {
 pub async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
-) -> Result<(StatusCode, Json<ConversationResponse>), (StatusCode, Json<ErrorResponse>)> {
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<ErrorResponse>)> {  // ✅ Changed return type
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
 
@@ -104,14 +115,15 @@ pub async fn create_conversation(
 
     Ok((
         StatusCode::CREATED,
-        Json(ConversationResponse {
-            id,
-            label: req.label,
-            folder: req.folder,
-            status: "active".to_string(),
-            message_count,
-            created_at: now, // CHANGED: Remove .to_string()
-        }),
+        Json(serde_json::json!({
+            "id": id,
+            "conversation_id": id,  // ✅ Both fields for compatibility
+            "label": req.label,
+            "folder": req.folder,
+            "status": "active",
+            "message_count": message_count,
+            "created_at": now,
+        })),
     ))
 }
 
@@ -304,18 +316,40 @@ pub async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state.repo.delete(id).await.map_err(|e| {
+    // Check if conversation exists first
+    let exists = state.repo.find_by_id(id).await.map_err(|e| {
         (
-            StatusCode::NOT_FOUND,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    if exists.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Conversation not found".to_string(),
                 code: 404,
+            }),
+        ));
+    }
+
+    state.repo.delete(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
             }),
         )
     })?;
 
     Ok(StatusCode::OK)
 }
+
 
 // ============================================
 // Endpoint 6: GET /api/v1/conversations/count
@@ -324,19 +358,49 @@ pub async fn delete_conversation(
     get,
     path = "/api/v1/conversations/count",
     responses(
-        (status = 200, description = "Count by label", body = serde_json::Value)
+        (status = 200, description = "Count conversations by label or folder", body = serde_json::Value)
     ),
     params(
-        ("label" = String, Query, description = "Label to count")
+        ("label" = Option<String>, Query, description = "Label to filter by"),
+        ("folder" = Option<String>, Query, description = "Folder to filter by")
     )
 )]
-
 pub async fn count_conversations(
     State(state): State<AppState>,
-    Query(label): Query<String>,
-) -> Json<serde_json::Value> {
-    let count = state.repo.count_by_label(&label).await.unwrap_or(0);
-    Json(serde_json::json!({ "count": count, "label": label }))
+    Query(params): Query<CountParams>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Clone values before they are moved
+    let label_for_response = params.label.clone();
+    let folder_for_response = params.folder.clone();
+    
+    let count = match (&params.label, &params.folder) {
+        (Some(label), None) => {
+            state.repo.count_by_label(label).await
+        }
+        (None, Some(folder)) => {
+            state.repo.find_by_folder(folder, u64::MAX, 0).await
+                .map(|convs| convs.len() as u64)
+        }
+        (None, None) => {
+            state.repo.find_with_filters(None, usize::MAX, 0).await
+                .map(|(_, count)| count)
+        }
+        (Some(_), Some(_)) => {
+            return Ok(Json(serde_json::json!({
+                "count": 0,
+                "error": "Cannot specify both label and folder"
+            })));
+        }
+    }.map_err(|e| {
+        tracing::error!("Count failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(serde_json::json!({ 
+        "count": count,
+        "label": label_for_response,
+        "folder": folder_for_response
+    })))
 }
 
 // ============================================

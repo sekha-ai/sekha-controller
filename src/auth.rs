@@ -60,7 +60,7 @@ impl FromRequestParts<AppState> for McpAuth {
             })
         } else {
             Err((
-                StatusCode::FORBIDDEN,
+                StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": "Invalid API key" })),
             )
                 .into_response())

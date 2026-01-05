@@ -26,6 +26,14 @@ pub enum RepositoryError {
     InvalidInput(String),
 }
 
+#[derive(Debug, serde::Serialize)]
+    pub struct Stats {
+        pub total_conversations: usize,
+        pub average_importance: f32,
+        pub group_type: String,   // "folder" or "label"
+        pub groups: Vec<String>,  // Contains folders OR labels based on group_type
+    }
+
 // ============================================
 // TRAIT DEFINITION
 // ============================================
@@ -73,7 +81,24 @@ pub trait ConversationRepository: Send + Sync {
     async fn get_message_list(
         &self,
         conversation_id: Uuid,
-    ) -> Result<Vec<Value>, Box<dyn std::error::Error>>;
+    ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>>;
+
+    async fn get_stats(
+        &self,
+        folder: Option<String>,
+    ) -> Result<Stats, Box<dyn std::error::Error>>;    
+
+    async fn get_stats_by_folder(&self, folder: Option<String>) -> Result<Stats, Box<dyn std::error::Error>>;
+    async fn get_stats_by_label(&self, label: Option<String>) -> Result<Stats, Box<dyn std::error::Error>>;
+
+    async fn get_all_folders(&self) -> Result<Vec<String>, RepositoryError>;
+
+    async fn find_by_folder(
+        &self,
+        folder: &str,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<Conversation>, RepositoryError>;
 
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError>;
     async fn update_importance(&self, id: Uuid, score: i32) -> Result<(), RepositoryError>;
@@ -240,7 +265,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
     async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError> {
         let count = conversations::Entity::find()
-            .filter(conversations::Column::Label.eq(label))
+            .filter(conversations::Column::Label.contains(label))
             .count(&self.db)
             .await?;
         Ok(count)
@@ -332,28 +357,27 @@ impl ConversationRepository for SeaOrmConversationRepository {
         Ok(labels)
     }
 
-    pub async fn get_message_list(
-        &self,
-        conversation_id: Uuid,
-    ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
-        use sea_orm::{entity::*, query::*};  // Add these imports
-        
-        let messages = entity::message::Entity::find()
-            .filter(entity::message::Column::ConversationId.eq(conversation_id))
-            .order_by_asc(entity::message::Column::Timestamp)
-            .all(&self.db)
-            .await?;
-
-        Ok(messages.into_iter().map(|msg| {
-            serde_json::json!({
-                "id": msg.id,
-                "role": msg.role,
-                "content": msg.content,
-                "timestamp": msg.timestamp,
-                "metadata": msg.metadata,
-            })
-        }).collect())
-    }
+    async fn get_message_list(
+            &self,
+            conversation_id: Uuid,
+        ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
+            let messages = messages::Entity::find()
+                .filter(messages::Column::ConversationId.eq(conversation_id))
+                .order_by_asc(messages::Column::Timestamp)
+                .all(&self.db)
+                .await?;
+            
+            Ok(messages.into_iter().map(|msg| {
+                serde_json::json!({
+                    "id": msg.id,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp,
+                    "metadata": msg.metadata,
+                })
+            }).collect())
+        }
+    
 
     async fn get_conversation_messages(
         &self,
@@ -381,6 +405,36 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .await?;
 
         Ok(models.into_iter().map(Message::from).collect())
+    }
+
+    async fn find_by_folder(
+        &self,
+        folder: &str,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<Conversation>, RepositoryError> {
+        let models = conversations::Entity::find()
+            .filter(conversations::Column::Folder.eq(folder))
+            .order_by_desc(conversations::Column::UpdatedAt)
+            .limit(limit)
+            .offset(offset)
+            .all(&self.db)
+            .await?;
+
+        Ok(models.into_iter().map(Conversation::from).collect())
+    }
+
+    async fn get_all_folders(&self) -> Result<Vec<String>, RepositoryError> {
+        let folders = conversations::Entity::find()
+            .select_only()
+            .column(conversations::Column::Folder)
+            .distinct()
+            .order_by_asc(conversations::Column::Folder)
+            .into_tuple::<String>()
+            .all(&self.db)
+            .await?;
+        
+        Ok(folders)
     }
 
     async fn update_status(&self, id: Uuid, status: &str) -> Result<(), RepositoryError> {
@@ -520,6 +574,129 @@ impl ConversationRepository for SeaOrmConversationRepository {
         }
 
         Ok(results)
+    }
+
+    async fn get_stats(
+        &self,
+        folder: Option<String>,
+    ) -> Result<Stats, Box<dyn std::error::Error>> {
+        match folder {
+            Some(folder_path) => {
+                // Stats for specific folder
+                let convs = self.find_by_folder(&folder_path, 10000, 0).await?;
+                
+                let total_conversations = convs.len();
+                let average_importance = if total_conversations > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_conversations as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations,
+                    average_importance,
+                    group_type: "folder".to_string(),
+                    groups: vec![folder_path],
+                })
+            }
+            None => {
+                // Global stats across all folders
+                let folders = self.get_all_folders().await?;
+                let (convs, total_count) = self.find_with_filters(None, 10000, 0).await?;
+                
+                let average_importance = if total_count > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_count as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations: total_count as usize,
+                    average_importance,
+                    group_type: "folder".to_string(),
+                    groups: folders,
+                })
+            }
+        }
+    }
+
+    async fn get_stats_by_folder(&self, folder: Option<String>) -> Result<Stats, Box<dyn std::error::Error>> {
+        match folder {
+            Some(folder_path) => {
+                let convs = self.find_by_folder(&folder_path, 10000, 0).await?;
+                let total_conversations = convs.len();
+                let average_importance = if total_conversations > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_conversations as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations,
+                    average_importance,
+                    group_type: "folder".to_string(),
+                    groups: vec![folder_path],
+                })
+            }
+            None => {
+                let folders = self.get_all_folders().await?;
+                let (convs, total_count) = self.find_with_filters(None, 10000, 0).await?;
+                
+                let average_importance = if total_count > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_count as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations: total_count as usize,
+                    average_importance,
+                    group_type: "folder".to_string(),
+                    groups: folders,
+                })
+            }
+        }
+    }
+
+    async fn get_stats_by_label(&self, label: Option<String>) -> Result<Stats, Box<dyn std::error::Error>> {
+        match label {
+            Some(label_path) => {
+                // Stats for specific label
+                let convs = self.find_by_label(&label_path, 10000, 0).await?;
+                
+                let total_conversations = convs.len();
+                let average_importance = if total_conversations > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_conversations as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations,
+                    average_importance,
+                    group_type: "label".to_string(),
+                    groups: vec![label_path],
+                })
+            }
+            None => {
+                // Global stats across all labels
+                let labels = self.get_all_labels().await?;
+                let (convs, total_count) = self.find_with_filters(None, 10000, 0).await?;
+                
+                let average_importance = if total_count > 0 {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_count as f32
+                } else {
+                    0.0
+                };
+                
+                Ok(Stats {
+                    total_conversations: total_count as usize,
+                    average_importance,
+                    group_type: "label".to_string(),
+                    groups: labels,
+                })
+            }
+        }
     }
 }
 

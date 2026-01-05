@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};
+use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation, storage::repository::{ConversationRepository}};
 
 /// API authentication middleware
 pub async fn auth_middleware(
@@ -104,31 +104,55 @@ pub async fn memory_store(
     let now = chrono::Utc::now().naive_utc();
 
     let importance = args.importance_score.unwrap_or(5);
+    let word_count: i32 = args.messages.iter().map(|m| m.content.len() as i32).sum();
 
-    let conv = Conversation {
-        id,
+    // ✅ Convert MessageDto to NewMessage
+    let new_messages: Vec<crate::models::internal::NewMessage> = args.messages
+        .into_iter()
+        .map(|m| crate::models::internal::NewMessage {
+            role: m.role,
+            content: m.content,
+            timestamp: now,
+            metadata: serde_json::json!({}),
+        })
+        .collect();
+
+    // ✅ Build NewConversation with messages
+    let new_conv = crate::models::internal::NewConversation {
+        id: Some(id),
         label: args.label.clone(),
         folder: args.folder.clone(),
         status: "active".to_string(),
-        importance_score: importance,
-        word_count: args.messages.iter().map(|m| m.content.len() as i32).sum(),
-        session_count: 1,
+        importance_score: Some(importance),
+        word_count,
+        session_count: Some(1),
         created_at: now,
         updated_at: now,
+        messages: new_messages,
     };
 
+    // ✅ Use create_with_messages (SeaORM entities, not raw SQL)
     state
         .repo
-        .create(conv)
+        .create_with_messages(new_conv)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to create conversation: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(McpToolResponse {
         success: true,
-        data: Some(serde_json::json!({ "conversation_id": id })),
+        data: Some(serde_json::json!({
+            "conversation_id": id.to_string(),
+            "id": id,
+            "label": args.label,
+            "folder": args.folder,
+        })),
         error: None,
     }))
 }
+
 
 // ==================== Tool: memory_search ====================
 
@@ -384,11 +408,7 @@ pub async fn memory_get_context(
             })),
             error: None,
         })),
-        None => Ok(Json(McpToolResponse {
-            success: false,
-            data: None,
-            error: Some("Conversation not found".to_string()),
-        })),
+        None => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -461,6 +481,16 @@ pub async fn memory_export(
 pub struct MemoryStatsArgs {
     #[serde(default)]
     folder: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct Stats {
+    pub total_conversations: usize,
+    pub average_importance: f32,
+    pub group_type: String, // "folder" or "label"
+    pub groups: Vec<String>,
 }
 
 pub async fn memory_stats(
@@ -468,69 +498,111 @@ pub async fn memory_stats(
     State(state): State<AppState>,
     Json(args): Json<MemoryStatsArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
-    let (total, avg_importance, folders) = if let Some(folder) = args.folder {
-        // Stats for specific folder
-        let convs = state
-            .repo
-            .find_with_filters(
-                Some(vec![folder.clone()]),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        
-        let total = convs.len();
-        let avg_importance = if total > 0 {
-            convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total as f32
-        } else {
-            0.0
-        };
-        
-        (total, avg_importance, vec![folder])
-    } else {
-        // Global stats
-        let total = state
-            .repo
-            .count(None, None, None)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? as usize;
-        
-        // Get all conversations for average
-        let convs = state
-            .repo
-            .find_with_filters(None, None, None, None, None)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        
-        let avg_importance = if total > 0 {
-            convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total as f32
-        } else {
-            0.0
-        };
-        
-        // Get folder list
-        let folders = state
-            .repo
-            .get_all_labels()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        
-        (total, avg_importance, folders)
-    };
+    match (args.folder, args.label) {
+        // Case 1: Stats for specific FOLDER
+        (Some(folder), None) => {
+            let convs = state
+                .repo
+                .find_by_folder(&folder, 10000, 0)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Folder stats query failed: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            let data = serde_json::json!({
+                "total_conversations": convs.len(),
+                "average_importance": if convs.is_empty() {
+                    0.0
+                } else {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / convs.len() as f32
+                },
+                "folders": vec![folder],  // ✅ Return FOLDERS array
+            });
 
-    Ok(Json(McpToolResponse {
-        success: true,
-        data: Some(serde_json::json!({
-            "total_conversations": total,
-            "average_importance": avg_importance,
-            "folders": folders,
-        })),
-        error: None,
-    }))
+            Ok(Json(McpToolResponse {
+                success: true,
+                data: Some(data),
+                error: None,
+            }))
+        }
+        
+        // Case 2: Stats for specific LABEL
+        (None, Some(label)) => {
+            let convs = state
+                .repo
+                .find_by_label(&label, 10000, 0)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Label stats query failed: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            let data = serde_json::json!({
+                "total_conversations": convs.len(),
+                "average_importance": if convs.is_empty() {
+                    0.0
+                } else {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / convs.len() as f32
+                },
+                "labels": vec![label],  // ✅ Return LABELS array
+            });
+
+            Ok(Json(McpToolResponse {
+                success: true,
+                data: Some(data),
+                error: None,
+            }))
+        }
+        
+        // Case 3: GLOBAL stats - return all folders (not labels, since those are optional)
+        (None, None) => {
+            let folders = state
+                .repo
+                .get_all_folders()
+                .await
+                .map_err(|e| {
+                    tracing::error!("Global stats - get_all_folders failed: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            let (convs, total_count) = state
+                .repo
+                .find_with_filters(None, 10000, 0)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Global stats - find_with_filters failed: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            let data = serde_json::json!({
+                "total_conversations": total_count,
+                "average_importance": if total_count == 0 {
+                    0.0
+                } else {
+                    convs.iter().map(|c| c.importance_score).sum::<i32>() as f32 / total_count as f32
+                },
+                "folders": folders,  // ✅ Return all FOLDERS array
+            });
+
+            Ok(Json(McpToolResponse {
+                success: true,
+                data: Some(data),
+                error: None,
+            }))
+        }
+        
+        // Case 4: ERROR - can't specify both
+        (Some(_), Some(_)) => {
+            Ok(Json(McpToolResponse {
+                success: false,
+                data: None,
+                error: Some("Cannot specify both folder and label".to_string()),
+            }))
+        }
+    }
 }
+
 
 // ==================== ROUTER & LEGACY COMPATIBILITY ====================
 

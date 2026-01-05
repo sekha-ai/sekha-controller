@@ -16,6 +16,7 @@ use sekha_controller::{
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
+use serde_json::json;
 
 // ============================================
 // Test Helpers
@@ -242,4 +243,61 @@ async fn test_query_endpoint() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+// ==================== MCP Export Tests ====================
+
+#[tokio::test]
+async fn test_memory_export_not_found() {
+    let app = create_test_mcp_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/mcp/tools/memory_export")
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .body(Body::from(
+                    r#"{"conversation_id": "00000000-0000-0000-0000-000000000000", "format": "json"}"#
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// ==================== MCP Stats Tests ====================
+
+#[tokio::test]
+async fn test_memory_stats_empty() {
+    let app = create_test_mcp_app().await;
+
+    // Get stats on empty database
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/mcp/tools/memory_stats")
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .body(Body::from(r#"{"folder": null}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert!(json["success"].as_bool().unwrap());
+    assert_eq!(json["data"]["total_conversations"], 0);
+    assert_eq!(json["data"]["average_importance"], 0.0);
+    assert_eq!(json["data"]["folders"], json!([]));
 }

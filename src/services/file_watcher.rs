@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::models::internal::{NewConversation, NewMessage};
 use crate::storage::repository::ConversationRepository;
+use crate::storage::repository::Stats;
 
 // ============================================
 // ChatGPT Export Format
@@ -814,6 +815,13 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn get_message_list(
+            &self,
+            _conversation_id: Uuid,
+        ) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
+            Ok(vec![]) // Mock implementation
+        }
+
         async fn get_conversation_messages(
             &self,
             _conversation_id: Uuid,
@@ -883,12 +891,61 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn get_stats(
+            &self,
+            _folder: Option<String>,
+        ) -> Result<Stats, Box<dyn std::error::Error>> {
+            Ok(Stats {
+                total_conversations: 0,
+                average_importance: 0.0,
+                group_type: "folder".to_string(),
+                groups: vec![],
+            })
+        }
+
+        async fn get_stats_by_folder(
+            &self,
+            folder: Option<String>,
+        ) -> Result<Stats, Box<dyn std::error::Error>> {
+            Ok(Stats {
+                total_conversations: 5,
+                average_importance: 3.5,
+                group_type: "folder".to_string(),
+                groups: folder.map(|f| vec![f]).unwrap_or_default(),
+            })
+        }
+
+        async fn get_stats_by_label(
+            &self,
+            label: Option<String>,
+        ) -> Result<Stats, Box<dyn std::error::Error>> {
+            Ok(Stats {
+                total_conversations: 3,
+                average_importance: 4.0,
+                group_type: "folder".to_string(),
+                groups: label.map(|l| vec![l]).unwrap_or_default(),
+            })
+        }
+
         async fn get_all_labels(&self) -> Result<Vec<String>, RepositoryError> {
             Ok(Vec::new())
         }
 
         fn get_db(&self) -> &DatabaseConnection {
             panic!("MockRepo::get_db() should not be called in tests")
+        }
+
+        async fn find_by_folder(
+            &self,
+            _folder: &str,
+            _limit: u64,
+            _offset: u64,
+        ) -> Result<Vec<Conversation>, RepositoryError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_all_folders(&self) -> Result<Vec<String>, RepositoryError> {
+            Ok(Vec::new())
         }
     }
 }

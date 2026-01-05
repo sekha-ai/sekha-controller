@@ -40,6 +40,12 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
 
+    db.execute_unprepared("PRAGMA journal_mode=WAL;")
+        .await
+        .map_err(|e| DbErr::Custom(format!("Failed to enable WAL mode: {}", e)))?;
+
+    tracing::info!("WAL mode enabled for database");
+
     // Apply migrations if needed
     tracing::info!("Applying migrations...");
     let schema_manager = SchemaManager::new(&db);
@@ -115,6 +121,7 @@ pub async fn get_connection() -> Option<DatabaseConnection> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use sea_orm::{DatabaseBackend, Statement};
 
     #[tokio::test]
     async fn test_init_db_creates_file() {
