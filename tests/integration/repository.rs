@@ -196,3 +196,89 @@ async fn test_updated_at_trigger() {
     );
     assert_eq!(updated_conv.label, "Updated Label");
 }
+
+#[tokio::test]
+async fn test_fts_auto_indexing() {
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db, chroma_client, embedding_service);
+
+    // Create a conversation with a searchable message
+    let mut conv = create_test_conversation();
+    conv.messages = vec![
+        NewMessage {
+            role: "user".to_string(),
+            content: "The quick brown fox jumps over the lazy dog".to_string(),
+            timestamp: chrono::Utc::now().naive_utc(),
+            metadata: json!({}),
+        },
+    ];
+    
+    let conv_id = repo.create_with_messages(conv).await.unwrap();
+
+    // Search using FTS - should find the message immediately
+    let results = repo.full_text_search("quick brown fox", 10).await.unwrap();
+
+    assert!(!results.is_empty(), "FTS should find the indexed message");
+    assert_eq!(results[0].conversation_id, conv_id);
+    assert!(results[0].content.contains("quick brown fox"));
+}
+
+#[tokio::test]
+async fn test_fts_update_trigger() {
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db.clone(), chroma_client, embedding_service);
+
+    // Create conversation
+    let mut conv = create_test_conversation();
+    conv.messages = vec![
+        NewMessage {
+            role: "user".to_string(),
+            content: "Original content here".to_string(),
+            timestamp: chrono::Utc::now().naive_utc(),
+            metadata: json!({}),
+        },
+    ];
+    
+    repo.create_with_messages(conv).await.unwrap();
+
+    // Update message content directly (simulating an update)
+    use sea_orm::ConnectionTrait;
+    db.execute_unprepared(
+        "UPDATE messages SET content = 'Updated searchable content' WHERE content = 'Original content here'"
+    ).await.unwrap();
+
+    // Search for updated content - trigger should have updated FTS index
+    let results = repo.full_text_search("searchable", 10).await.unwrap();
+
+    assert!(!results.is_empty(), "FTS should find updated content");
+    assert!(results[0].content.contains("searchable"));
+}
+
+#[tokio::test]
+async fn test_fts_performance() {
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db, chroma_client, embedding_service);
+
+    // Create 100 conversations with unique words
+    for i in 0..100 {
+        let mut conv = create_test_conversation();
+        conv.id = Some(Uuid::new_v4());
+        conv.messages = vec![NewMessage {
+            role: "user".to_string(),
+            content: format!("Message with unique word number{}", i),
+            timestamp: chrono::Utc::now().naive_utc(),
+            metadata: json!({}),
+        }];
+        repo.create_with_messages(conv).await.unwrap();
+    }
+
+    // FTS should find ONLY the matching message
+    let results = repo.full_text_search("number42", 10).await.unwrap();
+    
+    assert_eq!(results.len(), 1, "Should find exactly one message");
+    assert!(results[0].content.contains("number42"));
+}
+

@@ -475,7 +475,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         query: &str,
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
-        use sea_orm::{DatabaseBackend, FromQueryResult};
+        use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
 
         #[derive(FromQueryResult)]
         struct MessageResult {
@@ -490,11 +490,17 @@ impl ConversationRepository for SeaOrmConversationRepository {
         let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             r#"
-            SELECT m.id, m.conversation_id, m.role, m.content, m.timestamp, m.metadata 
+            SELECT 
+                hex(m.id) as id,
+                hex(m.conversation_id) as conversation_id,
+                m.role, 
+                m.content, 
+                m.timestamp, 
+                COALESCE(m.metadata, '{}') as metadata
             FROM messages m 
-            JOIN messages_fts fts ON m.rowid = fts.rowid
-            WHERE fts.content MATCH ?1
-            ORDER BY rank(fts)
+            WHERE m.rowid IN (
+                SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?1
+            )
             LIMIT ?2
             "#,
             vec![
@@ -507,18 +513,33 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         Ok(results
             .into_iter()
-            .map(|m| Message {
-                id: Uuid::parse_str(&m.id).unwrap(),
-                conversation_id: Uuid::parse_str(&m.conversation_id).unwrap(),
-                role: m.role,
-                content: m.content,
-                timestamp: chrono::NaiveDateTime::parse_from_str(
-                    &m.timestamp,
-                    "%Y-%m-%d %H:%M:%S%.f",
-                )
-                .unwrap(),
-                embedding_id: None,
-                metadata: serde_json::from_str(&m.metadata).ok(),
+            .filter_map(|m| {
+                // Convert hex UUID strings back to UUID
+                let id = Uuid::parse_str(&format!(
+                    "{}-{}-{}-{}-{}",
+                    &m.id[0..8], &m.id[8..12], &m.id[12..16], &m.id[16..20], &m.id[20..32]
+                )).ok()?;
+                
+                let conversation_id = Uuid::parse_str(&format!(
+                    "{}-{}-{}-{}-{}",
+                    &m.conversation_id[0..8], &m.conversation_id[8..12], 
+                    &m.conversation_id[12..16], &m.conversation_id[16..20], 
+                    &m.conversation_id[20..32]
+                )).ok()?;
+
+                Some(Message {
+                    id,
+                    conversation_id,
+                    role: m.role,
+                    content: m.content,
+                    timestamp: chrono::NaiveDateTime::parse_from_str(
+                        &m.timestamp,
+                        "%Y-%m-%d %H:%M:%S%.f",
+                    )
+                    .ok()?,
+                    embedding_id: None,
+                    metadata: serde_json::from_str(&m.metadata).ok(),
+                })
             })
             .collect())
     }
@@ -760,14 +781,6 @@ impl SeaOrmConversationRepository {
             "INSERT INTO messages_fts(rowid, content) VALUES ((SELECT rowid FROM messages WHERE id = '{}'), '{}')",
             msg_id,
             content_for_fts.replace("'", "''")
-        );
-
-        let _ = self.db.execute_unprepared(&fts_sql).await;
-
-        tracing::debug!(
-            "Stored message{}: {}",
-            if has_embedding { " with embedding" } else { "" },
-            msg_id
         );
 
         Ok(msg_id)
