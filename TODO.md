@@ -1,302 +1,171 @@
-```markdown
-# Sekha Controller - TODO for MCP Export & Stats Tools
+# Sekha Controller - Development TODO
 
-## Overview
-The MCP server (sekha-mcp) now supports 7 tools (store, search, update, context, prune, export, stats). The controller needs repository methods and API endpoints to support the 2 new tools: `memory_export` and `memory_stats`.
+## ✅ COMPLETED (v0.1.1)
 
----
-
-## 1. Repository Layer (`src/storage/repository.rs`)
-
-### 1.1 Add to `ConversationRepository` trait:
-
-```rust
-/// Get all messages for a conversation (for export)
-async fn get_message_list(
-    &self,
-    conversation_id: Uuid,
-) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>>;
-
-/// Get memory statistics (global or by folder)
-async fn get_stats(
-    &self,
-    folder: Option<String>,
-) -> Result<Stats, Box<dyn std::error::Error>>;
-```
-
-### 1.2 Implement in `SeaOrmConversationRepository`:
-
-```rust
-// Add imports at top:
-use sea_orm::{entity::*, query::*};
-
-// Implementation for get_message_list
-pub async fn get_message_list(
-    &self,
-    conversation_id: Uuid,
-) -> Result<Vec<serde_json::Value>, Box<dyn std::error::Error>> {
-    let messages = entity::message::Entity::find()
-        .filter(entity::message::Column::ConversationId.eq(conversation_id))
-        .order_by_asc(entity::message::Column::Timestamp)
-        .all(&self.db)
-        .await?;
-    
-    Ok(messages.into_iter().map(|msg| {
-        serde_json::json!({
-            "id": msg.id,
-            "role": msg.role,
-            "content": msg.content,
-            "timestamp": msg.timestamp,
-            "metadata": msg.metadata,
-        })
-    }).collect())
-}
-
-// Implementation for get_stats
-pub async fn get_stats(
-    &self,
-    folder: Option<String>,
-) -> Result<Stats, Box<dyn std::error::Error>> {
-    let mut query = entity::conversation::Entity::find();
-    
-    if let Some(folder_path) = folder {
-        query = query.filter(
-            entity::conversation::Column::Folder.eq(folder_path)
-        );
-    }
-    
-    let conversations = query.all(&self.db).await?;
-    let total = conversations.len();
-    
-    let avg_importance = if total > 0 {
-        conversations.iter()
-            .map(|c| c.importance_score)
-            .sum::<i32>() as f32 / total as f32
-    } else {
-        0.0
-    };
-    
-    // Get unique folders
-    let folders: Vec<String> = {
-        let folder_results: Vec<Option<String>> = entity::conversation::Entity::find()
-            .select_only()
-            .column(entity::conversation::Column::Folder)
-            .distinct()
-            .into_tuple()
-            .all(&self.db)
-            .await?;
-        
-        folder_results.into_iter()
-            .flatten()
-            .collect()
-    };
-    
-    Ok(Stats {
-        total_conversations: total,
-        average_importance: avg_importance,
-        folders,
-    })
-}
-```
-
-### 1.3 Add Stats struct:
-
-```rust
-// At top of file or in models module
-#[derive(Serialize)]
-pub struct Stats {
-    pub total_conversations: usize,
-    pub average_importance: f32,
-    pub folders: Vec<String>,
-}
-```
-
-### 1.4 Write repository tests:
-
-```rust
-#[tokio::test]
-async fn test_get_message_list_success() {
-    // Setup: create conversation with messages
-    // Call get_message_list
-    // Assert messages returned in correct order
-}
-
-#[tokio::test]
-async fn test_get_message_list_empty() {
-    // Setup: create conversation with no messages
-    // Call get_message_list
-    // Assert empty vector returned
-}
-
-#[tokio::test]
-async fn test_get_message_list_not_found() {
-    // Call with non-existent conversation_id
-    // Assert error
-}
-
-#[tokio::test]
-async fn test_get_stats_global() {
-    // Setup: create multiple conversations across folders
-    // Call get_stats(None)
-    // Assert correct counts and folder list
-}
-
-#[tokio::test]
-async fn test_get_stats_by_folder() {
-    // Setup: create conversations in specific folder
-    // Call get_stats(Some("/work"))
-    // Assert only that folder's stats
-}
-```
+### Core Functionality
+- ✅ MCP memory_export endpoint (full conversation export)
+- ✅ MCP memory_stats endpoint (global and folder-scoped stats)
+- ✅ Repository methods: `get_message_list()`, `get_stats()`
+- ✅ FTS5 full-text search with automatic indexing triggers
+- ✅ Database update triggers for `updated_at` timestamps
+- ✅ WAL mode for concurrent database access
+- ✅ Migration schema validation tests
+- ✅ 44 integration tests passing
+- ✅ UUID/BLOB handling fixed for SQLite
+- ✅ Modular test structure (`tests/integration/` modules)
+- ✅ Tarpaulin configured to exclude patches
+- ✅ Basic unit tests (route, queue, services construction)
 
 ---
 
-## 2. API Layer (`src/api/mcp.rs`)
+## 🎯 CURRENT FOCUS: Coverage → 80%+ (Option B: Mockall Path)
 
-### 2.1 Add endpoint handlers:
-
-Already added to file:
-- `memory_export()` 
-- `memory_stats()`
-
-But need completion:
-- `memory_export` needs to call `get_message_list()`
-- `memory_stats` needs to call `get_stats()`
-
-### 2.2 Update router:
-
-Add to `create_mcp_router()`:
-```rust
-.route("/mcp/tools/memory_export", post(memory_export))
-.route("/mcp/tools/memory_stats", post(memory_stats))
-```
+**Current Baseline:** 45-47% coverage (956/2121 lines)  
+**Target Goal:** 80% (1,697 lines) = **+741 lines needed**  
+**Stretch Goal:** 90% (1,909 lines) = **+953 lines needed**
 
 ---
 
-## 3. API Tests (`src/api/mcp.rs`)
+## Phase 1: Add Mockall Framework ⏱️ 30 min
 
-### 3.1 Export tests:
+**Status:** 🔴 Not Started
 
-```rust
-#[tokio::test]
-async fn test_memory_export_success() {
-    // Setup: create conversation with messages
-    // Call memory_export with valid ID
-    // Assert success response with messages
-}
+### Tasks:
+- [ ] Add `mockall = "0.13"` to Cargo.toml dev-dependencies
+- [ ] Make `ConversationRepository` trait mockable with `#[cfg_attr(test, mockall::automock)]`
+- [ ] Make `LlmBridgeClient` mockable
+- [ ] Make `ChromaClient` mockable
+- [ ] Verify mock generation works: `cargo test --test unit`
 
-#[tokio::test]
-async fn test_memory_export_not_found() {
-    // Call with non-existent UUID
-    // Assert 404 response
-}
-
-#[tokio::test]
-async fn test_memory_export_json_format() {
-    // Call with format: "json"
-    // Assert conversation data in JSON structure
-}
-
-#[tokio::test]
-async fn test_memory_export_markdown_format() {
-    // Call with format: "markdown"  
-    // Assert markdown-formatted response
-}
-```
-
-### 3.2 Stats tests:
-
-```rust
-#[tokio::test]
-async fn test_memory_stats_global() {
-    // Setup: create conversations across multiple folders
-    // Call memory_stats with no folder
-    // Assert correct totals and folder list
-}
-
-#[tokio::test]
-async fn test_memory_stats_by_folder() {
-    // Setup: create conversations in "/work" folder
-    // Call memory_stats with folder: "/work"
-    // Assert only "/work" stats
-}
-
-#[tokio::test]
-async fn test_memory_stats_empty() {
-    // Call on empty database
-    // Assert zero totals and empty folder list
-}
-```
+**Gain:** Infrastructure for all remaining tests  
+**Blockers:** None
 
 ---
 
-## 4. Integration Testing
+## Phase 2: Mock-Based Unit Tests ⏱️ 4-6 hours
 
-### 4.1 Add integration test skeleton:
+**Status:** 🔴 Not Started
 
-File: `tests/integration/test_mcp_endpoints.rs`
+### Priority 1: Orchestrator Layer (+150 lines)
 
-```rust
-#[tokio::test]
-async fn test_mcp_export_e2e() {
-    // Start controller
-    // Create conversation via MCP
-    // Export via MCP
-    // Verify export contains conversation
-}
+**Files to test:**
+- [ ] `src/orchestrator/importance_engine.rs` (26 lines)
+  - Test `calculate_score()` with mocked repo + LLM
+  - Test edge cases (empty messages, LLM errors)
+  
+- [ ] `src/orchestrator/pruning_engine.rs` (28 lines)
+  - Test `generate_suggestions()` with mocked repo
+  - Test various importance thresholds
 
-#[tokio::test]
-async fn test_mcp_stats_e2e() {
-    // Start controller
-    // Create multiple conversations
-    // Get stats via MCP
-    // Verify counts match
-}
-```
+- [ ] `src/orchestrator/label_intelligence.rs` (17 lines uncovered)
+  - Test `suggest_labels()` with mocked LLM
+  - Test `auto_label()` workflow
 
----
+- [ ] `src/orchestrator/context_assembly.rs` (24 lines uncovered)
+  - Test context building with mocked repo
 
-## 5. Documentation
+### Priority 2: Service Layer (+138 lines)
 
-### 5.1 Update controller docs:
+**Files to test:**
+- [ ] `src/services/chroma_client.rs` (81 lines)
+  - Mock HTTP responses with `mockito`
+  - Test `store_embedding()`, `search_similar()`, `delete()`
+  
+- [ ] `src/services/embedding_service.rs` (57 lines)
+  - Mock Ollama HTTP calls
+  - Test embedding generation, error handling
 
-- `docs/architecture/mcp-protocol.md` - Add export/stats examples
-- `docs/api/mcp-reference.md` - Document new endpoints
-- `CHANGELOG.md` - Add v0.1.1 entry
+### Priority 3: API Layer (+155 lines)
 
----
+**Files to test:**
+- [ ] `src/api/routes.rs` (155 lines uncovered)
+  - Test error paths (repo errors → 500 responses)
+  - Test validation errors (invalid UUID → 400)
+  - Test authentication failures
 
-## 6. Implementation Checklist
-
-- [ ] Add `get_message_list` to repository trait
-- [ ] Implement `get_message_list` in SeaOrm repo
-- [ ] Add `get_stats` to repository trait
-- [ ] Implement `get_stats` in SeaOrm repo
-- [ ] Add `Stats` struct
-- [ ] Write 6 repository unit tests
-- [ ] Update `create_mcp_router` with 2 new routes
-- [ ] Complete `memory_export` handler
-- [ ] Complete `memory_stats` handler
-- [ ] Write 6-8 API endpoint tests
-- [ ] Run full test suite: `cargo test`
-- [ ] Verify MCP integration: `pytest` in mcp repo
-- [ ] Update documentation
-- [ ] Update CHANGELOG
+**Estimated Gain:** ~443 lines (+21% coverage)
 
 ---
 
-## Estimated Effort
+## Phase 3: Enhanced Integration Tests ⏱️ 2-3 hours
 
-Repository methods: 2 hours
-API handlers: 1 hour
-Tests: 3 hours
-Documentation: 1 hour
-Total: ~7 hours
+**Status:** 🟡 Partially Done (44 tests exist)
+
+### Add These Scenarios:
+- [ ] Large dataset (100+ conversations) performance test
+- [ ] Concurrent writes stress test (already have basic concurrency test)
+- [ ] Error recovery tests (database locked, out of disk, etc.)
+- [ ] MCP auth edge cases (expired keys, wrong format)
+- [ ] REST API comprehensive error paths
+
+**Estimated Gain:** ~150 lines (+7% coverage)
+
+---
+
+## Phase 4: File Watcher Tests ⏱️ 2 hours
+
+**Status:** 🔴 Disabled (commented out in integration tests)
+
+**Current:** 8/336 lines (2.4%)
+
+### Tasks:
+- [ ] Create temp directory tests
+- [ ] Test ChatGPT import parsing
+- [ ] Test Claude import parsing
+- [ ] Test error handling (malformed JSON, missing files)
+- [ ] Re-enable in `tests/integration/mod.rs`
+
+**Estimated Gain:** ~200 lines (+9% coverage)
+
+---
+
+## Coverage Roadmap
+
+| Phase | Effort | Lines Gained | New Coverage | Status |
+|-------|--------|--------------|--------------|--------|
+| **Baseline** | - | - | 47% | ✅ |
+| Phase 1: Mockall Setup | 30 min | 0 | 47% | 🔴 |
+| Phase 2: Mock Tests | 4-6 hrs | +443 | **68%** | 🔴 |
+| Phase 3: Integration | 2-3 hrs | +150 | **75%** | 🔴 |
+| Phase 4: File Watcher | 2 hrs | +200 | **84%** | 🔴 |
+| **🎯 TARGET 80%** | **~10 hrs** | **+593** | **80%** ✅ | 🔴 |
+| **🌟 STRETCH 90%** | **+3 hrs** | **+200** | **90%** | 🟡 |
+
+---
+
+## 📋 Backlog (Post-80% Coverage)
+
+### Infrastructure
+- [ ] CI/CD coverage reporting (upload to Codecov/Coveralls)
+- [ ] Benchmark tests for FTS performance
+- [ ] Docker compose for test environment (Chroma + Ollama)
+- [ ] Upgrade to SeaORM 2.0.0 stable (when released)
+
+### Documentation
+- [ ] Update `docs/architecture/mcp-protocol.md` with export/stats
+- [ ] Update `docs/api/mcp-reference.md` with new endpoints
+- [ ] Add coverage badge to README
+- [ ] Update CHANGELOG.md for v0.1.1
+
+---
+
+## 🚀 Immediate Next Steps
+
+1. ✅ Fix route_test.rs compilation error
+2. ✅ Run tests and confirm 47% baseline
+3. 🔴 **Add mockall to Cargo.toml** (5 min)
+4. 🔴 **Make traits mockable** (15 min)
+5. 🔴 **Write first mocked test** (importance_engine) (1 hour)
+6. 🔴 **Verify coverage jumps to 50%+**
+7. 🔴 **Continue with remaining mock tests**
+
+---
 
 ## Notes
 
-- Ensure all paths use proper UUID validation
-- Handle empty result sets gracefully
-- Follow existing error handling patterns
-- Keep repository methods generic (not MCP-specific)
-- Test both happy path and error cases
+- ✅ SeaORM patch excluded from coverage
+- ✅ 44 integration tests passing
+- ✅ FTS5, triggers, WAL operational
+- 🔴 Mockall framework needed for orchestrator/service tests
+- 🎯 Realistic path to 80% within 10 hours
+- 🌟 90% achievable with file_watcher + edge cases

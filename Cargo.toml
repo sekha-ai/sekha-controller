@@ -135,6 +135,10 @@ path = "tests/integration/mod.rs"
 name = "api_test"
 path = "tests/api_test.rs"
 
+[[test]]
+name = "unit"
+path = "tests/unit/mod.rs"
+
 [[bin]]
 name = "benchmark"
 path = "tests/benchmarks/insert_1m_messages.rs"

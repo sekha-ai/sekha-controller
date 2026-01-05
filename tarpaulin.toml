@@ -1,0 +1,20 @@
+[report]
+out = ["Html", "Lcov"]
+
+[coverage]
+# Exclude patched dependencies from coverage
+exclude-files = [
+    "patches/*",
+    "target/*",
+]
+
+# Exclude generated code
+exclude-lines = [
+    "^\\s*#\\[derive\\(",
+    "^\\s*todo!",
+    "^\\s*unimplemented!",
+    "^\\s*unreachable!",
+]
+
+# Engine options
+engine = "Llvm"
