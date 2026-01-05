@@ -155,32 +155,29 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError> {
-        let sql = r#"
-            INSERT INTO conversations (id, label, folder, status, importance_score, word_count, session_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        "#;
+        use sea_orm::Set;
+        
+        let active_model = conversations::ActiveModel {
+            id: Set(conv.id),
+            label: Set(conv.label),
+            folder: Set(conv.folder),
+            status: Set(conv.status),
+            importance_score: Set(conv.importance_score),
+            word_count: Set(conv.word_count),
+            session_count: Set(conv.session_count),
+            created_at: Set(conv.created_at),
+            updated_at: Set(conv.updated_at),
+        };
 
-        let values = vec![
-            Value::String(Some(conv.id.to_string())),
-            Value::String(Some(conv.label)),
-            Value::String(Some(conv.folder)),
-            Value::String(Some(conv.status)),
-            Value::BigInt(Some(conv.importance_score as i64)),
-            Value::BigInt(Some(conv.word_count as i64)),
-            Value::BigInt(Some(conv.session_count as i64)),
-            Value::String(Some(
-                conv.created_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
-            )),
-            Value::String(Some(
-                conv.updated_at.format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
-            )),
-        ];
+        active_model.insert(&self.db).await.map_err(|e| {
+            tracing::error!("Failed to insert conversation: {:?}", e);
+            RepositoryError::DbError(e)
+        })?;
 
-        let stmt = Statement::from_sql_and_values(DatabaseBackend::Sqlite, sql, values);
-
-        self.db.execute_raw(stmt).await?;
+        tracing::info!("Created conversation: {}", conv.id);
         Ok(conv.id)
     }
+
 
     async fn create_with_messages(&self, conv: NewConversation) -> Result<Uuid, RepositoryError> {
         let conv_id = conv.id.unwrap_or_else(Uuid::new_v4);

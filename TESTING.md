@@ -2,7 +2,7 @@
 
 ## Test Structure
 - **Unit tests**: Co-located in `src/` modules or dedicated `tests/` files
-- **Integration tests**: `tests/api_test.rs`, `tests/integration_test.rs`
+- **Integration tests**: `tests/api_test.rs`, `tests/integration/` (modular)
 - **Benchmarks**: `tests/benchmarks/`
 
 ## Commands

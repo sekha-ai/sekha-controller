@@ -76,7 +76,7 @@ jobs:
         run: cargo test --lib --all-features --verbose
 
       - name: Run integration tests
-        run: cargo test --test integration_test --all-features --verbose
+        run: cargo test --test integration --all-features --verbose
 
       - name: Run API tests
         run: cargo test --test api_test --all-features --verbose
@@ -277,7 +277,7 @@ jobs:
         env:
           SEKHA_CONTROLLER_URL: http://localhost:${{ env.SEKHA_PORT }}
         run: |
-          ./tests/integration_test.sh
+          ./tests/integration.sh
 
       - name: Cleanup
         working-directory: controller

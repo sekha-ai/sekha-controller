@@ -4,5 +4,5 @@ The Memory Orchestration layer provides intelligent context assembly, summarizat
 
 ### Integration Tests
 
-Module 5 has comprehensive integration tests in `tests/integration_test.rs`:
+Module 5 has comprehensive integration tests in `tests/integration/`:
 

@@ -1,43 +1,29 @@
-// tests/integration/mod.rs
-
-// ============================================
-// Re-export commonly used types
-// ============================================
-pub use serde_json::json;                                    // ✅ Macro
-pub use std::sync::Arc;                                       // ✅ Arc
-pub use uuid::Uuid;                                           // ✅ Uuid
-
-// tests/integration/mod.rs
-use axum::Router;
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+    Router,
+};
 use sekha_controller::{
     api::routes::{create_router, AppState},
     config::Config,
     models::internal::{NewConversation, NewMessage},
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
-        chroma_client::ChromaClient, init_db, SeaOrmConversationRepository,
+        chroma_client::ChromaClient, init_db, ConversationRepository, SeaOrmConversationRepository,
     },
 };
+use serde_json::json;
+use std::sync::Arc;
 use tokio::sync::RwLock;
-use sekha_controller::ConversationRepository;
+use tower::ServiceExt;
+use uuid::Uuid;
+use reqwest;
 
 // ============================================
-// Public modules (test files)
-// ============================================
-pub mod api;
-pub mod mcp;
-pub mod orchestrator;
-pub mod repository;
-// Future modules:
-// pub mod file_watcher; // ✅ Comment out until we implement the public API
-pub mod concurrency;
-// pub mod search;
-
-// ============================================
-// Shared Test Helpers
+// Test Fixtures and Helpers
 // ============================================
 
-pub fn create_test_services() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
+fn create_test_services() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let embedding_service = Arc::new(EmbeddingService::new(
         "http://localhost:11434".to_string(),
@@ -46,7 +32,7 @@ pub fn create_test_services() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
     (chroma_client, embedding_service)
 }
 
-pub async fn is_llm_bridge_running() -> bool {
+async fn is_llm_bridge_running() -> bool {
     let client = reqwest::Client::new();
     let result = client
         .get("http://localhost:11434")
@@ -57,7 +43,7 @@ pub async fn is_llm_bridge_running() -> bool {
     result.is_ok()
 }
 
-pub async fn is_chroma_running() -> bool {
+async fn is_chroma_running() -> bool {
     let client = reqwest::Client::new();
     let result = client
         .get("http://localhost:8000/api/v1/heartbeat")
@@ -68,7 +54,7 @@ pub async fn is_chroma_running() -> bool {
     result.is_ok()
 }
 
-pub async fn create_test_config() -> Arc<RwLock<Config>> {
+async fn create_test_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
@@ -88,7 +74,7 @@ pub async fn create_test_config() -> Arc<RwLock<Config>> {
     }))
 }
 
-pub async fn create_test_app() -> Router {
+async fn create_test_app() -> Router {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
@@ -112,7 +98,7 @@ pub async fn create_test_app() -> Router {
     create_router(state)
 }
 
-pub async fn create_test_mcp_app() -> Router {
+async fn create_test_mcp_app() -> Router {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
@@ -136,7 +122,7 @@ pub async fn create_test_mcp_app() -> Router {
     sekha_controller::api::mcp::create_mcp_router(state)
 }
 
-pub fn create_test_conversation() -> NewConversation {
+fn create_test_conversation() -> NewConversation {
     NewConversation {
         id: Some(Uuid::new_v4()),
         label: "Test Conversation".to_string(),
@@ -164,13 +150,29 @@ pub fn create_test_conversation() -> NewConversation {
     }
 }
 
-// Feature flag for tests requiring external services
-#[cfg(test)]
-pub fn requires_chroma() -> bool {
-    std::env::var("CHROMA_URL").is_ok()
-}
+// ============================================
+// Module 6: Serialization Tests
+// ============================================
 
-#[cfg(test)]
-pub fn requires_ollama() -> bool {
-    std::env::var("OLLAMA_URL").is_ok()
+#[tokio::test]
+async fn test_json_serialization_edge_cases() {
+    let app = create_test_app().await;
+
+    // Test with special characters
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/conversations")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    r#"{ "label": "Special \"Chars\" \n \t \\ Test", "folder": "/", "messages": [{"role": "user", "content": "Line1\nLine2\tTabbed"}] }"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
 }

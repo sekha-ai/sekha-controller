@@ -128,8 +128,8 @@ wiremock = "0.6.5"
 sea-orm-cli = "=2.0.0-rc.22"
 
 [[test]]
-name = "integration_test"
-path = "tests/integration_test.rs"
+name = "integration"
+path = "tests/integration/mod.rs"
 
 [[test]]
 name = "api_test"
