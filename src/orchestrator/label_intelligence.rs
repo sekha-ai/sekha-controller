@@ -21,10 +21,13 @@ impl LabelIntelligence {
         conversation_id: Uuid,
     ) -> Result<Vec<LabelSuggestion>, RepositoryError> {
         // Verify conversation exists
-        let _conv = self.repo
+        let _conv = self
+            .repo
             .find_by_id(conversation_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", conversation_id)))?;
+            .ok_or_else(|| {
+                RepositoryError::NotFound(format!("Conversation {} not found", conversation_id))
+            })?;
 
         let messages = self.repo.get_conversation_messages(conversation_id).await?;
 
@@ -63,7 +66,10 @@ impl LabelIntelligence {
                 if existing_labels.is_empty() {
                     "general,conversation,note".to_string()
                 } else {
-                    existing_labels.first().cloned().unwrap_or_else(|| "general".to_string())
+                    existing_labels
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "general".to_string())
                 }
             }
         };

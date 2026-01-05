@@ -1,14 +1,14 @@
 use super::{
-    create_test_services, 
-    create_test_conversation, 
+    create_test_conversation,
+    create_test_services,
     is_chroma_running,
-    ConversationRepository,  // ✅ Import trait
-    Arc,                     // ✅ Import Arc
-    json,                    // ✅ Import json macro
+    json,                   // ✅ Import json macro
+    Arc,                    // ✅ Import Arc
+    ConversationRepository, // ✅ Import trait
 };
 use sekha_controller::{
+    models::internal::NewMessage, // ✅ Import NewMessage
     storage::{init_db, SeaOrmConversationRepository},
-    models::internal::NewMessage,  // ✅ Import NewMessage
 };
 use uuid::Uuid;
 
@@ -205,15 +205,13 @@ async fn test_fts_auto_indexing() {
 
     // Create a conversation with a searchable message
     let mut conv = create_test_conversation();
-    conv.messages = vec![
-        NewMessage {
-            role: "user".to_string(),
-            content: "The quick brown fox jumps over the lazy dog".to_string(),
-            timestamp: chrono::Utc::now().naive_utc(),
-            metadata: json!({}),
-        },
-    ];
-    
+    conv.messages = vec![NewMessage {
+        role: "user".to_string(),
+        content: "The quick brown fox jumps over the lazy dog".to_string(),
+        timestamp: chrono::Utc::now().naive_utc(),
+        metadata: json!({}),
+    }];
+
     let conv_id = repo.create_with_messages(conv).await.unwrap();
 
     // Search using FTS - should find the message immediately
@@ -232,15 +230,13 @@ async fn test_fts_update_trigger() {
 
     // Create conversation
     let mut conv = create_test_conversation();
-    conv.messages = vec![
-        NewMessage {
-            role: "user".to_string(),
-            content: "Original content here".to_string(),
-            timestamp: chrono::Utc::now().naive_utc(),
-            metadata: json!({}),
-        },
-    ];
-    
+    conv.messages = vec![NewMessage {
+        role: "user".to_string(),
+        content: "Original content here".to_string(),
+        timestamp: chrono::Utc::now().naive_utc(),
+        metadata: json!({}),
+    }];
+
     repo.create_with_messages(conv).await.unwrap();
 
     // Update message content directly (simulating an update)
@@ -277,8 +273,7 @@ async fn test_fts_performance() {
 
     // FTS should find ONLY the matching message
     let results = repo.full_text_search("number42", 10).await.unwrap();
-    
+
     assert_eq!(results.len(), 1, "Should find exactly one message");
     assert!(results[0].content.contains("number42"));
 }
-

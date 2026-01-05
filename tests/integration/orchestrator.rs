@@ -131,7 +131,9 @@ async fn test_orchestrator_daily_summary() {
 #[tokio::test]
 async fn test_orchestrator_weekly_monthly_summaries() {
     if !is_llm_bridge_running().await {
-        eprintln!("⚠️  Skipping test_orchestrator_weekly_monthly_summaries - LLM bridge not running");
+        eprintln!(
+            "⚠️  Skipping test_orchestrator_weekly_monthly_summaries - LLM bridge not running"
+        );
         return;
     }
     let app = create_test_app().await;

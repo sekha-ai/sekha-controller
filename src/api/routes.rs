@@ -67,7 +67,8 @@ pub struct CountParams {
 pub async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<ErrorResponse>)> {  // ✅ Changed return type
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<ErrorResponse>)> {
+    // ✅ Changed return type
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
 
@@ -350,7 +351,6 @@ pub async fn delete_conversation(
     Ok(StatusCode::OK)
 }
 
-
 // ============================================
 // Endpoint 6: GET /api/v1/conversations/count
 // ============================================
@@ -372,31 +372,32 @@ pub async fn count_conversations(
     // Clone values before they are moved
     let label_for_response = params.label.clone();
     let folder_for_response = params.folder.clone();
-    
+
     let count = match (&params.label, &params.folder) {
-        (Some(label), None) => {
-            state.repo.count_by_label(label).await
-        }
-        (None, Some(folder)) => {
-            state.repo.find_by_folder(folder, u64::MAX, 0).await
-                .map(|convs| convs.len() as u64)
-        }
-        (None, None) => {
-            state.repo.find_with_filters(None, usize::MAX, 0).await
-                .map(|(_, count)| count)
-        }
+        (Some(label), None) => state.repo.count_by_label(label).await,
+        (None, Some(folder)) => state
+            .repo
+            .find_by_folder(folder, u64::MAX, 0)
+            .await
+            .map(|convs| convs.len() as u64),
+        (None, None) => state
+            .repo
+            .find_with_filters(None, usize::MAX, 0)
+            .await
+            .map(|(_, count)| count),
         (Some(_), Some(_)) => {
             return Ok(Json(serde_json::json!({
                 "count": 0,
                 "error": "Cannot specify both label and folder"
             })));
         }
-    }.map_err(|e| {
+    }
+    .map_err(|e| {
         tracing::error!("Count failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(serde_json::json!({ 
+    Ok(Json(serde_json::json!({
         "count": count,
         "label": label_for_response,
         "folder": folder_for_response

@@ -13,10 +13,10 @@ use sekha_controller::{
     storage::chroma_client::ChromaClient,
     storage::{self, SeaOrmConversationRepository},
 };
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
-use serde_json::json;
 
 // ============================================
 // Test Helpers
@@ -282,7 +282,10 @@ async fn test_memory_stats_empty() {
                 .method(Method::POST)
                 .uri("/mcp/tools/memory_stats")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{"folder": null}"#))
                 .unwrap(),
         )
@@ -290,12 +293,12 @@ async fn test_memory_stats_empty() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json["success"].as_bool().unwrap());
     assert_eq!(json["data"]["total_conversations"], 0);
     assert_eq!(json["data"]["average_importance"], 0.0);

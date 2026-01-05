@@ -1,7 +1,7 @@
 // tests/integration/concurrency.rs
-use super::{create_test_services, ConversationRepository, Arc};
-use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
+use super::{create_test_services, Arc, ConversationRepository};
 use sekha_controller::models::internal::{NewConversation, NewMessage};
+use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
 use serde_json::json;
 
 #[tokio::test]
@@ -10,12 +10,12 @@ async fn test_concurrent_conversation_creation() {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
     let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
-        SeaOrmConversationRepository::new(db, chroma_client, embedding_service)
+        SeaOrmConversationRepository::new(db, chroma_client, embedding_service),
     );
 
     // Spawn 10 concurrent conversation creations
     let mut handles = vec![];
-    
+
     for i in 0..10 {
         let repo_clone = repo.clone();
         let handle = tokio::spawn(async move {
@@ -36,10 +36,10 @@ async fn test_concurrent_conversation_creation() {
                     metadata: json!({}),
                 }],
             };
-            
+
             repo_clone.create_with_messages(new_conv).await
         });
-        
+
         handles.push(handle);
     }
 

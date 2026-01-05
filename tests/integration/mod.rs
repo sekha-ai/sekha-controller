@@ -3,23 +3,21 @@
 // ============================================
 // Re-export commonly used types
 // ============================================
-pub use serde_json::json;                                    // ✅ Macro
-pub use std::sync::Arc;                                       // ✅ Arc
-pub use uuid::Uuid;                                           // ✅ Uuid
+pub use serde_json::json; // ✅ Macro
+pub use std::sync::Arc; // ✅ Arc
+pub use uuid::Uuid; // ✅ Uuid
 
 // tests/integration/mod.rs
 use axum::Router;
+use sekha_controller::ConversationRepository;
 use sekha_controller::{
     api::routes::{create_router, AppState},
     config::Config,
     models::internal::{NewConversation, NewMessage},
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
-    storage::{
-        chroma_client::ChromaClient, init_db, SeaOrmConversationRepository,
-    },
+    storage::{chroma_client::ChromaClient, init_db, SeaOrmConversationRepository},
 };
 use tokio::sync::RwLock;
-use sekha_controller::ConversationRepository;
 
 // ============================================
 // Public modules (test files)
@@ -53,7 +51,7 @@ pub async fn is_llm_bridge_running() -> bool {
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await;
-    
+
     result.is_ok()
 }
 
@@ -64,7 +62,7 @@ pub async fn is_chroma_running() -> bool {
         .timeout(std::time::Duration::from_secs(2))
         .send()
         .await;
-    
+
     result.is_ok()
 }
 

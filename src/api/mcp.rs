@@ -13,7 +13,10 @@ use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation, storage::repository::{ConversationRepository}};
+use crate::{
+    api::dto::*, auth::McpAuth, models::internal::Conversation,
+    storage::repository::ConversationRepository,
+};
 
 /// API authentication middleware
 pub async fn auth_middleware(
@@ -107,7 +110,8 @@ pub async fn memory_store(
     let word_count: i32 = args.messages.iter().map(|m| m.content.len() as i32).sum();
 
     // ✅ Convert MessageDto to NewMessage
-    let new_messages: Vec<crate::models::internal::NewMessage> = args.messages
+    let new_messages: Vec<crate::models::internal::NewMessage> = args
+        .messages
         .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
@@ -152,7 +156,6 @@ pub async fn memory_store(
         error: None,
     }))
 }
-
 
 // ==================== Tool: memory_search ====================
 
@@ -509,7 +512,7 @@ pub async fn memory_stats(
                     tracing::error!("Folder stats query failed: {}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?;
-            
+
             let data = serde_json::json!({
                 "total_conversations": convs.len(),
                 "average_importance": if convs.is_empty() {
@@ -526,7 +529,7 @@ pub async fn memory_stats(
                 error: None,
             }))
         }
-        
+
         // Case 2: Stats for specific LABEL
         (None, Some(label)) => {
             let convs = state
@@ -537,7 +540,7 @@ pub async fn memory_stats(
                     tracing::error!("Label stats query failed: {}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?;
-            
+
             let data = serde_json::json!({
                 "total_conversations": convs.len(),
                 "average_importance": if convs.is_empty() {
@@ -554,27 +557,24 @@ pub async fn memory_stats(
                 error: None,
             }))
         }
-        
+
         // Case 3: GLOBAL stats - return all folders (not labels, since those are optional)
         (None, None) => {
-            let folders = state
-                .repo
-                .get_all_folders()
-                .await
-                .map_err(|e| {
-                    tracing::error!("Global stats - get_all_folders failed: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-            
-            let (convs, total_count) = state
-                .repo
-                .find_with_filters(None, 10000, 0)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Global stats - find_with_filters failed: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-            
+            let folders = state.repo.get_all_folders().await.map_err(|e| {
+                tracing::error!("Global stats - get_all_folders failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            let (convs, total_count) =
+                state
+                    .repo
+                    .find_with_filters(None, 10000, 0)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Global stats - find_with_filters failed: {}", e);
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    })?;
+
             let data = serde_json::json!({
                 "total_conversations": total_count,
                 "average_importance": if total_count == 0 {
@@ -591,18 +591,15 @@ pub async fn memory_stats(
                 error: None,
             }))
         }
-        
+
         // Case 4: ERROR - can't specify both
-        (Some(_), Some(_)) => {
-            Ok(Json(McpToolResponse {
-                success: false,
-                data: None,
-                error: Some("Cannot specify both folder and label".to_string()),
-            }))
-        }
+        (Some(_), Some(_)) => Ok(Json(McpToolResponse {
+            success: false,
+            data: None,
+            error: Some("Cannot specify both folder and label".to_string()),
+        })),
     }
 }
-
 
 // ==================== ROUTER & LEGACY COMPATIBILITY ====================
 

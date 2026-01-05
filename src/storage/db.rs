@@ -121,8 +121,8 @@ pub async fn get_connection() -> Option<DatabaseConnection> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use sea_orm::{DatabaseBackend, Statement};
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_init_db_creates_file() {

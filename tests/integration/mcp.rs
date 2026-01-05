@@ -1,5 +1,8 @@
 use super::{create_test_mcp_app, json, Uuid};
-use axum::{body::Body, http::{Request, StatusCode}};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use tower::ServiceExt;
 
 // ============================================
@@ -426,7 +429,6 @@ async fn test_mcp_tools_discovery() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
-
 }
 
 // ============================================
@@ -468,22 +470,26 @@ async fn test_mcp_memory_export_success() {
                 .method("POST")
                 .uri("/mcp/tools/memory_export")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
-                .body(Body::from(
-                    format!(r#"{{"conversation_id": "{}", "format": "json"}}"#, conversation_id)
-                ))
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(format!(
+                    r#"{{"conversation_id": "{}", "format": "json"}}"#,
+                    conversation_id
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(export_response.status(), StatusCode::OK);
-    
+
     let body = axum::body::to_bytes(export_response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json["success"].as_bool().unwrap());
     assert!(json["data"]["messages"].is_array());
     assert_eq!(json["data"]["messages"].as_array().unwrap().len(), 2);
@@ -519,7 +525,10 @@ async fn test_mcp_memory_stats_global() {
                 .method("POST")
                 .uri("/mcp/tools/memory_stats")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{"folder": null}"#))
                 .unwrap(),
         )
@@ -527,12 +536,12 @@ async fn test_mcp_memory_stats_global() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json["success"].as_bool().unwrap());
     assert_eq!(json["data"]["total_conversations"], 3);
     assert!(json["data"]["folders"].is_array());
@@ -586,7 +595,10 @@ async fn test_mcp_memory_stats_by_folder() {
                 .method("POST")
                 .uri("/mcp/tools/memory_stats")
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
                 .body(Body::from(r#"{"folder": "/work"}"#))
                 .unwrap(),
         )
@@ -594,12 +606,12 @@ async fn test_mcp_memory_stats_by_folder() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json["success"].as_bool().unwrap());
     assert_eq!(json["data"]["total_conversations"], 2);
     assert_eq!(json["data"]["folders"], json!(["/work"]));

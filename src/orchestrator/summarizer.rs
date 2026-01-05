@@ -28,10 +28,13 @@ impl HierarchicalSummarizer {
         conversation_id: Uuid,
     ) -> Result<String, RepositoryError> {
         // Verify conversation exists first
-        let _conv = self.repo
+        let _conv = self
+            .repo
             .find_by_id(conversation_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", conversation_id)))?;
+            .ok_or_else(|| {
+                RepositoryError::NotFound(format!("Conversation {} not found", conversation_id))
+            })?;
 
         let messages = self
             .fetch_messages_from_last_n_days(conversation_id, 1)
@@ -65,16 +68,18 @@ impl HierarchicalSummarizer {
         Ok(summary)
     }
 
-
     pub async fn generate_weekly_summary(
         &self,
         conversation_id: Uuid,
     ) -> Result<String, RepositoryError> {
         // Verify conversation exists
-        let _conv = self.repo
+        let _conv = self
+            .repo
             .find_by_id(conversation_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", conversation_id)))?;
+            .ok_or_else(|| {
+                RepositoryError::NotFound(format!("Conversation {} not found", conversation_id))
+            })?;
 
         let daily_summaries = self
             .fetch_summaries_from_last_n_days(conversation_id, 7, "daily")
@@ -96,7 +101,9 @@ impl HierarchicalSummarizer {
             }
         };
 
-        let _ = self.store_summary(conversation_id, "weekly", &summary).await;
+        let _ = self
+            .store_summary(conversation_id, "weekly", &summary)
+            .await;
 
         Ok(summary)
     }
@@ -106,10 +113,13 @@ impl HierarchicalSummarizer {
         conversation_id: Uuid,
     ) -> Result<String, RepositoryError> {
         // Verify conversation exists
-        let _conv = self.repo
+        let _conv = self
+            .repo
             .find_by_id(conversation_id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound(format!("Conversation {} not found", conversation_id)))?;
+            .ok_or_else(|| {
+                RepositoryError::NotFound(format!("Conversation {} not found", conversation_id))
+            })?;
 
         let weekly_summaries = self
             .fetch_summaries_from_last_n_days(conversation_id, 30, "weekly")
@@ -131,7 +141,9 @@ impl HierarchicalSummarizer {
             }
         };
 
-        let _ = self.store_summary(conversation_id, "monthly", &summary).await;
+        let _ = self
+            .store_summary(conversation_id, "monthly", &summary)
+            .await;
 
         Ok(summary)
     }
