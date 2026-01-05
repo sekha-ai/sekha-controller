@@ -335,7 +335,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.label = Set(new_label.to_string());
         active_model.folder = Set(new_folder.to_string());
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -442,7 +441,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.status = Set(status.to_string());
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())
@@ -456,7 +454,6 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         let mut active_model: conversations::ActiveModel = model.into_active_model();
         active_model.importance_score = Set(score as i32);
-        active_model.updated_at = Set(chrono::Utc::now().naive_utc());
 
         active_model.update(&self.db).await?;
         Ok(())

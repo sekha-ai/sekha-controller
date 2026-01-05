@@ -162,3 +162,37 @@ async fn test_concurrent_inserts() {
     let count = repo.count_by_label("Concurrent").await.unwrap();
     assert_eq!(count, 10);
 }
+
+#[tokio::test]
+async fn test_updated_at_trigger() {
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = SeaOrmConversationRepository::new(db, chroma_client, embedding_service);
+
+    // Create a conversation
+    let mut conv = create_test_conversation();
+    conv.id = Some(Uuid::new_v4());
+    let conv_id = repo.create_with_messages(conv).await.unwrap();
+
+    // Get initial updated_at
+    let initial_conv = repo.find_by_id(conv_id).await.unwrap().unwrap();
+    let initial_updated_at = initial_conv.updated_at;
+
+    // Wait a moment to ensure timestamp would be different
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Update the conversation
+    repo.update_label(conv_id, "Updated Label", "/updated")
+        .await
+        .unwrap();
+
+    // Get updated conversation
+    let updated_conv = repo.find_by_id(conv_id).await.unwrap().unwrap();
+
+    // Verify updated_at changed automatically
+    assert!(
+        updated_conv.updated_at > initial_updated_at,
+        "updated_at should be automatically updated by trigger"
+    );
+    assert_eq!(updated_conv.label, "Updated Label");
+}
