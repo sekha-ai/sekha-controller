@@ -3,6 +3,7 @@ mod chroma_client_test;
 mod embedding_queue_test;
 mod embedding_service_test;
 mod llm_bridge_test;
+mod file_watcher_test;
 
 // Unit tests for orchestrator
 mod importance_engine_test;
