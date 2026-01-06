@@ -6,6 +6,7 @@ out = ["Html", "Lcov"]
 exclude-files = [
     "patches/*",
     "target/*",
+    "src/main.rs",
 ]
 
 # Exclude generated code

@@ -114,3 +114,27 @@ fn test_rate_limit_validation() {
         assert!(rate <= 10000);
     }
 }
+
+#[test]
+fn test_get_all_api_keys_deduplication() {
+    let config = Config {
+        server_port: 8080,
+        mcp_api_key: "key1".to_string(),
+        database_url: "sqlite://test.db".to_string(),
+        ollama_url: "http://localhost:11434".to_string(),
+        chroma_url: "http://localhost:8000".to_string(),
+        embedding_model: "test-model".to_string(),
+        max_connections: 10,
+        log_level: "info".to_string(),
+        summarization_enabled: true,
+        summarization_model: "test-model".to_string(),
+        pruning_enabled: true,
+        rest_api_key: Some("key1".to_string()), // Duplicate!
+        additional_api_keys: vec!["key1".to_string(), "key2".to_string()], // More duplicates
+        rate_limit_per_minute: 1000,
+        cors_enabled: true,
+    };
+
+    let all_keys = config.get_all_api_keys();
+    assert_eq!(all_keys.len(), 2); // Should deduplicate to 2 unique keys
+}

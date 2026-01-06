@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::automock;
+
 use async_trait::async_trait;
 use sea_orm::{
     prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
@@ -37,6 +40,7 @@ pub struct Stats {
 // ============================================
 // TRAIT DEFINITION
 // ============================================
+#[cfg_attr(test, automock)]
 #[async_trait]
 pub trait ConversationRepository: Send + Sync {
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError>;

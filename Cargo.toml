@@ -111,6 +111,7 @@ ndarray = "0.17.1"
 
 # Optional: Better XML parsing
 quick-xml = { version = "0.38", optional = true }
+mockall = "0.13"
 
 [features]
 cli = []  # Enable CLI tool
@@ -126,6 +127,10 @@ toml = "0.9.8"
 tower-test = "0.4"
 wiremock = "0.6.5"
 sea-orm-cli = "=2.0.0-rc.22"
+mockall = "0.13"
+tokio = { version = "1.42", features = ["full"] }
+serde_json = "1.0"
+hex = "0.4"
 
 [[test]]
 name = "integration"

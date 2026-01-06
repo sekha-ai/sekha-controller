@@ -46,7 +46,6 @@ async fn semantic_query(
     }))
 }
 
-// Add to create_router:
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/conversations", post(create_conversation))

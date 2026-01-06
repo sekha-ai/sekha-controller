@@ -1,4 +1,7 @@
 use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+use serde_json::json;
 
 #[test]
 fn test_llm_bridge_client_new() {
@@ -73,4 +76,114 @@ fn test_url_construction() {
         let _client = LlmBridgeClient::new(url.to_string());
         // Should construct without panic
     }
+}
+
+#[tokio::test]
+async fn test_embed_text_success() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("POST"))
+        .and(path("/embed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "embedding": [0.1, 0.2, 0.3],
+            "model": "nomic-embed-text",
+            "tokens_used": 10
+        })))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.embed_text("test text", None).await.unwrap();
+    assert_eq!(result.len(), 3);
+    assert_eq!(result[0], 0.1);
+}
+
+#[tokio::test]
+async fn test_summarize_success() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("POST"))
+        .and(path("/summarize"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "summary": "Test summary",
+            "level": "brief",
+            "model": "llama3.1:8b",
+            "tokens_used": 50
+        })))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.summarize(
+        vec!["message 1".to_string(), "message 2".to_string()],
+        "brief",
+        None,
+        None
+    ).await.unwrap();
+    
+    assert_eq!(result, "Test summary");
+}
+
+#[tokio::test]
+async fn test_score_importance_success() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("POST"))
+        .and(path("/score_importance"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "score": 0.85,
+            "reasoning": "High importance",
+            "model": "llama3.1:8b"
+        })))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.score_importance("important message", None, None).await.unwrap();
+    assert_eq!(result, 0.85);
+}
+
+#[tokio::test]
+async fn test_embed_text_api_error() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("POST"))
+        .and(path("/embed"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("Internal error"))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.embed_text("test", None).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_health_check_success() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.health_check().await.unwrap();
+    assert!(result);
+}
+
+#[tokio::test]
+async fn test_health_check_failure() {
+    let mock_server = MockServer::start().await;
+    let client = LlmBridgeClient::new(mock_server.uri());
+    
+    Mock::given(method("GET"))
+        .and(path("/health"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&mock_server)
+        .await;
+    
+    let result = client.health_check().await.unwrap();
+    assert!(!result);
 }
