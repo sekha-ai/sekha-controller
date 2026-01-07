@@ -11,6 +11,15 @@ keywords = ["ai", "memory", "llm", "context", "ml"]
 categories = ["command-line-utilities", "web-programming"]
 readme = "README.md"
 
+[package.metadata.tarpaulin]
+# Exclude integration methods that require running services
+exclude-files = []
+exclude = [
+    "src/services/embedding_service.rs:process_message",
+    "src/services/embedding_service.rs:process_message_with_retry", 
+    "src/services/embedding_service.rs:search_messages"
+]
+
 # Binary configuration
 [[bin]]
 name = "sekha-controller"
@@ -131,6 +140,7 @@ mockall = "0.13"
 tokio = { version = "1.42", features = ["full"] }
 serde_json = "1.0"
 hex = "0.4"
+futures = "0.3"
 
 [[test]]
 name = "integration"

@@ -7,6 +7,7 @@ use sea_orm::{
     Statement, TransactionTrait, Value,
 };
 use serde_json::Value as JsonValue;
+use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -14,6 +15,66 @@ use crate::models::internal::{Conversation, Message, NewConversation, NewMessage
 use crate::services::embedding_service::EmbeddingService;
 use crate::storage::chroma_client::ChromaClient;
 use crate::storage::entities::{conversations, messages};
+use crate::init_db;
+
+#[tokio::test]
+async fn test_create_message_with_fts_indexing() {
+    // Setup: Create in-memory DB and repository with graceful degradation
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let db = init_db(&format!("sqlite://{}", db_path.display()))
+        .await
+        .unwrap();
+
+    // Use invalid URLs so embedding fails gracefully (creates message but no embedding)
+    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
+    let embedding_service = Arc::new(EmbeddingService::new(
+        "http://localhost:1".to_string(),
+        "http://localhost:1".to_string(),
+    ));
+
+    let repo = SeaOrmConversationRepository::new(db, chroma, embedding_service);
+
+    // Create a conversation first
+    let conv_id = Uuid::new_v4();
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "test_conv".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 10,
+        session_count: Some(1),
+        created_at: chrono::Utc::now().naive_utc(),
+        updated_at: chrono::Utc::now().naive_utc(),
+        messages: vec![], // No initial messages
+    };
+
+    repo.create_with_messages(conv).await.unwrap();
+
+    // Test: Call create_message with specific content
+    let new_msg = NewMessage {
+        role: "user".to_string(),
+        content: "Test message for FTS indexing".to_string(),
+        timestamp: chrono::Utc::now().naive_utc(),
+        metadata: json!({"test": "metadata"}),
+    };
+
+    let msg_id = repo.create_message(conv_id, new_msg).await.unwrap();
+
+    // Verify: Message was created in database
+    let message = repo.find_message_by_id(msg_id).await.unwrap().unwrap();
+    assert_eq!(message.content, "Test message for FTS indexing");
+    assert_eq!(message.role, "user");
+
+    // Verify: FTS index was created by searching for the content
+    let search_results = repo.full_text_search("FTS indexing", 10).await.unwrap();
+    assert_eq!(search_results.len(), 1);
+    assert_eq!(search_results[0].id, msg_id);
+
+    // Verify: Metadata was stored correctly
+    assert_eq!(search_results[0].metadata, Some(json!({"test": "metadata"})));
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum RepositoryError {

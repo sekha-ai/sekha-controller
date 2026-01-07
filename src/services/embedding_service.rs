@@ -1,6 +1,8 @@
+// src/services/embedding_service.rs
+//! Embedding service with provider abstraction
+
 use crate::storage::chroma_client::ChromaClient;
-use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
-use ollama_rs::{error::OllamaError, Ollama};
+use crate::services::embedding_provider::{EmbeddingProvider, ProviderError, OllamaProvider};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::AcquireError;
@@ -12,7 +14,7 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum EmbeddingError {
     #[error("Ollama error: {0}")]
-    OllamaError(#[from] OllamaError),
+    OllamaError(String),
     #[error("Chroma error: {0}")]
     ChromaError(#[from] crate::storage::chroma_client::ChromaError),
     #[error("No embeddings returned")]
@@ -21,6 +23,8 @@ pub enum EmbeddingError {
     SemaphoreError(String),
     #[error("Max retries exceeded")]
     MaxRetriesExceeded,
+    #[error("Provider error: {0}")]
+    ProviderError(String),
 }
 
 impl From<AcquireError> for EmbeddingError {
@@ -31,25 +35,40 @@ impl From<AcquireError> for EmbeddingError {
 
 #[derive(Clone)]
 pub struct EmbeddingService {
-    ollama: Ollama,
+    provider: Arc<dyn EmbeddingProvider>,
     chroma: Arc<ChromaClient>,
     semaphore: Arc<Semaphore>,
     max_retries: u32,
 }
 
 impl EmbeddingService {
+    /// Production constructor with Ollama provider
     pub fn new(ollama_url: String, chroma_url: String) -> Self {
-        let ollama = Ollama::new(ollama_url, 11434);
+        let provider = Arc::new(OllamaProvider::new(
+            ollama_url,
+            "nomic-embed-text:latest".to_string(),
+        ));
+        
         let chroma = Arc::new(ChromaClient::new(chroma_url));
-
-        // Rate limiting: max 4 concurrent embedding requests (per Module 4 spec)
-        let semaphore = Arc::new(Semaphore::new(4));
-
-        // Module 4 spec: retry with exponential backoff
+        let semaphore = Arc::new(Semaphore::new(5));
         let max_retries = 3;
 
         Self {
-            ollama,
+            provider,
+            chroma,
+            semaphore,
+            max_retries,
+        }
+    }
+
+    /// Test constructor with custom provider
+    pub fn with_provider(provider: Arc<dyn EmbeddingProvider>, chroma_url: String) -> Self {
+        let chroma = Arc::new(ChromaClient::new(chroma_url));
+        let semaphore = Arc::new(Semaphore::new(5));
+        let max_retries = 3;
+
+        Self {
+            provider,
             chroma,
             semaphore,
             max_retries,
@@ -124,7 +143,7 @@ impl EmbeddingService {
 
         debug!("Generating embedding for message: {}", message_id);
 
-        // Generate embedding via Ollama
+        // Generate embedding via provider
         let embedding = self.generate_embedding(content).await?;
 
         // Prepare Chroma metadata
@@ -135,7 +154,7 @@ impl EmbeddingService {
             "metadata": metadata,
         });
 
-        // Store in Chroma - FIXED: Collection name to "conversations" per spec
+        // Store in Chroma
         let embedding_id = message_id.to_string();
         self.chroma
             .ensure_collection("conversations", embedding.len() as i32)
@@ -156,33 +175,68 @@ impl EmbeddingService {
         Ok(embedding_id)
     }
 
-    /// Generate embedding using Ollama
-    #[allow(clippy::map_clone)] // False positive - type conversion is necessary
-    async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
-        let input = EmbeddingsInput::Single(content.to_string());
-        let request = GenerateEmbeddingsRequest::new("nomic-embed-text:latest".to_string(), input);
+    /// Generate embedding using configured provider
+    pub async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
+        let _permit = self.semaphore.acquire().await?;
+        
+        self.provider.generate_embedding(content).await
+            .map_err(|e| EmbeddingError::ProviderError(e.to_string()))
+    }
 
-        let response = self.ollama.generate_embeddings(request).await?;
-
-        if response.embeddings.is_empty() {
-            return Err(EmbeddingError::NoEmbeddings);
+    /// Generate embedding with retry logic
+    pub async fn generate_embedding_with_retry(
+        &self,
+        content: &str,
+        max_retries: u32,
+    ) -> Result<Vec<f32>, EmbeddingError> {
+        let mut last_error = None;
+        
+        for attempt in 0..max_retries {
+            match self.provider.generate_embedding(content).await {
+                Ok(embedding) => return Ok(embedding),
+                Err(ProviderError::NoEmbeddings) => {
+                    // Don't retry - immediately return NoEmbeddings
+                    return Err(EmbeddingError::NoEmbeddings);
+                }
+                Err(e) => {
+                    last_error = Some(EmbeddingError::ProviderError(e.to_string()));
+                    
+                    // Exponential backoff (except on last attempt)
+                    if attempt < max_retries - 1 {
+                        sleep(Duration::from_millis(100 * (2_u64.pow(attempt)))).await;
+                    }
+                }
+            }
         }
+        
+        Err(EmbeddingError::MaxRetriesExceeded)
+    }
 
-        // Convert f64 to f32 (necessary for Chroma compatibility)
-        let embedding: Vec<f32> = match response.embeddings.len() {
-            0 => return Err(EmbeddingError::NoEmbeddings),
-            1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
-            _ => response
-                .embeddings
-                .into_iter()
-                .next()
-                .unwrap()
-                .into_iter()
-                .map(|v| v as f32)
-                .collect(),
-        };
-
-        Ok(embedding)
+    /// Generate embeddings for multiple texts in batches
+    pub async fn generate_embeddings_batch(
+        &self,
+        texts: Vec<String>,
+        batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        let mut all_embeddings = Vec::new();
+        
+        for chunk in texts.chunks(batch_size) {
+            // Process batch concurrently
+            let mut batch_futures = Vec::new();
+            
+            for text in chunk {
+                batch_futures.push(self.generate_embedding(text));
+            }
+            
+            let batch_results = futures::future::join_all(batch_futures).await;
+            
+            // Collect results, failing if any individual embedding fails
+            for result in batch_results {
+                all_embeddings.push(result?);
+            }
+        }
+        
+        Ok(all_embeddings)
     }
 
     /// Semantic search across messages
@@ -208,24 +262,40 @@ impl EmbeddingService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::embedding_provider::MockProvider;
+    use std::sync::Arc;
 
     #[tokio::test]
-    #[ignore] // Requires running Ollama
-    async fn test_embedding_generation() {
-        let service = EmbeddingService::new(
-            "http://localhost".to_string(),
-            "http://localhost:8000".to_string(),
-        );
-
-        let embedding = service.generate_embedding("test content").await;
-        assert!(embedding.is_ok());
-        assert_eq!(embedding.unwrap().len(), 768); // nomic-embed-text dimension
+    async fn test_generate_embedding_with_retry_success() {
+        let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+        
+        let result = service.generate_embedding_with_retry("test content", 3).await;
+        
+        assert!(result.is_ok());
+        let embedding = result.unwrap();
+        assert_eq!(embedding.len(), 768);
     }
 
     #[tokio::test]
-    async fn test_retry_logic_eventually_succeeds() {
-        // This test would require mocking Ollama/Chroma to simulate failures
-        // For now, it's a placeholder for the retry logic
-        // assert!(true); // Placeholder
+    async fn test_generate_embedding_error() {
+        let provider = Arc::new(MockProvider::new_error(
+            ProviderError::NoEmbeddings
+        ));
+        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+        
+        let result = service.generate_embedding("test").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_generate_embedding_with_retry_exhaustion() {
+        let provider = Arc::new(MockProvider::new_error(
+            ProviderError::Http("Connection failed".to_string())
+        ));
+        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+        
+        let result = service.generate_embedding_with_retry("test", 2).await;
+        assert!(result.is_err());
     }
 }

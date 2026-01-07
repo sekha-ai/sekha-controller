@@ -4,6 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use tower::ServiceExt;
+use sekha_controller::api::mcp::default_limit;
 
 // ============================================
 // MCP Protocol Tests
@@ -615,4 +616,118 @@ async fn test_mcp_memory_stats_by_folder() {
     assert!(json["success"].as_bool().unwrap());
     assert_eq!(json["data"]["total_conversations"], 2);
     assert_eq!(json["data"]["folders"], json!(["/work"]));
+}
+
+// ============================================
+// Test: default_limit function
+// ============================================
+
+#[test]
+pub fn test_default_limit() {
+    // Simple test for the default_limit function
+    let result = default_limit();
+    assert_eq!(result, Some(10));
+}
+
+// ============================================
+// Test: memory_stats label stats path
+// This covers lines 497-523 in mcp.rs
+// ============================================
+
+#[tokio::test]
+async fn test_memory_stats_label_path_coverage() {
+    let app = create_test_mcp_app().await;
+
+    // Create 3 conversations with the same label
+    for i in 0..3 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp/tools/memory_store")
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer test_key_12345678901234567890123456789012")
+                    .body(Body::from(format!(
+                        r#"{{"label": "CoverageLabel", "folder": "/test{}", "messages": [{{"role": "user", "content": "Test {}"}}]}}"#, i, i
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    // Query stats for that specific label (lines 497-523)
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mcp/tools/memory_stats")
+                .header("Content-Type", "application/json")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(r#"{"label": "CoverageLabel"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify the response structure from lines 497-523
+    assert!(json["success"].as_bool().unwrap());
+    let data = json["data"].as_object().unwrap();
+    assert_eq!(data["total_conversations"], 3);
+    assert!(data.contains_key("labels"));
+    
+    let labels = data["labels"].as_array().unwrap();
+    assert_eq!(labels.len(), 1);
+    assert_eq!(labels[0], "CoverageLabel");
+}
+
+#[tokio::test]
+async fn test_memory_stats_both_folder_and_label_error() {
+    let app = create_test_mcp_app().await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mcp/tools/memory_stats")
+                .header("Content-Type", "application/json")
+                .header(
+                    "Authorization",
+                    "Bearer test_key_12345678901234567890123456789012",
+                )
+                .body(Body::from(
+                    r#"{"folder": "/test", "label": "TestLabel"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // Verify error response from lines 517-521
+    assert_eq!(json["success"], false);
+    assert_eq!(json["data"], serde_json::Value::Null);
+    assert_eq!(
+        json["error"],
+        "Cannot specify both folder and label"
+    );
 }

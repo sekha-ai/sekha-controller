@@ -121,6 +121,10 @@ impl ImportWatcher {
         }
     }
 
+    pub fn processor(&self) -> Arc<ImportProcessor> {
+        self.processor.clone()
+    }
+
     /// Start watching the import directory for new files
     pub async fn watch(&self) -> Result<()> {
         // Ensure directories exist
@@ -228,6 +232,7 @@ impl ImportWatcher {
 // Import Processor
 // ============================================
 
+#[derive(Clone)]
 pub struct ImportProcessor {
     repo: Arc<dyn ConversationRepository + Send + Sync>,
 }
@@ -235,6 +240,10 @@ pub struct ImportProcessor {
 impl ImportProcessor {
     pub fn new(repo: Arc<dyn ConversationRepository + Send + Sync>) -> Self {
         Self { repo }
+    }
+
+    pub fn repo(&self) -> Arc<dyn ConversationRepository> {
+        self.repo.clone()
     }
 
     pub async fn process_file(&self, path: &Path) -> Result<()> {

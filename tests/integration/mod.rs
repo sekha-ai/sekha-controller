@@ -26,8 +26,7 @@ pub mod api;
 pub mod mcp;
 pub mod orchestrator;
 pub mod repository;
-// Future modules:
-pub mod file_watcher; // ✅ Comment out until we implement the public API
+pub mod file_watcher;
 pub mod concurrency;
 // pub mod search;
 

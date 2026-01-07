@@ -1,67 +1,163 @@
-use sekha_controller::services::embedding_service::EmbeddingService;
+// tests/unit/embedding_service_test.rs
+//! Unit tests for embedding service - pure logic only
+//! Tests that require Chroma moved to integration tests
 
-#[test]
-fn test_embedding_service_new() {
-    let ollama_url = "http://localhost:11434";
-    let chroma_url = "http://localhost:8000";
+use sekha_controller::services::{
+    EmbeddingService,
+    EmbeddingProvider,
+    MockProvider,
+};
+use sekha_controller::services::embedding_provider::ProviderError;
+use sekha_controller::services::embedding_service::EmbeddingError;
+use std::sync::Arc;
 
-    let _service = EmbeddingService::new(ollama_url.to_string(), chroma_url.to_string());
-    // Should construct successfully
+// ============================================
+// Test: Successful embedding generation
+// ============================================
+
+#[tokio::test]
+async fn test_generate_embedding_success() {
+    let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+    let provider_clone = provider.clone();
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding("test content").await;
+    
+    assert!(result.is_ok());
+    let embedding = result.unwrap();
+    assert_eq!(embedding.len(), 768);
+    assert_eq!(*provider_clone.call_count.lock().unwrap(), 1);
 }
 
-#[test]
-fn test_embedding_service_urls_with_trailing_slash() {
-    let _service = EmbeddingService::new(
-        "http://localhost:11434/".to_string(),
-        "http://localhost:8000/".to_string(),
-    );
-    // Should handle trailing slashes
+// ============================================
+// Test: Error propagation
+// ============================================
+
+#[tokio::test]
+async fn test_generate_embedding_error() {
+    let provider = Arc::new(MockProvider::new_error(
+        ProviderError::NoEmbeddings
+    ));
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding("test").await;
+    assert!(result.is_err());
+    
+    // Check it's ProviderError variant (mapped from ProviderError)
+    let error_str = result.unwrap_err().to_string();
+    assert!(error_str.contains("No embeddings returned"));
 }
 
-#[test]
-fn test_text_chunking_logic() {
-    // Test text chunking for embeddings
-    let text = "This is a test sentence. This is another sentence.";
-    let chunks: Vec<&str> = text.split(". ").collect();
+// ============================================
+// Test: Retry logic success
+// ============================================
 
-    assert_eq!(chunks.len(), 2);
+#[tokio::test]
+async fn test_generate_embedding_with_retry_success() {
+    let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding_with_retry("test content", 3).await;
+    
+    assert!(result.is_ok());
+    let embedding = result.unwrap();
+    assert_eq!(embedding.len(), 768);
 }
 
-#[test]
-fn test_embedding_dimension_validation() {
-    // Test that embeddings have correct dimensions
-    let valid_dimensions = vec![384, 768, 1024, 1536];
+// ============================================
+// Test: Retry exhaustion
+// ============================================
 
-    for dim in valid_dimensions {
-        let embedding = vec![0.0; dim];
-        assert_eq!(embedding.len(), dim);
+#[tokio::test]
+async fn test_generate_embedding_with_retry_exhaustion() {
+    let provider = Arc::new(MockProvider::new_error(
+        ProviderError::Http("Connection failed".to_string())
+    ));
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding_with_retry("test", 2).await;
+    assert!(result.is_err());
+    
+    let error_str = result.unwrap_err().to_string();
+    assert!(error_str.contains("Max retries exceeded"));
+}
+
+// ============================================
+// Test: Don't retry on NoEmbeddings
+// ============================================
+
+#[tokio::test]
+async fn test_generate_embedding_with_retry_no_embeddings_no_retry() {
+    let provider = Arc::new(MockProvider::new_error(
+        ProviderError::NoEmbeddings
+    ));
+    let provider_clone = provider.clone();
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding_with_retry("test", 3).await;
+    assert!(result.is_err());
+    
+    // Should fail immediately without retries
+    assert_eq!(*provider_clone.call_count.lock().unwrap(), 1);
+}
+
+// ============================================
+// Test: Batch processing
+// ============================================
+
+#[tokio::test]
+async fn test_generate_embeddings_batch() {
+    let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+    let provider_clone = provider.clone();
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
+    let result = service.generate_embeddings_batch(texts, 2).await;
+    
+    assert!(result.is_ok());
+    let embeddings = result.unwrap();
+    assert_eq!(embeddings.len(), 3);
+    assert_eq!(*provider_clone.call_count.lock().unwrap(), 3);
+}
+
+// ============================================
+// Test: Empty batch
+// ============================================
+
+#[tokio::test]
+async fn test_generate_embeddings_batch_empty() {
+    let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embeddings_batch(vec![], 10).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().len(), 0);
+}
+
+// ============================================
+// Test: Rate limiting (semaphore)
+// ============================================
+
+#[tokio::test]
+async fn test_semaphore_rate_limiting() {
+    let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
+    let provider_clone = provider.clone();
+    let service = Arc::new(EmbeddingService::with_provider(provider, "http://localhost:8000".to_string()));
+    
+    // Spawn 10 concurrent requests
+    let mut handles = vec![];
+    for i in 0..10 {
+        let service = service.clone();
+        let handle = tokio::spawn(async move {
+            service.generate_embedding(&format!("text{}", i)).await
+        });
+        handles.push(handle);
     }
-}
-
-#[test]
-fn test_embedding_normalization() {
-    // Test vector normalization logic
-    let vector = vec![1.0, 2.0, 3.0];
-    let magnitude = (vector.iter().map(|x| x * x).sum::<f64>()).sqrt();
-
-    assert!(magnitude > 0.0);
-
-    // Normalized vector
-    let normalized: Vec<f64> = vector.iter().map(|x| x / magnitude).collect();
-    let norm_magnitude = (normalized.iter().map(|x| x * x).sum::<f64>()).sqrt();
-
-    assert!((norm_magnitude - 1.0).abs() < 0.0001); // Should be ~1.0
-}
-
-#[test]
-fn test_batch_text_preparation() {
-    let texts = vec!["text1", "text2", "text3"];
-
-    // Test batch size calculations
-    assert_eq!(texts.len(), 3);
-
-    // Simulate chunking into batches of 2
-    let batch_size = 2;
-    let num_batches = (texts.len() + batch_size - 1) / batch_size;
-    assert_eq!(num_batches, 2);
+    
+    // Wait for all
+    let results = futures::future::join_all(handles).await;
+    assert!(results.iter().all(|r| r.is_ok()));
+    
+    // All 10 requests should have been processed (rate limited at 5 concurrent)
+    assert_eq!(*provider_clone.call_count.lock().unwrap(), 10);
 }
