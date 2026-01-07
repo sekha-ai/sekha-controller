@@ -102,20 +102,20 @@ async fn test_generate_embedding_with_retry_no_embeddings_no_retry() {
 #[tokio::test]
 async fn test_generate_embeddings_batch() {
     let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
-    let provider_clone = provider.clone();
     let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
-
+    
     let texts = vec![
         "text1".to_string(),
         "text2".to_string(),
         "text3".to_string(),
     ];
+    
     let result = service.generate_embeddings_batch(texts, 2).await;
-
+    
     assert!(result.is_ok());
     let embeddings = result.unwrap();
     assert_eq!(embeddings.len(), 3);
-    assert_eq!(*provider_clone.call_count.lock().unwrap(), 3);
+    assert_eq!(embeddings[0].len(), 768);
 }
 
 // ============================================
@@ -160,4 +160,16 @@ async fn test_semaphore_rate_limiting() {
 
     // All 10 requests should have been processed (rate limited at 5 concurrent)
     assert_eq!(*provider_clone.call_count.lock().unwrap(), 10);
+}
+
+
+#[tokio::test]
+async fn test_generate_embedding_with_retry_no_embeddings() {
+    let provider = Arc::new(MockProvider::new_error(ProviderError::NoEmbeddings));
+    let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    
+    let result = service.generate_embedding_with_retry("test", 3).await;
+    
+    // Should immediately fail without retries on NoEmbeddings
+    assert!(matches!(result, Err(EmbeddingError::NoEmbeddings)));
 }

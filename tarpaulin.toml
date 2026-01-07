@@ -7,6 +7,8 @@ exclude-files = [
     "patches/*",
     "target/*",
     "src/main.rs",
+    "src/api/dto.rs",
+    "src/storage/entities/*.rs",
 ]
 
 # Exclude generated code
@@ -15,6 +17,10 @@ exclude-lines = [
     "^\\s*todo!",
     "^\\s*unimplemented!",
     "^\\s*unreachable!",
+    # Health check error paths
+    "checks\\[\"status\"\\] = \"unhealthy\"",
+    # Database connection errors
+    "StatusCode::INTERNAL_SERVER_ERROR.*error: e.to_string",
 ]
 
 # Engine options

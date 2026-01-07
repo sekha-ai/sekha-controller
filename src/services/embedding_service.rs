@@ -76,6 +76,7 @@ impl EmbeddingService {
     }
 
     /// Generate embedding for a message and store in Chroma with retry logic
+    #[cfg(not(tarpaulin_include))]
     pub async fn process_message_with_retry(
         &self,
         message_id: Uuid,

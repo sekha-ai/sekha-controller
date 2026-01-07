@@ -21,6 +21,8 @@ mock! {
         async fn create_with_messages(&self, conv: sekha_controller::models::internal::NewConversation) -> Result<Uuid, RepositoryError>;
         async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
         async fn count_by_label(&self, label: &str) -> Result<u64, RepositoryError>;
+        async fn count_by_folder(&self, folder: &str) -> Result<u64, RepositoryError>;
+        async fn count_all(&self) -> Result<u64, RepositoryError>;
         async fn find_by_id(&self, id: Uuid) -> Result<Option<sekha_controller::models::internal::Conversation>, RepositoryError>;
         async fn find_by_label(&self, label: &str, limit: u64, offset: u64) -> Result<Vec<sekha_controller::models::internal::Conversation>, RepositoryError>;
         async fn get_conversation_messages(&self, conversation_id: Uuid) -> Result<Vec<Message>, RepositoryError>;

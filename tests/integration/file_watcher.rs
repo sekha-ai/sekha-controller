@@ -457,3 +457,248 @@ fn create_chatgpt_single_export() -> String {
     }"#
     .to_string()
 }
+
+// ============================================
+// Test Suite 1: watch() Function Coverage
+// ============================================
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_watch_spawns_watcher_task() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("import");
+    fs::create_dir_all(&watch_path).unwrap();
+    
+    // Use real repository setup
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    // Spawn watch with timeout
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await; // Ignore result, will abort
+    });
+    
+    // Give it time to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+    // Create a test file
+    let test_file = watch_path.join("test.json");
+    fs::write(&test_file, create_chatgpt_single_export()).unwrap();
+    
+    // Give it time to detect and process
+    tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+    
+    // Abort the watch task
+    watch_handle.abort();
+    
+    // Verify file was moved to imported/
+    assert!(!test_file.exists(), "File should be moved after processing");
+}
+
+#[tokio::test]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_watch_ignores_non_supported_files() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("import");
+    fs::create_dir_all(&watch_path).unwrap();
+    
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await;
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+    // Create non-supported files
+    let pdf_file = watch_path.join("test.pdf");
+    let docx_file = watch_path.join("test.docx");
+    fs::write(&pdf_file, "fake pdf").unwrap();
+    fs::write(&docx_file, "fake docx").unwrap();
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+    
+    watch_handle.abort();
+    
+    // Files should still exist (ignored by watcher)
+    assert!(pdf_file.exists(), "PDF should be ignored");
+    assert!(docx_file.exists(), "DOCX should be ignored");
+}
+
+#[tokio::test]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_watch_processes_multiple_files_sequentially() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("import");
+    fs::create_dir_all(&watch_path).unwrap();
+    
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await;
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+    // Create multiple files with delays
+    for i in 0..3 {
+        let file = watch_path.join(format!("test{}.json", i));
+        fs::write(&file, create_chatgpt_single_export()).unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_millis(700)).await;
+    }
+    
+    watch_handle.abort();
+    
+    // All files should be processed and moved
+    let remaining = fs::read_dir(&watch_path).unwrap().count();
+    assert_eq!(remaining, 0, "All files should be moved after processing");
+}
+
+// ============================================
+// Test Suite 2: ensure_directories() Coverage
+// ============================================
+
+#[tokio::test]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_ensure_directories_creates_nested_paths() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("deep").join("nested").join("import");
+    
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    // Trigger directory creation through watch()
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await;
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+    
+    // Verify directories were created
+    assert!(watch_path.exists(), "Watch path should be created");
+    assert!(
+        watch_path.parent().unwrap().join("imported").exists(),
+        "Imported directory should be created"
+    );
+    
+    watch_handle.abort();
+}
+
+#[tokio::test]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_ensure_directories_handles_existing_paths() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("import");
+    
+    // Pre-create directories
+    fs::create_dir_all(&watch_path).unwrap();
+    fs::create_dir_all(watch_path.parent().unwrap().join("imported")).unwrap();
+    
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    // Should not fail with existing directories
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await;
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    
+    assert!(watch_path.exists(), "Watch path should still exist");
+    
+    watch_handle.abort();
+}
+
+// ============================================
+// Test Suite 4: Error Path Coverage
+// ============================================
+
+#[tokio::test]
+#[ignore] // Run only with --ignored or in CI with services
+async fn test_process_existing_files_handles_read_errors() {
+    let tempdir = TempDir::new().unwrap();
+    let watch_path = tempdir.path().join("import");
+    fs::create_dir_all(&watch_path).unwrap();
+    
+    // Create a file, then make it unreadable (Unix only)
+    let bad_file = watch_path.join("unreadable.json");
+    fs::write(&bad_file, "{}").unwrap();
+    
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&bad_file).unwrap().permissions();
+        perms.set_mode(0o000); // No permissions
+        fs::set_permissions(&bad_file, perms).unwrap();
+    }
+    
+    let db = init_db("sqlite::memory:").await.unwrap();
+    let (chroma_client, embedding_service) = create_test_services();
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client,
+        embedding_service,
+    ));
+    
+    let watcher = ImportWatcher::new(watch_path.clone(), repo);
+    
+    // Should handle error gracefully and continue
+    let watch_handle = tokio::spawn(async move {
+        let _ = watcher.watch().await;
+    });
+    
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    
+    watch_handle.abort();
+    
+    // Cleanup - restore permissions
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&bad_file).unwrap().permissions();
+        perms.set_mode(0o644);
+        fs::set_permissions(&bad_file, perms).unwrap();
+    }
+    
+    // On Unix, file should still exist (couldn't be read)
+    // On Windows, test is essentially a no-op
+    #[cfg(unix)]
+    assert!(bad_file.exists(), "Unreadable file should remain");
+}
