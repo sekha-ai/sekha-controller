@@ -4,7 +4,7 @@ use crate::api::routes::{
     list_conversations, metrics, update_conversation_label,
 };
 use crate::AppState;
-use axum::extract::{Path, Query, State};
+use axum::extract::State;
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde_json::Value;

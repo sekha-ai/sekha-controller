@@ -11,9 +11,7 @@ use std::fs;
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 
-use super::{create_test_conversation, ChromaClient, EmbeddingService};
-use std::path::PathBuf;
-use uuid::Uuid;
+use super::{ChromaClient, EmbeddingService};
 
 // ============================================
 // Integration Tests
@@ -145,7 +143,7 @@ async fn test_watcher_creates_directories() {
     // Direct test isn't possible since ensure_directories is private
     // But we can verify it works by creating a processor and checking directories exist
     // let processor = ImportProcessor::new(watcher.processor.repo.clone());
-    let processor = watcher.processor();
+    let _processor = watcher.processor();
 
     // The processor will create directories when needed
     let test_dir = temp_dir.path().join("test_import");
@@ -384,7 +382,7 @@ async fn test_processor_concurrent_processing() {
     }
 
     // Verify all conversations were created
-    let conversations: Vec<_> = processor
+    let _conversations: Vec<_> = processor
         .repo()
         .find_by_label("ChatGPT Single Test", 100, 0)
         .await
