@@ -1,7 +1,7 @@
 use sekha_controller::storage::chroma_client::ChromaClient;
-use uuid::Uuid;
 use serde_json::json;
-use wiremock::matchers::{method, path, body_json};
+use uuid::Uuid;
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
@@ -69,29 +69,31 @@ fn test_search_limit_validation() {
 async fn test_upsert_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
-    
+
     // Mock collection lookup
     Mock::given(method("GET"))
         .and(path("/api/v1/collections/test_collection"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
         .mount(&mock_server)
         .await;
-    
+
     // Mock upsert
     Mock::given(method("POST"))
         .and(path("/api/v1/collections/col-123/upsert"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
-    
-    let result = client.upsert(
-        "test_collection",
-        "vec-1",
-        vec![0.1, 0.2, 0.3],
-        json!({"type": "test"}),
-        None
-    ).await;
-    
+
+    let result = client
+        .upsert(
+            "test_collection",
+            "vec-1",
+            vec![0.1, 0.2, 0.3],
+            json!({"type": "test"}),
+            None,
+        )
+        .await;
+
     assert!(result.is_ok());
 }
 
@@ -99,13 +101,13 @@ async fn test_upsert_success() {
 async fn test_query_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
-    
+
     Mock::given(method("GET"))
         .and(path("/api/v1/collections/test_collection"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
         .mount(&mock_server)
         .await;
-    
+
     Mock::given(method("POST"))
         .and(path("/api/v1/collections/col-123/query"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -115,14 +117,12 @@ async fn test_query_success() {
         })))
         .mount(&mock_server)
         .await;
-    
-    let results = client.query(
-        "test_collection",
-        vec![0.1, 0.2, 0.3],
-        5,
-        None
-    ).await.unwrap();
-    
+
+    let results = client
+        .query("test_collection", vec![0.1, 0.2, 0.3], 5, None)
+        .await
+        .unwrap();
+
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].id, "vec-1");
 }
@@ -131,20 +131,22 @@ async fn test_query_success() {
 async fn test_delete_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
-    
+
     Mock::given(method("GET"))
         .and(path("/api/v1/collections/test_collection"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
         .mount(&mock_server)
         .await;
-    
+
     Mock::given(method("POST"))
         .and(path("/api/v1/collections/col-123/delete"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
-    
-    let result = client.delete("test_collection", vec!["vec-1".to_string()]).await;
+
+    let result = client
+        .delete("test_collection", vec!["vec-1".to_string()])
+        .await;
     assert!(result.is_ok());
 }
 
@@ -152,13 +154,13 @@ async fn test_delete_success() {
 async fn test_collection_not_found() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
-    
+
     Mock::given(method("GET"))
         .and(path("/api/v1/collections/nonexistent"))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
-    
+
     let result = client.query("nonexistent", vec![0.1], 5, None).await;
     assert!(result.is_err());
 }

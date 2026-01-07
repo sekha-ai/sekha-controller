@@ -1,20 +1,20 @@
-use sekha_controller::orchestrator::importance_engine::ImportanceEngine;
-use sekha_controller::storage::repository::{ConversationRepository, RepositoryError};
-use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
-use sekha_controller::models::internal::Message;
 use async_trait::async_trait;
-use mockall::predicate::*;
 use mockall::mock;
-use uuid::Uuid;
-use std::sync::Arc;
-use wiremock::{Mock, MockServer, ResponseTemplate};
-use wiremock::matchers::{method, path};
+use mockall::predicate::*;
+use sekha_controller::models::internal::Message;
+use sekha_controller::orchestrator::importance_engine::ImportanceEngine;
+use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+use sekha_controller::storage::repository::{ConversationRepository, RepositoryError};
 use serde_json::json;
+use std::sync::Arc;
+use uuid::Uuid;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // Manually define the mock since automock doesn't work for integration tests
 mock! {
     pub ConversationRepo {}
-    
+
     #[async_trait]
     impl ConversationRepository for ConversationRepo {
         async fn create(&self, conv: sekha_controller::models::internal::Conversation) -> Result<Uuid, RepositoryError>;
@@ -48,10 +48,10 @@ mock! {
 async fn test_calculate_score_basic_message() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     // Create test message with correct fields
     let test_message = Message {
         id: message_id,
@@ -62,13 +62,13 @@ async fn test_calculate_score_basic_message() {
         embedding_id: None,
         metadata: None,
     };
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(move |_| Ok(Some(test_message.clone())));
-    
+
     // Mock LLM score response
     Mock::given(method("POST"))
         .and(path("/score_importance"))
@@ -79,10 +79,10 @@ async fn test_calculate_score_basic_message() {
         })))
         .mount(&mock_server)
         .await;
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let score = engine.calculate_score(message_id).await.unwrap();
-    
+
     // Score should be weighted: (heuristic * 0.3) + (llm_score * 0.7)
     // heuristic ~5.0, llm 0.6 -> (5.0 * 0.3) + (0.6 * 0.7) = 1.5 + 0.42 = 1.92
     assert!(score > 1.0);
@@ -93,10 +93,10 @@ async fn test_calculate_score_basic_message() {
 async fn test_calculate_score_important_message_with_code() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     // Important message with keywords and code
     let test_message = Message {
         id: message_id,
@@ -107,13 +107,13 @@ async fn test_calculate_score_important_message_with_code() {
         embedding_id: None,
         metadata: Some(json!({"type": "important"})),
     };
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(move |_| Ok(Some(test_message.clone())));
-    
+
     // Mock high LLM score
     Mock::given(method("POST"))
         .and(path("/score_importance"))
@@ -124,27 +124,31 @@ async fn test_calculate_score_important_message_with_code() {
         })))
         .mount(&mock_server)
         .await;
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let score = engine.calculate_score(message_id).await.unwrap();
-    
+
     // Should have high score due to:
     // - "critical" keyword (+1.0)
     // - Length > 100 (+1.0)
     // - Code block ``` (+2.0)
     // Base 5.0 + 4.0 = 9.0 heuristic
     // (9.0 * 0.3) + (0.9 * 0.7) = 2.7 + 0.63 = 3.33
-    assert!(score > 3.0, "Score should be high for important message, got {}", score);
+    assert!(
+        score > 3.0,
+        "Score should be high for important message, got {}",
+        score
+    );
 }
 
 #[tokio::test]
 async fn test_calculate_score_question_with_urgent_keyword() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     let test_message = Message {
         id: message_id,
         conversation_id: Uuid::new_v4(),
@@ -154,13 +158,13 @@ async fn test_calculate_score_question_with_urgent_keyword() {
         embedding_id: None,
         metadata: None,
     };
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(move |_| Ok(Some(test_message.clone())));
-    
+
     Mock::given(method("POST"))
         .and(path("/score_importance"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -170,10 +174,10 @@ async fn test_calculate_score_question_with_urgent_keyword() {
         })))
         .mount(&mock_server)
         .await;
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let score = engine.calculate_score(message_id).await.unwrap();
-    
+
     // Heuristic: 5.0 + 1.0 (urgent) + 0.5 (question mark) = 6.5
     // (6.5 * 0.3) + (0.7 * 0.7) = 1.95 + 0.49 = 2.44
     assert!(score > 2.0, "Score: {}", score);
@@ -183,31 +187,34 @@ async fn test_calculate_score_question_with_urgent_keyword() {
 async fn test_calculate_score_message_not_found() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(|_| Ok(None));
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let result = engine.calculate_score(message_id).await;
-    
+
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Message not found"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Message not found"));
 }
 
 #[tokio::test]
 async fn test_calculate_score_llm_error() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     let test_message = Message {
         id: message_id,
         conversation_id: Uuid::new_v4(),
@@ -217,23 +224,23 @@ async fn test_calculate_score_llm_error() {
         embedding_id: None,
         metadata: None,
     };
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(move |_| Ok(Some(test_message.clone())));
-    
+
     // Mock LLM error (500)
     Mock::given(method("POST"))
         .and(path("/score_importance"))
         .respond_with(ResponseTemplate::new(500).set_body_string("LLM unavailable"))
         .mount(&mock_server)
         .await;
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let result = engine.calculate_score(message_id).await;
-    
+
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("LLM Bridge error"));
 }
@@ -242,10 +249,10 @@ async fn test_calculate_score_llm_error() {
 async fn test_heuristic_score_all_keywords() {
     let mock_server = MockServer::start().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(mock_server.uri()));
-    
+
     let mut mock_repo = MockConversationRepo::new();
     let message_id = Uuid::new_v4();
-    
+
     // Message with ALL heuristic bonuses
     let test_message = Message {
         id: message_id,
@@ -256,13 +263,13 @@ async fn test_heuristic_score_all_keywords() {
         embedding_id: None,
         metadata: None,
     };
-    
+
     mock_repo
         .expect_find_message_by_id()
         .with(eq(message_id))
         .times(1)
         .returning(move |_| Ok(Some(test_message.clone())));
-    
+
     Mock::given(method("POST"))
         .and(path("/score_importance"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -272,10 +279,10 @@ async fn test_heuristic_score_all_keywords() {
         })))
         .mount(&mock_server)
         .await;
-    
+
     let engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     let score = engine.calculate_score(message_id).await.unwrap();
-    
+
     // Heuristic: 5.0 + 1.0 (length) + 2.0 (code) + 0.5 (question) + 3.0 (keywords) = 11.5
     // But clamped to 10.0
     // (10.0 * 0.3) + (0.95 * 0.7) = 3.0 + 0.665 = 3.665

@@ -40,25 +40,37 @@ impl OllamaProvider {
 #[async_trait]
 impl EmbeddingProvider for OllamaProvider {
     async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, ProviderError> {
-        use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
-        
+        use ollama_rs::generation::embeddings::request::{
+            EmbeddingsInput, GenerateEmbeddingsRequest,
+        };
+
         let input = EmbeddingsInput::Single(content.to_string());
         let request = GenerateEmbeddingsRequest::new(self.model.clone(), input);
-        
-        let response = self.ollama.generate_embeddings(request).await
+
+        let response = self
+            .ollama
+            .generate_embeddings(request)
+            .await
             .map_err(|e| ProviderError::Http(e.to_string()))?;
-        
+
         if response.embeddings.is_empty() {
             return Err(ProviderError::NoEmbeddings);
         }
-        
+
         // Convert f64 to f32 for Chroma compatibility
         let embedding: Vec<f32> = match response.embeddings.len() {
             0 => return Err(ProviderError::NoEmbeddings),
             1 => response.embeddings[0].iter().map(|&v| v as f32).collect(),
-            _ => response.embeddings.into_iter().next().unwrap().into_iter().map(|v| v as f32).collect(),
+            _ => response
+                .embeddings
+                .into_iter()
+                .next()
+                .unwrap()
+                .into_iter()
+                .map(|v| v as f32)
+                .collect(),
         };
-        
+
         Ok(embedding)
     }
 }
@@ -77,7 +89,7 @@ impl MockProvider {
             call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
         }
     }
-    
+
     /// Create a mock provider that returns an error
     pub fn new_error(error: ProviderError) -> Self {
         Self {

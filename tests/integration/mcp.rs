@@ -3,8 +3,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use tower::ServiceExt;
 use sekha_controller::api::mcp::default_limit;
+use tower::ServiceExt;
 
 // ============================================
 // MCP Protocol Tests
@@ -655,7 +655,7 @@ async fn test_memory_stats_label_path_coverage() {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -688,7 +688,7 @@ async fn test_memory_stats_label_path_coverage() {
     let data = json["data"].as_object().unwrap();
     assert_eq!(data["total_conversations"], 3);
     assert!(data.contains_key("labels"));
-    
+
     let labels = data["labels"].as_array().unwrap();
     assert_eq!(labels.len(), 1);
     assert_eq!(labels[0], "CoverageLabel");
@@ -708,9 +708,7 @@ async fn test_memory_stats_both_folder_and_label_error() {
                     "Authorization",
                     "Bearer test_key_12345678901234567890123456789012",
                 )
-                .body(Body::from(
-                    r#"{"folder": "/test", "label": "TestLabel"}"#,
-                ))
+                .body(Body::from(r#"{"folder": "/test", "label": "TestLabel"}"#))
                 .unwrap(),
         )
         .await
@@ -726,8 +724,5 @@ async fn test_memory_stats_both_folder_and_label_error() {
     // Verify error response from lines 517-521
     assert_eq!(json["success"], false);
     assert_eq!(json["data"], serde_json::Value::Null);
-    assert_eq!(
-        json["error"],
-        "Cannot specify both folder and label"
-    );
+    assert_eq!(json["error"], "Cannot specify both folder and label");
 }

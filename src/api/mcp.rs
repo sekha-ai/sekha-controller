@@ -21,58 +21,57 @@ use crate::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::{header, Request as HttpRequest};
-    use uuid::Uuid;
-    use chrono::Utc;
-    use serde_json::json;
-    use crate::storage::repository::SearchResult;
-    use crate::storage::repository::MockConversationRepository;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
+    use crate::orchestrator::MemoryOrchestrator;
     use crate::services::embedding_service::EmbeddingService;
     use crate::storage::chroma_client::ChromaClient;
-    use crate::orchestrator::MemoryOrchestrator;
+    use crate::storage::repository::MockConversationRepository;
+    use crate::storage::repository::SearchResult;
     use crate::LlmBridgeClient;
+    use axum::body::Body;
+    use axum::http::{header, Request as HttpRequest};
+    use chrono::Utc;
+    use serde_json::json;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn test_memory_search_executes_formatting() {
         // Create mock repository
         let mut mock_repo = MockConversationRepository::new();
-        
+
         // Setup mock to return search results
-        let mock_results = vec![
-            SearchResult {
-                conversation_id: Uuid::new_v4(),
-                message_id: Uuid::new_v4(),
-                score: 0.95,
-                content: "Test message content".to_string(),
-                label: "Test Label".to_string(),
-                folder: "/test".to_string(),
-                timestamp: Utc::now().naive_utc(),
-                metadata: json!({"key": "value"}),
-            }
-        ];
-        
+        let mock_results = vec![SearchResult {
+            conversation_id: Uuid::new_v4(),
+            message_id: Uuid::new_v4(),
+            score: 0.95,
+            content: "Test message content".to_string(),
+            label: "Test Label".to_string(),
+            folder: "/test".to_string(),
+            timestamp: Utc::now().naive_utc(),
+            metadata: json!({"key": "value"}),
+        }];
+
         mock_repo
             .expect_semantic_search()
             .returning(move |_, _, _| Ok(mock_results.clone()));
-        
+
         // Create AppState with both services
         let config = Arc::new(RwLock::new(Config::default()));
         let repo = Arc::new(mock_repo);
-        
+
         // Create EmbeddingService for AppState
-        let embedding_service = Arc::new(
-            EmbeddingService::new("http://localhost:1".to_string(), "http://localhost:1".to_string())
-        );
-        
+        let embedding_service = Arc::new(EmbeddingService::new(
+            "http://localhost:1".to_string(),
+            "http://localhost:1".to_string(),
+        ));
+
         // Create LlmBridgeClient for Orchestrator
         let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:1".to_string()));
-        
+
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
         let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge));
-        
+
         let state = AppState {
             config,
             repo,
@@ -80,7 +79,7 @@ mod tests {
             embedding_service,
             chroma_client,
         };
-        
+
         // Call memory_search (this executes the formatting code)
         let args = MemorySearchArgs {
             query: "test query".to_string(),
@@ -88,41 +87,42 @@ mod tests {
             limit: Some(10),
             offset: None,
         };
-        
+
         let result = memory_search(
-            McpAuth { token: "Bearer test_key_12345678901234567890123456789012".to_string() },
+            McpAuth {
+                token: "Bearer test_key_12345678901234567890123456789012".to_string(),
+            },
             State(state),
-            Json(args)
-        ).await;
-        
+            Json(args),
+        )
+        .await;
+
         // Verify success
         assert!(result.is_ok());
-        
+
         let response = result.unwrap();
         let json = serde_json::to_value(response.0).unwrap();
-        
+
         // Verify formatted results
         assert!(json["data"]["results"].is_array());
         let results = json["data"]["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["content"], "Test message content");
     }
-    
+
     #[test]
     fn test_format_search_results_for_mcp() {
         // Create test data
-        let search_results = vec![
-            SearchResult {
-                conversation_id: Uuid::new_v4(),
-                message_id: Uuid::new_v4(),
-                score: 0.95,
-                content: "Test message".to_string(),
-                label: "Test Label".to_string(),
-                folder: "/test".to_string(),
-                timestamp: Utc::now().naive_utc(),
-                metadata: json!({"test": "value"}),
-            }
-        ];
+        let search_results = vec![SearchResult {
+            conversation_id: Uuid::new_v4(),
+            message_id: Uuid::new_v4(),
+            score: 0.95,
+            content: "Test message".to_string(),
+            label: "Test Label".to_string(),
+            folder: "/test".to_string(),
+            timestamp: Utc::now().naive_utc(),
+            metadata: json!({"test": "value"}),
+        }];
 
         // EXACT CODE TO COVERAGE (copy-paste from source)
         let results: Vec<Value> = search_results

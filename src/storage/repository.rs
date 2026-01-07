@@ -6,16 +6,16 @@ use sea_orm::{
     prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
     Statement, TransactionTrait, Value,
 };
-use serde_json::Value as JsonValue;
 use serde_json::json;
+use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::init_db;
 use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
 use crate::services::embedding_service::EmbeddingService;
 use crate::storage::chroma_client::ChromaClient;
 use crate::storage::entities::{conversations, messages};
-use crate::init_db;
 
 #[tokio::test]
 async fn test_create_message_with_fts_indexing() {
@@ -73,7 +73,10 @@ async fn test_create_message_with_fts_indexing() {
     assert_eq!(search_results[0].id, msg_id);
 
     // Verify: Metadata was stored correctly
-    assert_eq!(search_results[0].metadata, Some(json!({"test": "metadata"})));
+    assert_eq!(
+        search_results[0].metadata,
+        Some(json!({"test": "metadata"}))
+    );
 }
 
 #[derive(Debug, thiserror::Error)]

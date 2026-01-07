@@ -1,7 +1,7 @@
 use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-use serde_json::json;
 
 #[test]
 fn test_llm_bridge_client_new() {
@@ -82,7 +82,7 @@ fn test_url_construction() {
 async fn test_embed_text_success() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("POST"))
         .and(path("/embed"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -92,7 +92,7 @@ async fn test_embed_text_success() {
         })))
         .mount(&mock_server)
         .await;
-    
+
     let result = client.embed_text("test text", None).await.unwrap();
     assert_eq!(result.len(), 3);
     assert_eq!(result[0], 0.1);
@@ -102,7 +102,7 @@ async fn test_embed_text_success() {
 async fn test_summarize_success() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("POST"))
         .and(path("/summarize"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -113,14 +113,17 @@ async fn test_summarize_success() {
         })))
         .mount(&mock_server)
         .await;
-    
-    let result = client.summarize(
-        vec!["message 1".to_string(), "message 2".to_string()],
-        "brief",
-        None,
-        None
-    ).await.unwrap();
-    
+
+    let result = client
+        .summarize(
+            vec!["message 1".to_string(), "message 2".to_string()],
+            "brief",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
     assert_eq!(result, "Test summary");
 }
 
@@ -128,7 +131,7 @@ async fn test_summarize_success() {
 async fn test_score_importance_success() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("POST"))
         .and(path("/score_importance"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -138,8 +141,11 @@ async fn test_score_importance_success() {
         })))
         .mount(&mock_server)
         .await;
-    
-    let result = client.score_importance("important message", None, None).await.unwrap();
+
+    let result = client
+        .score_importance("important message", None, None)
+        .await
+        .unwrap();
     assert_eq!(result, 0.85);
 }
 
@@ -147,13 +153,13 @@ async fn test_score_importance_success() {
 async fn test_embed_text_api_error() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("POST"))
         .and(path("/embed"))
         .respond_with(ResponseTemplate::new(500).set_body_string("Internal error"))
         .mount(&mock_server)
         .await;
-    
+
     let result = client.embed_text("test", None).await;
     assert!(result.is_err());
 }
@@ -162,13 +168,13 @@ async fn test_embed_text_api_error() {
 async fn test_health_check_success() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("GET"))
         .and(path("/health"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
-    
+
     let result = client.health_check().await.unwrap();
     assert!(result);
 }
@@ -177,13 +183,13 @@ async fn test_health_check_success() {
 async fn test_health_check_failure() {
     let mock_server = MockServer::start().await;
     let client = LlmBridgeClient::new(mock_server.uri());
-    
+
     Mock::given(method("GET"))
         .and(path("/health"))
         .respond_with(ResponseTemplate::new(503))
         .mount(&mock_server)
         .await;
-    
+
     let result = client.health_check().await.unwrap();
     assert!(!result);
 }

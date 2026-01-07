@@ -1,18 +1,18 @@
-use sekha_controller::api::routes::{create_router, AppState};
-use sekha_controller::api::dto::*;
-use sekha_controller::config::Config;
-use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
-use sekha_controller::storage::chroma_client::ChromaClient;
-use sekha_controller::services::embedding_service::EmbeddingService;
-use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
-use sekha_controller::orchestrator::MemoryOrchestrator;
-use sekha_controller::models::internal::{NewConversation, NewMessage};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use tower::ServiceExt;
+use sekha_controller::api::dto::*;
+use sekha_controller::api::routes::{create_router, AppState};
+use sekha_controller::config::Config;
+use sekha_controller::models::internal::{NewConversation, NewMessage};
+use sekha_controller::orchestrator::MemoryOrchestrator;
+use sekha_controller::services::embedding_service::EmbeddingService;
+use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+use sekha_controller::storage::chroma_client::ChromaClient;
+use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::json;
+use tower::ServiceExt;
 use uuid::Uuid;
 
 async fn create_test_app() -> AppState {
@@ -33,16 +33,20 @@ async fn create_test_app() -> AppState {
         embedding_model: "nomic-embed-text:latest".to_string(),
         summarization_model: "llama3.1:8b".to_string(),
     }));
-    
+
     let db = init_db("sqlite::memory:").await.unwrap();
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let embedding_service = Arc::new(EmbeddingService::new(
         "http://localhost:11434".to_string(),
         "http://localhost:8000".to_string(),
     ));
-    let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma.clone(), embedding_service.clone()));
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma.clone(),
+        embedding_service.clone(),
+    ));
     let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
-    
+
     AppState {
         config,
         repo: repo.clone(),
@@ -55,7 +59,7 @@ async fn create_test_app() -> AppState {
 #[tokio::test]
 async fn test_list_conversations_with_label_filter() {
     let state = create_test_app().await;
-    
+
     // Create conversation with specific label
     let conv = NewConversation {
         id: None,
@@ -75,7 +79,7 @@ async fn test_list_conversations_with_label_filter() {
         }],
     };
     state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
     let response = router
         .oneshot(
@@ -87,7 +91,7 @@ async fn test_list_conversations_with_label_filter() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -95,7 +99,7 @@ async fn test_list_conversations_with_label_filter() {
 async fn test_list_conversations_with_all_filters() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -106,7 +110,7 @@ async fn test_list_conversations_with_all_filters() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -114,7 +118,7 @@ async fn test_list_conversations_with_all_filters() {
 async fn test_count_conversations_both_params_error() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -125,7 +129,7 @@ async fn test_count_conversations_both_params_error() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -134,7 +138,7 @@ async fn test_get_conversation_not_found() {
     let state = create_test_app().await;
     let router = create_router(state);
     let fake_id = Uuid::new_v4();
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -145,7 +149,7 @@ async fn test_get_conversation_not_found() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
@@ -154,7 +158,7 @@ async fn test_delete_conversation_not_found() {
     let state = create_test_app().await;
     let router = create_router(state);
     let fake_id = Uuid::new_v4();
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -165,7 +169,7 @@ async fn test_delete_conversation_not_found() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
@@ -173,7 +177,7 @@ async fn test_delete_conversation_not_found() {
 async fn test_health_endpoint() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -184,15 +188,17 @@ async fn test_health_endpoint() {
         )
         .await
         .unwrap();
-    
+
     // May be 200 or 503 depending on services
-    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE
+    );
 }
 
 #[tokio::test]
 async fn test_update_conversation_folder() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -211,7 +217,7 @@ async fn test_update_conversation_folder() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
     let response = router
         .oneshot(
@@ -224,14 +230,14 @@ async fn test_update_conversation_folder() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_pin_conversation() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -250,7 +256,7 @@ async fn test_pin_conversation() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
     let response = router
         .oneshot(
@@ -262,14 +268,14 @@ async fn test_pin_conversation() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_archive_conversation() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -288,7 +294,7 @@ async fn test_archive_conversation() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
     let response = router
         .oneshot(
@@ -300,7 +306,7 @@ async fn test_archive_conversation() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -308,7 +314,7 @@ async fn test_archive_conversation() {
 async fn test_rebuild_embeddings() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -319,7 +325,7 @@ async fn test_rebuild_embeddings() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::ACCEPTED);
 }
 
@@ -327,7 +333,7 @@ async fn test_rebuild_embeddings() {
 async fn test_full_text_search() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -339,7 +345,7 @@ async fn test_full_text_search() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -347,26 +353,28 @@ async fn test_full_text_search() {
 async fn test_assemble_context() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/context/assemble")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"query":"test query","preferred_labels":[],"context_budget":5}"#))
+                .body(Body::from(
+                    r#"{"query":"test query","preferred_labels":[],"context_budget":5}"#,
+                ))
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert!(response.status().is_success() || response.status().is_server_error());
 }
 
 #[tokio::test]
 async fn test_generate_summary() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -385,21 +393,24 @@ async fn test_generate_summary() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/summarize")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"conversation_id":"{}","level":"daily"}}"#, conv_id)))
+                .body(Body::from(format!(
+                    r#"{{"conversation_id":"{}","level":"daily"}}"#,
+                    conv_id
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert!(response.status().is_success() || response.status().is_server_error());
 }
 
@@ -408,19 +419,22 @@ async fn test_generate_summary_invalid_level() {
     let state = create_test_app().await;
     let router = create_router(state);
     let conv_id = Uuid::new_v4();
-    
+
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/summarize")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"conversation_id":"{}","level":"invalid"}}"#, conv_id)))
+                .body(Body::from(format!(
+                    r#"{{"conversation_id":"{}","level":"invalid"}}"#,
+                    conv_id
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
@@ -428,7 +442,7 @@ async fn test_generate_summary_invalid_level() {
 async fn test_prune_dry_run() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -440,14 +454,14 @@ async fn test_prune_dry_run() {
         )
         .await
         .unwrap();
-    
+
     assert!(response.status().is_success() || response.status().is_server_error());
 }
 
 #[tokio::test]
 async fn test_prune_execute() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -466,28 +480,31 @@ async fn test_prune_execute() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/prune/execute")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"conversation_ids":["{}"]}}"#, conv_id)))
+                .body(Body::from(format!(
+                    r#"{{"conversation_ids":["{}"]}}"#,
+                    conv_id
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_suggest_labels() {
     let state = create_test_app().await;
-    
+
     let conv = NewConversation {
         id: None,
         label: "Test".to_string(),
@@ -506,21 +523,24 @@ async fn test_suggest_labels() {
         }],
     };
     let conv_id = state.repo.create_with_messages(conv).await.unwrap();
-    
+
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/labels/suggest")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"conversation_id":"{}"}}"#, conv_id)))
+                .body(Body::from(format!(
+                    r#"{{"conversation_id":"{}"}}"#,
+                    conv_id
+                )))
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert!(response.status().is_success() || response.status().is_server_error());
 }
 
@@ -529,7 +549,7 @@ async fn test_update_folder_not_found() {
     let state = create_test_app().await;
     let router = create_router(state);
     let fake_id = Uuid::new_v4();
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -541,7 +561,7 @@ async fn test_update_folder_not_found() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
@@ -549,7 +569,7 @@ async fn test_update_folder_not_found() {
 async fn test_semantic_query_with_results() {
     let state = create_test_app().await;
     let router = create_router(state);
-    
+
     let response = router
         .oneshot(
             Request::builder()
@@ -561,6 +581,6 @@ async fn test_semantic_query_with_results() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }

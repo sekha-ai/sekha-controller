@@ -23,11 +23,11 @@ use tokio::sync::RwLock;
 // Public modules (test files)
 // ============================================
 pub mod api;
+pub mod concurrency;
+pub mod file_watcher;
 pub mod mcp;
 pub mod orchestrator;
 pub mod repository;
-pub mod file_watcher;
-pub mod concurrency;
 // pub mod search;
 
 // ============================================

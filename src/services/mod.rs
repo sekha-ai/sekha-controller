@@ -5,8 +5,8 @@ pub mod file_watcher;
 pub mod llm_bridge_client;
 
 // Re-export for convenience
-pub use embedding_queue::EmbeddingJob;
 pub use embedding_provider::{EmbeddingProvider, MockProvider, OllamaProvider};
+pub use embedding_queue::EmbeddingJob;
 pub use embedding_service::EmbeddingService;
 pub use llm_bridge_client::LlmBridgeClient;
 

@@ -1,8 +1,8 @@
 // src/services/embedding_service.rs
 //! Embedding service with provider abstraction
 
+use crate::services::embedding_provider::{EmbeddingProvider, OllamaProvider, ProviderError};
 use crate::storage::chroma_client::ChromaClient;
-use crate::services::embedding_provider::{EmbeddingProvider, ProviderError, OllamaProvider};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::AcquireError;
@@ -48,7 +48,7 @@ impl EmbeddingService {
             ollama_url,
             "nomic-embed-text:latest".to_string(),
         ));
-        
+
         let chroma = Arc::new(ChromaClient::new(chroma_url));
         let semaphore = Arc::new(Semaphore::new(5));
         let max_retries = 3;
@@ -178,8 +178,10 @@ impl EmbeddingService {
     /// Generate embedding using configured provider
     pub async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
         let _permit = self.semaphore.acquire().await?;
-        
-        self.provider.generate_embedding(content).await
+
+        self.provider
+            .generate_embedding(content)
+            .await
             .map_err(|e| EmbeddingError::ProviderError(e.to_string()))
     }
 
@@ -190,7 +192,7 @@ impl EmbeddingService {
         max_retries: u32,
     ) -> Result<Vec<f32>, EmbeddingError> {
         let mut last_error = None;
-        
+
         for attempt in 0..max_retries {
             match self.provider.generate_embedding(content).await {
                 Ok(embedding) => return Ok(embedding),
@@ -200,7 +202,7 @@ impl EmbeddingService {
                 }
                 Err(e) => {
                     last_error = Some(EmbeddingError::ProviderError(e.to_string()));
-                    
+
                     // Exponential backoff (except on last attempt)
                     if attempt < max_retries - 1 {
                         sleep(Duration::from_millis(100 * (2_u64.pow(attempt)))).await;
@@ -208,7 +210,7 @@ impl EmbeddingService {
                 }
             }
         }
-        
+
         Err(EmbeddingError::MaxRetriesExceeded)
     }
 
@@ -219,23 +221,23 @@ impl EmbeddingService {
         batch_size: usize,
     ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         let mut all_embeddings = Vec::new();
-        
+
         for chunk in texts.chunks(batch_size) {
             // Process batch concurrently
             let mut batch_futures = Vec::new();
-            
+
             for text in chunk {
                 batch_futures.push(self.generate_embedding(text));
             }
-            
+
             let batch_results = futures::future::join_all(batch_futures).await;
-            
+
             // Collect results, failing if any individual embedding fails
             for result in batch_results {
                 all_embeddings.push(result?);
             }
         }
-        
+
         Ok(all_embeddings)
     }
 
@@ -268,10 +270,13 @@ mod tests {
     #[tokio::test]
     async fn test_generate_embedding_with_retry_success() {
         let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
-        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
-        
-        let result = service.generate_embedding_with_retry("test content", 3).await;
-        
+        let service =
+            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+
+        let result = service
+            .generate_embedding_with_retry("test content", 3)
+            .await;
+
         assert!(result.is_ok());
         let embedding = result.unwrap();
         assert_eq!(embedding.len(), 768);
@@ -279,22 +284,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_embedding_error() {
-        let provider = Arc::new(MockProvider::new_error(
-            ProviderError::NoEmbeddings
-        ));
-        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
-        
+        let provider = Arc::new(MockProvider::new_error(ProviderError::NoEmbeddings));
+        let service =
+            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+
         let result = service.generate_embedding("test").await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_generate_embedding_with_retry_exhaustion() {
-        let provider = Arc::new(MockProvider::new_error(
-            ProviderError::Http("Connection failed".to_string())
-        ));
-        let service = EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
-        
+        let provider = Arc::new(MockProvider::new_error(ProviderError::Http(
+            "Connection failed".to_string(),
+        )));
+        let service =
+            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+
         let result = service.generate_embedding_with_retry("test", 2).await;
         assert!(result.is_err());
     }
