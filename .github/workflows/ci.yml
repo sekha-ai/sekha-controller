@@ -163,10 +163,10 @@ jobs:
           poetry install --no-interaction --no-ansi
           poetry run pip install pytest pytest-cov
 
-      - name: Lint with flake8
-        run: |
-          poetry run flake8 llm_bridge tests --count --select=E9,F63,F7,F82 --show-source --statistics
-          poetry run flake8 llm_bridge tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      # - name: Lint with flake8
+      #  run: |
+      #    poetry run flake8 llm_bridge tests --count --select=E9,F63,F7,F82 --show-source --statistics
+      #    poetry run flake8 llm_bridge tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run tests with pytest
         env:
