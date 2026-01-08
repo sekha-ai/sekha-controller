@@ -2,6 +2,7 @@ codecov:
   require_ci_to_pass: yes
   notify:
     wait_for_ci: yes
+  token: ef9182f2-2603-43c3-93b4-771ed2ad978b  
 
 coverage:
   precision: 2
@@ -40,4 +41,4 @@ flags:
   llm-bridge-tests:
     paths:
       - llm_bridge/
-    carryforward: true
+    carryforward: true    
