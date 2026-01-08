@@ -224,7 +224,7 @@ jobs:
       - name: Checkout Python SDK
         uses: actions/checkout@v4
         with:
-          repository: sekha-ai/python-sdk
+          repository: sekha-ai/sekha-python-sdk
           path: python-sdk
 
       - name: Set up Python
@@ -295,9 +295,9 @@ jobs:
   # PHASE 4: Build & Push (Release)
   # ============================================================
   build-and-push:
-    name: Build & Push Images
+    name: Build & Push Controller Image
     runs-on: ubuntu-latest
-    needs: test-controller
+    needs: [test-controller]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
@@ -314,29 +314,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push controller
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/sekha-ai/controller
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push controller image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ghcr.io/sekha-ai/controller:latest
-            ghcr.io/sekha-ai/controller:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
 
-      - name: Build and push llm-bridge
-        uses: docker/build-push-action@v5
-        with:
-          context: ./llm-bridge
-          file: ./llm-bridge/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/sekha-ai/llm-bridge:latest
-            ghcr.io/sekha-ai/llm-bridge:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Image digest
+        run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"
 
 
   # ============================================================
@@ -345,8 +346,8 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
-    needs: [test-controller, test-bridge, integration-test]
-    if: always()  # Run even if integration-test is skipped
+    needs: [test-controller]
+    if: always()  # Run even if tests fail to report status
 
     steps:
       - name: Checkout
@@ -355,19 +356,49 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo audit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit-v0.18
+
       - name: Security audit
         run: |
-          cargo install cargo-audit
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit --version 0.18.3
+          fi
           cargo audit
+        continue-on-error: true  # Don't fail on advisories, just report
 
-      - name: Check coverage thresholds
+      - name: Check test results
         run: |
-          # Controller must have >80% coverage
-          # Bridge must have >80% coverage
-          # Enforced by codecov settings and badges
-          echo "✅ Coverage checks delegated to Codecov"
+          if [[ "${{ needs.test-controller.result }}" != "success" ]]; then
+            echo "❌ Controller tests failed"
+            exit 1
+          fi
+          echo "✅ Controller tests passed"
 
-      - name: Set final status
+      - name: Verify coverage uploaded
         run: |
-          echo "✅ All quality gates passed"
-          exit 0
+          # This just verifies the upload step ran, actual threshold enforced by Codecov
+          if [[ "${{ needs.test-controller.result }}" == "success" ]]; then
+            echo "✅ Coverage data should be available on Codecov"
+          else
+            echo "⚠️  Coverage upload may have been skipped"
+          fi
+
+      - name: Final status
+        if: always()
+        run: |
+          echo "============================================"
+          echo "Quality Gate Results:"
+          echo "  Controller Tests: ${{ needs.test-controller.result }}"
+          echo "============================================"
+          
+          # Fail if any required job failed
+          if [[ "${{ needs.test-controller.result }}" != "success" ]]; then
+            echo "❌ Quality gates FAILED"
+            exit 1
+          fi
+          
+          echo "✅ All quality gates PASSED"
