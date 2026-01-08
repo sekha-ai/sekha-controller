@@ -341,30 +341,29 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn count_by_folder(&self, folder: &str) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::conversations;  // ✅ Use entity, not internal model
+        use crate::storage::entities::conversations; // ✅ Use entity, not internal model
         use sea_orm::{EntityTrait, QueryFilter};
-        
+
         let count = conversations::Entity::find()
             .filter(conversations::Column::Folder.eq(folder))
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;  // ✅ Correct error variant
-        
+            .map_err(|e| RepositoryError::DbError(e))?; // ✅ Correct error variant
+
         Ok(count)
     }
 
     async fn count_all(&self) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::conversations;  // ✅ Use entity, not internal model
+        use crate::storage::entities::conversations; // ✅ Use entity, not internal model
         use sea_orm::EntityTrait;
-        
+
         let count = conversations::Entity::find()
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;  // ✅ Correct error variant
-        
+            .map_err(|e| RepositoryError::DbError(e))?; // ✅ Correct error variant
+
         Ok(count)
     }
-
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Conversation>, RepositoryError> {
         let model = conversations::Entity::find_by_id(id).one(&self.db).await?;

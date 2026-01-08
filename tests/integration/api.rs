@@ -345,7 +345,7 @@ async fn test_json_serialization_edge_cases() {
 #[tokio::test]
 async fn test_count_conversations_by_folder() {
     let app = create_test_app().await;
-    
+
     // Create conversations in different folders
     for i in 0..3 {
         app.clone()
@@ -363,7 +363,7 @@ async fn test_count_conversations_by_folder() {
             .await
             .unwrap();
     }
-    
+
     // Create one in different folder
     app.clone()
         .oneshot(
@@ -378,7 +378,7 @@ async fn test_count_conversations_by_folder() {
         )
         .await
         .unwrap();
-    
+
     // Count by folder
     let response = app
         .oneshot(
@@ -390,19 +390,21 @@ async fn test_count_conversations_by_folder() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["count"], 3);
 }
 
 #[tokio::test]
 async fn test_count_conversations_no_filters() {
     let app = create_test_app().await;
-    
+
     // Create several conversations
     for i in 0..5 {
         app.clone()
@@ -420,7 +422,7 @@ async fn test_count_conversations_no_filters() {
             .await
             .unwrap();
     }
-    
+
     // Count all - no filters (covers lines 540-541)
     let response = app
         .oneshot(
@@ -432,19 +434,21 @@ async fn test_count_conversations_no_filters() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert!(json["count"].as_u64().unwrap() >= 5);
 }
 
 #[tokio::test]
 async fn test_count_conversations_by_label() {
     let app = create_test_app().await;
-    
+
     // Create conversations with same label
     for _ in 0..2 {
         app.clone()
@@ -461,7 +465,7 @@ async fn test_count_conversations_by_label() {
             .await
             .unwrap();
     }
-    
+
     // Count by label (covers lines 599-600)
     let response = app
         .oneshot(
@@ -473,12 +477,14 @@ async fn test_count_conversations_by_label() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["count"], 2);
 }
 
@@ -489,7 +495,7 @@ async fn test_count_conversations_by_label() {
 #[tokio::test]
 async fn test_list_conversations_with_archived_filter() {
     let app = create_test_app().await;
-    
+
     // Create and archive a conversation
     let create_response = app.clone()
         .oneshot(
@@ -504,11 +510,13 @@ async fn test_list_conversations_with_archived_filter() {
         )
         .await
         .unwrap();
-    
-    let body = axum::body::to_bytes(create_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(create_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["id"].as_str().unwrap();
-    
+
     // Archive it (you'll need to implement update_status or use label endpoint)
     // For now, test the filter parameter (covers line 606)
     let response = app
@@ -521,14 +529,14 @@ async fn test_list_conversations_with_archived_filter() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_list_conversations_with_pinned_filter() {
     let app = create_test_app().await;
-    
+
     // Test pinned filter (covers filter building logic)
     let response = app
         .oneshot(
@@ -540,7 +548,7 @@ async fn test_list_conversations_with_pinned_filter() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -551,7 +559,7 @@ async fn test_list_conversations_with_pinned_filter() {
 #[tokio::test]
 async fn test_delete_conversation_covers_error_paths() {
     let app = create_test_app().await;
-    
+
     // Create a conversation
     let create_response = app.clone()
         .oneshot(
@@ -566,11 +574,13 @@ async fn test_delete_conversation_covers_error_paths() {
         )
         .await
         .unwrap();
-    
-    let body = axum::body::to_bytes(create_response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(create_response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let conv_id = json["id"].as_str().unwrap();
-    
+
     // Delete it
     let response = app
         .oneshot(
@@ -582,12 +592,12 @@ async fn test_delete_conversation_covers_error_paths() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     // Try to delete again - should get 404 (covers error paths)
     let app = create_test_app().await; // New app for clean state
-    
+
     let fake_id = "00000000-0000-0000-0000-000000000000";
     let response = app
         .oneshot(
@@ -599,14 +609,14 @@ async fn test_delete_conversation_covers_error_paths() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_count_conversations_both_filters_error() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -617,12 +627,14 @@ async fn test_count_conversations_both_filters_error() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(json["count"], 0);
     assert_eq!(json["error"], "Cannot specify both label and folder");
 }
@@ -631,7 +643,7 @@ async fn test_count_conversations_both_filters_error() {
 #[tokio::test]
 async fn test_list_conversations_archived_filter() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -642,7 +654,7 @@ async fn test_list_conversations_archived_filter() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -650,7 +662,7 @@ async fn test_list_conversations_archived_filter() {
 #[tokio::test]
 async fn test_list_conversations_pinned_filter() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -661,6 +673,6 @@ async fn test_list_conversations_pinned_filter() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
 }

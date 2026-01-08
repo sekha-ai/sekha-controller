@@ -375,8 +375,8 @@ pub async fn count_conversations(
 
     let count = match (&params.label, &params.folder) {
         (Some(label), None) => state.repo.count_by_label(label).await,
-        (None, Some(folder)) => state.repo.count_by_folder(folder).await,  // ✅ CHANGED
-        (None, None) => state.repo.count_all().await,  // ✅ CHANGED
+        (None, Some(folder)) => state.repo.count_by_folder(folder).await, // ✅ CHANGED
+        (None, None) => state.repo.count_all().await,                     // ✅ CHANGED
         (Some(_), Some(_)) => {
             return Ok(Json(serde_json::json!({
                 "count": 0,
@@ -395,7 +395,6 @@ pub async fn count_conversations(
         "folder": folder_for_response
     })))
 }
-
 
 // ============================================
 // Endpoint 7: POST /api/v1/query
