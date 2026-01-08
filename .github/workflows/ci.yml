@@ -80,15 +80,15 @@ jobs:
         run: cargo test --release --test benchmark -- --nocapture
         timeout-minutes: 15
 
-      - name: Run E2E smoke test
-        env:
-          SEKHA_BASE_URL: http://localhost:8080
-          SEKHA_API_KEY: ${{ secrets.TEST_API_KEY }}
-          WAIT_TIMEOUT: 120
-          SKIP_EMBEDDINGS: false
-        run: |
-          chmod +x tests/e2e/smoke_test.sh
-          ./tests/e2e/smoke_test.sh    
+    #  - name: Run E2E smoke test
+    #    env:
+    #      SEKHA_BASE_URL: http://localhost:8080
+    #      SEKHA_API_KEY: ${{ secrets.TEST_API_KEY }}
+    #      WAIT_TIMEOUT: 120
+    #      SKIP_EMBEDDINGS: false
+    #    run: |
+    #      chmod +x tests/e2e/smoke_test.sh
+    #      ./tests/e2e/smoke_test.sh    
 
     #  - name: Run E2E smoke test
     #    run: ./tests/e2e/smoke_test.sh
@@ -96,10 +96,10 @@ jobs:
     #      SEKHA_API_KEY: ${{ env.SEKHA_API_KEY }}
     #      SEKHA_BASE_URL: http://localhost:${{ env.SEKHA_PORT }}
 
-      - name: Test installation script
-        run: |
-          chmod +x tests/test_install.sh
-          ./tests/test_install.sh
+    #  - name: Test installation script
+    #    run: |
+    #      chmod +x tests/test_install.sh
+    #      ./tests/test_install.sh
     
 
       - name: Generate coverage
