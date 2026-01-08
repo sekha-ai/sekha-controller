@@ -77,7 +77,7 @@ jobs:
         run: cargo test --test api_test --all-features --verbose
 
       - name: Run 1M message benchmark
-        run: cargo test --release --test insert_1m_messages -- --nocapture
+        run: cargo test --release --test benchmark -- --nocapture
         timeout-minutes: 15
 
       - name: Run E2E smoke test
