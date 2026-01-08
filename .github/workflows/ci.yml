@@ -128,7 +128,7 @@ jobs:
       - name: Checkout llm-bridge
         uses: actions/checkout@v4
         with:
-          repository: sekha-ai/llm-bridge
+          repository: sekha-ai/sekha-llm-bridge
 
       - name: Set up Python
         uses: actions/setup-python@v4
