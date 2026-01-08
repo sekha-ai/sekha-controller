@@ -4,8 +4,11 @@
 
 > Your conversations are your intellectual property. Memory should be sovereign, not rented. Simplicity is a feature, not a compromise.
 
-[![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![CI Status](https://github.com/sekha-ai/sekha-controller/workflows/CI%20-%20Master%20Orchestrator/badge.svg)](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sekha-ai/sekha-controller/branch/main/graph/badge.svg?token=YOUR_TOKEN_HERE)](https://codecov.io/gh/sekha-ai/sekha-controller)
+[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://github.com/sekha-ai/sekha-controller/pkgs/container/controller)
 [![API Docs](https://img.shields.io/badge/API-Reference-blue)](https://sekha-ai.github.io/sekha-controller)
 [![GitHub Actions](https://github.com/sekha-ai/sekha-controller/workflows/CI/badge.svg)](https://github.com/sekha-ai/sekha-controller/actions)
 

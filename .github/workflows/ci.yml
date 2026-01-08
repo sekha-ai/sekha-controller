@@ -33,11 +33,6 @@ jobs:
         image: chromadb/chroma:latest
         ports:
           - 8000:8000
-        options: >-
-          --health-cmd="curl -f http://localhost:8000/api/v1/heartbeat"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
       redis:
         image: redis:7-alpine
         ports:
@@ -99,15 +94,17 @@ jobs:
 
       - name: Generate coverage
         run: |
-          cargo install cargo-tarpaulin --version 0.27.0
-          cargo tarpaulin --out Xml --output-dir ./coverage
+          cargo install cargo-tarpaulin --locked
+          cargo tarpaulin --out Xml --output-dir ./coverage --all-features
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
-          file: ./coverage/cobertura.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/cobertura.xml
           flags: controller-tests
           name: sekha-controller
+          fail_ci_if_error: true
 
 
   # ============================================================
