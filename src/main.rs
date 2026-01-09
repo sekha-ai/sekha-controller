@@ -1,5 +1,5 @@
 use axum::{middleware, Router};
-use dotenv;
+use dotenvy;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -185,7 +185,7 @@ async fn run_setup() -> anyhow::Result<()> {
 }
 
 async fn start_server(port: u16) -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     // Initialize tracing
     tracing_subscriber::registry()

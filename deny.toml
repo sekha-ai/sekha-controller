@@ -1,0 +1,35 @@
+# cargo-deny configuration
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+# Ignore unfixable transitive dependencies
+ignore = [
+    "RUSTSEC-2023-0071",  # rsa: Transitive from sea-orm->sqlx-mysql (compile-time only)
+    "RUSTSEC-2025-0134",  # rustls-pemfile: From chromadb->reqwest (waiting for upstream)
+    "RUSTSEC-2025-0069",  # daemonize` is Unmaintained
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []

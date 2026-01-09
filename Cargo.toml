@@ -44,7 +44,7 @@ serde_json = "1.0"
 
 # Configuration
 config = "0.15.19"
-dotenv = "0.15.0"
+dotenvy = "0.15.0"
 
 # File watching
 notify = "8.2.0"
@@ -96,7 +96,7 @@ sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
     "with-uuid",
     "with-bigdecimal",
     "with-time",
-    # Removed: with-bigdecimal, with-rust_decimal, with-time
+    # Removed: with-rust_decimal,
 ] }
 
 sea-orm-migration = { version = "=2.0.0-rc.22", default-features = false }

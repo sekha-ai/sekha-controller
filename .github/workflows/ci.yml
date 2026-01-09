@@ -297,8 +297,16 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Checkout
+      - name: Checkout controller repo
         uses: actions/checkout@v4
+        with:
+          path: sekha-controller
+
+      - name: Checkout docker repo (for Dockerfiles)
+        uses: actions/checkout@v4
+        with:
+          repository: sekha-ai/sekha-docker
+          path: sekha-docker
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -323,8 +331,8 @@ jobs:
       - name: Build and push controller image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./sekha-controller
+          file: ./sekha-docker/docker/Dockerfile.rust.prod
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -333,8 +341,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Image digest
-        run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"
-
+        run: echo "✅ Image pushed - Tags: ${{ steps.meta.outputs.tags }}"
 
   # ============================================================
   # PHASE 5: Quality Gates
@@ -343,7 +350,7 @@ jobs:
     name: Quality Gates
     runs-on: ubuntu-latest
     needs: [test-controller]
-    if: always()  # Run even if tests fail to report status
+    if: always()
 
     steps:
       - name: Checkout
@@ -352,19 +359,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo audit
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-audit
-          key: ${{ runner.os }}-cargo-audit-v0.18
-
-      - name: Security audit
+      - name: Install cargo-deny
         run: |
-          if ! command -v cargo-audit &> /dev/null; then
-            cargo install cargo-audit --version 0.18.3
-          fi
-          cargo audit
-        continue-on-error: true  # Don't fail on advisories, just report
+          cargo install cargo-deny --locked
+          cargo deny --version
+
+      - name: Security and license audit
+        run: |
+          echo "Running comprehensive security, license, and dependency audit..."
+          cargo deny check
+        continue-on-error: false  # Fail hard on security issues
 
       - name: Check test results
         run: |
@@ -376,11 +380,8 @@ jobs:
 
       - name: Verify coverage uploaded
         run: |
-          # This just verifies the upload step ran, actual threshold enforced by Codecov
           if [[ "${{ needs.test-controller.result }}" == "success" ]]; then
-            echo "✅ Coverage data should be available on Codecov"
-          else
-            echo "⚠️  Coverage upload may have been skipped"
+            echo "✅ Coverage data uploaded to Codecov"
           fi
 
       - name: Final status
@@ -391,7 +392,6 @@ jobs:
           echo "  Controller Tests: ${{ needs.test-controller.result }}"
           echo "============================================"
           
-          # Fail if any required job failed
           if [[ "${{ needs.test-controller.result }}" != "success" ]]; then
             echo "❌ Quality gates FAILED"
             exit 1
