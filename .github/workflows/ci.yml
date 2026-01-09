@@ -108,14 +108,10 @@ jobs:
           cargo tarpaulin --out Xml --output-dir ./coverage --all-features
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/cobertura.xml
-          flags: controller-tests
-          name: sekha-controller
-          fail_ci_if_error: true
-
+          slug: sekha-ai/sekha-controller
 
   # ============================================================
   # PHASE 2: Test LLM Bridge
