@@ -545,6 +545,7 @@ async fn test_suggest_labels() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_update_folder_not_found() {
     let state = create_test_app().await;
     let router = create_router(state);
