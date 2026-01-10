@@ -147,6 +147,8 @@ pub struct ContextAssembleRequest {
     pub query: String,
     pub preferred_labels: Vec<String>,
     pub context_budget: usize,
+    #[serde(default)]  // ← Optional, defaults to empty vec
+    pub excluded_folders: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]

@@ -20,6 +20,7 @@ impl ContextAssembler {
         query: &str,
         preferred_labels: Vec<String>,
         context_budget: usize,
+        excluded_folders: Vec<String>,
     ) -> Result<Vec<Message>, RepositoryError> {
         // Phase 1: Recall - Get candidate messages
         let candidates = self.recall_candidates(query, &preferred_labels).await?;
@@ -43,12 +44,16 @@ impl ContextAssembler {
         &self,
         query: &str,
         preferred_labels: &[String],
+        excluded_folders: &[String],
     ) -> Result<Vec<CandidateMessage>, RepositoryError> {
         let mut candidates = Vec::new();
 
         // 1. Semantic search from Chroma (top 200)
         let semantic_results = self.repo.semantic_search(query, 200, None).await?;
         for result in semantic_results {
+            if excluded_folders.iter().any(|folder| result.folder.starts_with(folder)) {
+                continue;  // Skip excluded conversations
+            }
             candidates.push(CandidateMessage {
                 message_id: result.message_id,
                 conversation_id: result.conversation_id,

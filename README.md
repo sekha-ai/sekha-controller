@@ -37,6 +37,17 @@ Sekha gives AI **persistent, searchable, infinite memory** - like a second brain
 - 🏥 **Healthcare**: Patient history tracking with perfect recall (HIPAA-ready architecture)
 - 💡 **Creative Work**: Brainstorming partner that remembers every idea, draft, and iteration
 
+**For important things that actually need to be completed. For problems that actually need to be solved.**
+
+Sekha is NOT:
+A chatbot
+An LLM
+An agent framework
+Sekha IS:
+A memory protocol layer
+Sits BETWEEN user/agent and LLM
+Captures, organizes, retrieves context
+Makes infinite context windows possible
 ---
 
 ## ✨ **Key Features**

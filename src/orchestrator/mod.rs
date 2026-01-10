@@ -46,9 +46,10 @@ impl MemoryOrchestrator {
         query: &str,
         preferred_labels: Vec<String>,
         context_budget: usize,
+        excluded_folders: Vec<String>,
     ) -> Result<Vec<Message>, RepositoryError> {
         self.context_assembler
-            .assemble(query, preferred_labels, context_budget)
+            .assemble(query, preferred_labels, context_budget, excluded_folders)
             .await
     }
 
