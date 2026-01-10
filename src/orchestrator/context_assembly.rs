@@ -23,7 +23,7 @@ impl ContextAssembler {
         excluded_folders: Vec<String>,
     ) -> Result<Vec<Message>, RepositoryError> {
         // Phase 1: Recall - Get candidate messages
-        let candidates = self.recall_candidates(query, &preferred_labels).await?;
+        let candidates = self.recall_candidates(query, &preferred_labels, &excluded_folders).await?;
 
         // Phase 2: Ranking - Score each candidate
         let mut ranked = self
