@@ -23,7 +23,9 @@ impl ContextAssembler {
         excluded_folders: Vec<String>,
     ) -> Result<Vec<Message>, RepositoryError> {
         // Phase 1: Recall - Get candidate messages
-        let candidates = self.recall_candidates(query, &preferred_labels, &excluded_folders).await?;
+        let candidates = self
+            .recall_candidates(query, &preferred_labels, &excluded_folders)
+            .await?;
 
         // Phase 2: Ranking - Score each candidate
         let mut ranked = self
@@ -51,8 +53,11 @@ impl ContextAssembler {
         // 1. Semantic search from Chroma (top 200)
         let semantic_results = self.repo.semantic_search(query, 200, None).await?;
         for result in semantic_results {
-            if excluded_folders.iter().any(|folder| result.folder.starts_with(folder)) {
-                continue;  // Skip excluded conversations
+            if excluded_folders
+                .iter()
+                .any(|folder| result.folder.starts_with(folder))
+            {
+                continue; // Skip excluded conversations
             }
             candidates.push(CandidateMessage {
                 message_id: result.message_id,

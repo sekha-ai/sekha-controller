@@ -711,7 +711,12 @@ async fn assemble_context(
 ) -> Result<Json<Vec<Message>>, (StatusCode, Json<ErrorResponse>)> {
     let results = state
         .orchestrator
-        .assemble_context(&req.query, req.preferred_labels, req.context_budget, req.excluded_folders)
+        .assemble_context(
+            &req.query,
+            req.preferred_labels,
+            req.context_budget,
+            req.excluded_folders,
+        )
         .await
         .map_err(|e| {
             (

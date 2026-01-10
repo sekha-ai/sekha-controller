@@ -40,14 +40,16 @@ Sekha gives AI **persistent, searchable, infinite memory** - like a second brain
 **For important things that actually need to be completed. For problems that actually need to be solved.**
 
 Sekha is NOT:
-A chatbot
-An LLM
-An agent framework
+- A chatbot
+- An LLM
+- An agent framework
+
 Sekha IS:
-A memory protocol layer
-Sits BETWEEN user/agent and LLM
-Captures, organizes, retrieves context
-Makes infinite context windows possible
+- A memory protocol layer
+- Sits BETWEEN user/agent and LLM
+- Captures, organizes, retrieves context
+- Makes infinite context windows possible
+
 ---
 
 ## ✨ **Key Features**
@@ -659,19 +661,12 @@ Contributing
 We are seeking contributors! 
 
 How to Contribute:
-
 Check open issues
-
 Fork the repo and create a feature branch
-
 Write tests for new functionality
-
 Ensure cargo test passes with 80%+ coverage
-
 Run cargo fmt and cargo clippy
-
 Submit a pull request
-
 See CONTRIBUTING.md for detailed guidelines.
 
 Code Quality Standards
@@ -723,70 +718,46 @@ Local-First Architecture
 By default, all data stays on your machine:
 
 SQLite database: ~/.sekha/data/sekha.db
-
 ChromaDB vectors: Docker volume or local directory
-
-No telemetry, no phone-home, no analytics
+No telemetry, no phone-home, no analytics (opt-in only)
 
 Self-Hosted Deployment
 Full control over your infrastructure:
 
 Deploy on your own servers
-
 Use your own LLMs (Ollama, vLLM, custom)
-
 Air-gapped environments supported
 
 GDPR/HIPAA-ready architecture
-
 Security Features
 Bearer token authentication
-
 Rate limiting (per-IP, configurable)
-
 CORS protection
-
 Audit logging of all operations
-
 Security audits via cargo-deny and cargo-audit
-
 No external dependencies in production binary
-
 Vulnerability Reporting: security@sekha.dev
 
 📄 License
 Dual License:
-
 Open Source: AGPL-3.0 for personal, educational, and non-commercial use
-
 Commercial: Contact hello@sekha.dev for enterprise licensing
 
 🌐 Links & Resources
 Website: https://sekha.dev - Product info, blog, use cases
-
 Documentation: https://docs.sekha.dev - Full guides and API reference
-
 GitHub: https://github.com/sekha-ai - All repositories
-
 Discord: https://discord.gg/sekha - Community support
-
 API Docs: http://localhost:8080/swagger-ui/ - Interactive API explorer (when running locally)
 
 🙏 Acknowledgments
 Built with world-class open-source tools:
-
 Axum - Ergonomic async web framework
-
 SeaORM - Rust async ORM
-
 ChromaDB - Vector database for embeddings
-
 Ollama - Local LLM runtime
-
 SQLite - World's most deployed database
-
 Utoipa - OpenAPI documentation generator
-
 Special thanks to the Rust, AI, and open-source communities.
 
 📞 Support
