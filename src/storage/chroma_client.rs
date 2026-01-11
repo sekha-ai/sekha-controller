@@ -283,20 +283,11 @@ impl ChromaClient {
 
         Ok(results)
     }
-    // Health check method - use /api/v1 root endpoint instead of deprecated /heartbeat
+    // Health check method
     pub async fn ping(&self) -> Result<(), ChromaError> {
-        let url = format!("{}/api/v1", self.base_url);
-        let response = self.client.get(&url).send().await?;
-        
-        // Accept any 2xx status code
-        if response.status().is_success() {
-            Ok(())
-        } else {
-            Err(ChromaError::ApiError {
-                status: response.status().as_u16(),
-                message: response.text().await?,
-            })
-        }
+        let url = format!("{}/api/v1/heartbeat", self.base_url);
+        self.client.get(&url).send().await?.error_for_status()?;
+        Ok(())
     }
 }
 
