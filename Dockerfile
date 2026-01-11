@@ -1,6 +1,6 @@
 # Multi-stage build for Sekha Controller
 # Stage 1: Build
-FROM rust:1.75-slim as builder
+FROM rust:1.83-slim as builder
 
 WORKDIR /app
 
@@ -13,17 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy source to cache dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src
-
-# Copy actual source
+# Copy source (skip dummy build, causes issues with workspaces)
 COPY . .
 
 # Build for release
-RUN cargo build --release
+RUN cargo build --release --bin sekha-controller
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
