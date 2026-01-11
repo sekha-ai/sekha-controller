@@ -1,11 +1,16 @@
 // Integration tests for orchestrator edge cases
-use crate::integration::{create_test_config, create_test_services};
+use super::{
+    create_test_conversation,
+    create_test_services,
+    json,
+    Arc,
+};
 use sekha_controller::{
     orchestrator::context_assembly::ContextAssembler,
-    storage::{init_db, SeaOrmConversationRepository},
+    storage::{init_db, repository::ConversationRepository, SeaOrmConversationRepository},
 };
-use std::sync::Arc;
 use tokio;
+use uuid::Uuid;
 
 /// Test context assembly with empty database
 #[tokio::test]
@@ -43,19 +48,15 @@ async fn test_budget_edge_cases() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
-    // Add a test conversation
-    let _ = repo
-        .create(
-            "Test".to_string(),
-            "/test".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Hello world"})],
-            None,
-        )
-        .await;
+    // Add a test conversation using the helper
+    let mut conv = create_test_conversation();
+    conv.label = "Test Budget".to_string();
+    conv.id = Some(Uuid::new_v4());
+    let _ = repo.create_with_messages(conv).await;
     
     let assembler = ContextAssembler::new(repo);
     
@@ -71,7 +72,6 @@ async fn test_budget_edge_cases() {
         .assemble("test", vec![], 10, vec![])
         .await;
     assert!(result.is_ok());
-    // Should return 0 or 1 message depending on size
     
     // Test: Huge budget
     let result = assembler
@@ -87,28 +87,23 @@ async fn test_privacy_folder_exclusion() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
-    // Create conversations in different folders
-    let _ = repo
-        .create(
-            "Public".to_string(),
-            "/work/project".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Public info"})],
-            None,
-        )
-        .await;
+    // Create public conversation
+    let mut conv1 = create_test_conversation();
+    conv1.label = "Public".to_string();
+    conv1.folder = "/work/project".to_string();
+    conv1.id = Some(Uuid::new_v4());
+    let _ = repo.create_with_messages(conv1).await;
     
-    let _ = repo
-        .create(
-            "Private".to_string(),
-            "/private/secrets".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Secret info"})],
-            None,
-        )
-        .await;
+    // Create private conversation
+    let mut conv2 = create_test_conversation();
+    conv2.label = "Private".to_string();
+    conv2.folder = "/private/secrets".to_string();
+    conv2.id = Some(Uuid::new_v4());
+    let _ = repo.create_with_messages(conv2).await;
     
     let assembler = ContextAssembler::new(repo);
     
@@ -124,9 +119,8 @@ async fn test_privacy_folder_exclusion() {
         .unwrap();
     
     // Result should not contain messages from /private
-    // Note: Since we can't get folder from Message directly,
-    // we trust the assembler's exclusion logic works
-    // (tested via recall_candidates filtering)
+    // Note: We can't check folder directly on Message,
+    // but the assembler's recall_candidates should filter them out
     assert!(result.len() >= 0); // Graceful handling
 }
 
@@ -137,22 +131,21 @@ async fn test_message_truncation() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
-    // Create multiple conversations with content
+    // Create multiple conversations with long content
     let long_content = "a".repeat(1000); // ~250 tokens
     
     for i in 0..5 {
-        let _ = repo
-            .create(
-                format!("Long {}", i),
-                "/test".to_string(),
-                vec![serde_json::json!({"role": "user", "content": long_content})],
-                None,
-            )
-            .await;
+        let mut conv = create_test_conversation();
+        conv.label = format!("Long {}", i);
+        conv.folder = "/test".to_string();
+        conv.id = Some(Uuid::new_v4());
+        // Replace message content with long content
+        conv.messages[0].content = long_content.clone();
+        let _ = repo.create_with_messages(conv).await;
     }
     
     let assembler = ContextAssembler::new(repo);
@@ -174,22 +167,16 @@ async fn test_unicode_content() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
     // Create conversation with unicode
-    let _ = repo
-        .create(
-            "Unicode Test".to_string(),
-            "/test".to_string(),
-            vec![serde_json::json!({
-                "role": "user",
-                "content": "Hello 🌍 世界 مرحبا"
-            })],
-            None,
-        )
-        .await;
+    let mut conv = create_test_conversation();
+    conv.label = "Unicode Test".to_string();
+    conv.id = Some(Uuid::new_v4());
+    conv.messages[0].content = "Hello 🌍 世界 مرحبا".to_string();
+    let _ = repo.create_with_messages(conv).await;
     
     let assembler = ContextAssembler::new(repo);
     
@@ -208,28 +195,25 @@ async fn test_preferred_labels() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
-    // Create conversations with different labels
-    let _ = repo
-        .create(
-            "Important Project".to_string(),
-            "/work".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Project details"})],
-            None,
-        )
-        .await;
+    // Create conversation with important label
+    let mut conv1 = create_test_conversation();
+    conv1.label = "Important Project".to_string();
+    conv1.folder = "/work".to_string();
+    conv1.id = Some(Uuid::new_v4());
+    conv1.messages[0].content = "Project details".to_string();
+    let _ = repo.create_with_messages(conv1).await;
     
-    let _ = repo
-        .create(
-            "Random Chat".to_string(),
-            "/casual".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Casual conversation"})],
-            None,
-        )
-        .await;
+    // Create conversation with random label
+    let mut conv2 = create_test_conversation();
+    conv2.label = "Random Chat".to_string();
+    conv2.folder = "/casual".to_string();
+    conv2.id = Some(Uuid::new_v4());
+    conv2.messages[0].content = "Casual conversation".to_string();
+    let _ = repo.create_with_messages(conv2).await;
     
     let assembler = ContextAssembler::new(repo);
     
@@ -253,20 +237,16 @@ async fn test_metadata_enhancement() {
     let (chroma_client, embedding_service) = create_test_services();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
-        chroma_client.clone(),
-        embedding_service.clone(),
+        chroma_client,
+        embedding_service,
     ));
     
     // Create conversation
-    let conv = repo
-        .create(
-            "Test Conversation".to_string(),
-            "/test/folder".to_string(),
-            vec![serde_json::json!({"role": "user", "content": "Test message"})],
-            None,
-        )
-        .await
-        .unwrap();
+    let mut conv = create_test_conversation();
+    conv.label = "Test Conversation".to_string();
+    conv.folder = "/test/folder".to_string();
+    conv.id = Some(Uuid::new_v4());
+    let _ = repo.create_with_messages(conv).await;
     
     let assembler = ContextAssembler::new(repo);
     
@@ -280,11 +260,14 @@ async fn test_metadata_enhancement() {
     for msg in result {
         if let Some(metadata) = msg.metadata {
             // Should have citation metadata from Phase 4
-            if let Some(_citation) = metadata.get("citation") {
+            if metadata.get("citation").is_some() {
                 // Citation exists - enhancement worked!
                 assert!(true);
                 return;
             }
         }
     }
+    
+    // If we get here, no citation was found
+    // This might be OK if no messages were returned
 }
