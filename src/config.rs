@@ -14,6 +14,7 @@ pub struct Config {
     pub database_url: String,
     pub ollama_url: String,
     pub chroma_url: String,
+    pub llm_bridge_url: String,
     pub embedding_model: String,
 
     #[validate(range(min = 1, max = 100))]
@@ -59,6 +60,7 @@ impl Config {
             .set_default("database_url", "sqlite://sekha.db")?
             .set_default("ollama_url", "http://localhost:11434")?
             .set_default("chroma_url", "http://localhost:8000")?
+            .set_default("llm_bridge_url", "http://localhost:5001")?
             .set_default("embedding_model", "nomic-embed-text:latest")?
             .set_default("summarization_model", "llama3.1:8b")?
             .set_default("summarization_enabled", true)?
@@ -137,6 +139,7 @@ mod tests {
             database_url: "sqlite://test.db".to_string(),
             ollama_url: "http://localhost:11434".to_string(),
             chroma_url: "http://localhost:8000".to_string(),
+            llm_bridge_url: "http://localhost:5001".to_string(),
             embedding_model: "test-model".to_string(),
             max_connections: 10,
             log_level: "info".to_string(),
@@ -165,6 +168,7 @@ mod tests {
             database_url: "sqlite://test.db".to_string(),
             ollama_url: "http://localhost:11434".to_string(),
             chroma_url: "http://localhost:8000".to_string(),
+            llm_bridge_url: "http://localhost:5001".to_string(),
             embedding_model: "test-model".to_string(),
             max_connections: 10,
             log_level: "info".to_string(),
@@ -193,6 +197,7 @@ mod tests {
             database_url: "sqlite://test.db".to_string(),
             ollama_url: "http://localhost:11434".to_string(),
             chroma_url: "http://localhost:8000".to_string(),
+            llm_bridge_url: "http://localhost:5001".to_string(),
             embedding_model: "test-model".to_string(),
             max_connections: 10,
             log_level: "info".to_string(),
@@ -222,6 +227,7 @@ mod tests {
             database_url: "sqlite://test.db".to_string(),
             ollama_url: "http://localhost:11434".to_string(),
             chroma_url: "http://localhost:8000".to_string(),
+            llm_bridge_url: "http://localhost:5001".to_string(),
             embedding_model: "test-model".to_string(),
             max_connections: 10,
             log_level: "info".to_string(),
