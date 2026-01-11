@@ -4,10 +4,11 @@ FROM rustlang/rust:nightly-slim as builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (including curl for swagger-ui download)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy manifests
