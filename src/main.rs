@@ -243,8 +243,14 @@ async fn start_server(port: u16) -> anyhow::Result<()> {
         embedding_service.clone(),
     ));
 
-    // Initialize LLM Bridge client (MODULE 6 integration)
-    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
+    // Initialize LLM Bridge client (MODULE 6 integration) - read from config
+    let llm_bridge_url = config.read().await.llm_bridge_url.clone();
+    let llm_bridge_url = if llm_bridge_url.is_empty() {
+        "http://localhost:5001".to_string()
+    } else {
+        llm_bridge_url
+    };
+    let llm_bridge = Arc::new(LlmBridgeClient::new(llm_bridge_url.clone()));
 
     // Verify LLM Bridge health on startup
     match llm_bridge.health_check().await {
@@ -333,7 +339,7 @@ async fn start_server(port: u16) -> anyhow::Result<()> {
     tracing::info!("🚀 Server listening on {}", addr);
     tracing::info!("📊 Chroma URL: {}", chroma_url);
     tracing::info!("🤖 Ollama URL: {}", ollama_url);
-    tracing::info!("🧠 LLM Bridge URL: http://localhost:5001");
+    tracing::info!("🧠 LLM Bridge URL: {}", llm_bridge_url);
     tracing::info!("🤖 Smart Query: POST /api/v1/query/smart");
     tracing::info!("📖 API Docs: http://{}/docs (if enabled)", addr);
 
