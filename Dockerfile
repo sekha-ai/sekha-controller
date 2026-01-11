@@ -1,6 +1,6 @@
 # Multi-stage build for Sekha Controller
 # Stage 1: Build
-FROM rust:1.83-slim as builder
+FROM rustlang/rust:nightly-slim as builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 # Copy manifests
 COPY Cargo.toml Cargo.lock ./
 
-# Copy source (skip dummy build, causes issues with workspaces)
+# Copy source (including patches)
 COPY . .
 
 # Build for release
