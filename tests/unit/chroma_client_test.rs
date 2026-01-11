@@ -1,7 +1,7 @@
 use sekha_controller::storage::chroma_client::ChromaClient;
 use serde_json::json;
 use uuid::Uuid;
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
@@ -70,16 +70,16 @@ async fn test_upsert_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
 
-    // Mock collection lookup
+    // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v1/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
         .mount(&mock_server)
         .await;
 
-    // Mock upsert
+    // Mock upsert - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v1/collections/col-123/upsert"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/upsert"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
@@ -102,14 +102,16 @@ async fn test_query_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
 
+    // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v1/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
         .mount(&mock_server)
         .await;
 
+    // Mock query - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v1/collections/col-123/query"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/query"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "ids": [["vec-1", "vec-2"]],
             "distances": [[0.1, 0.3]],
@@ -132,14 +134,16 @@ async fn test_delete_success() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
 
+    // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v1/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123"})))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
         .mount(&mock_server)
         .await;
 
+    // Mock delete - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v1/collections/col-123/delete"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/delete"))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
@@ -155,12 +159,55 @@ async fn test_collection_not_found() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
 
+    // Mock collection not found - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v1/collections/nonexistent"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/nonexistent"))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
 
     let result = client.query("nonexistent", vec![0.1], 5, None).await;
     assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_ensure_collection_creates_if_missing() {
+    let mock_server = MockServer::start().await;
+    let client = ChromaClient::new(mock_server.uri());
+
+    // Mock collection not found - V2 API
+    Mock::given(method("GET"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/new_collection"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    // Mock collection creation - V2 API
+    Mock::given(method("POST"))
+        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "col-new",
+            "name": "new_collection"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let result = client.ensure_collection("new_collection", 768).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_ping_success() {
+    let mock_server = MockServer::start().await;
+    let client = ChromaClient::new(mock_server.uri());
+
+    // Mock heartbeat - V2 API
+    Mock::given(method("GET"))
+        .and(path("/api/v2/heartbeat"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"status": "ok"})))
+        .mount(&mock_server)
+        .await;
+
+    let result = client.ping().await;
+    assert!(result.is_ok());
 }
