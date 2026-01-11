@@ -49,10 +49,12 @@ struct ChromaQueryResponse {
     documents: Option<Vec<Vec<String>>>,
 }
 
-/// Rust-native ChromaDB client using HTTP API
+/// Rust-native ChromaDB client using HTTP API v2
 pub struct ChromaClient {
     base_url: String,
     client: Client,
+    tenant: String,
+    database: String,
 }
 
 impl ChromaClient {
@@ -60,38 +62,65 @@ impl ChromaClient {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             client: Client::new(),
+            tenant: "default_tenant".to_string(),
+            database: "default_database".to_string(),
         }
+    }
+
+    fn collections_url(&self) -> String {
+        format!(
+            "{}/api/v2/tenants/{}/databases/{}/collections",
+            self.base_url, self.tenant, self.database
+        )
+    }
+
+    fn collection_url(&self, collection_name: &str) -> String {
+        format!(
+            "{}/api/v2/tenants/{}/databases/{}/collections/{}",
+            self.base_url, self.tenant, self.database, collection_name
+        )
+    }
+
+    fn collection_operation_url(&self, collection_id: &str, operation: &str) -> String {
+        format!(
+            "{}/api/v2/tenants/{}/databases/{}/collections/{}/{}",
+            self.base_url, self.tenant, self.database, collection_id, operation
+        )
     }
 
     /// Ensure collection exists, create if not
     pub async fn ensure_collection(&self, name: &str, dimension: i32) -> Result<(), ChromaError> {
-        let url = format!("{}/api/v1/collections", self.base_url);
+        let url = self.collections_url();
 
-        // Check if collection exists
-        let collections: Vec<Value> = self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        // List all collections
+        let response = self.client.get(&url).send().await?;
+        
+        match response.status() {
+            StatusCode::OK => {
+                let collections: Vec<Value> = response.json().await?;
+                let exists = collections.iter().any(|c| c["name"] == name);
 
-        let exists = collections.iter().any(|c| c["name"] == name);
-
-        if !exists {
-            tracing::info!("Creating Chroma collection: {}", name);
-            self.create_collection(name, dimension).await?;
-        } else {
-            tracing::debug!("Collection {} already exists", name);
+                if !exists {
+                    tracing::info!("Creating Chroma collection: {}", name);
+                    self.create_collection(name, dimension).await?;
+                } else {
+                    tracing::debug!("Collection {} already exists", name);
+                }
+                Ok(())
+            }
+            status => {
+                let message = response.text().await?;
+                Err(ChromaError::ApiError {
+                    status: status.as_u16(),
+                    message,
+                })
+            }
         }
-
-        Ok(())
     }
 
     /// Create a new collection with specified dimension
     async fn create_collection(&self, name: &str, dimension: i32) -> Result<(), ChromaError> {
-        let url = format!("{}/api/v1/collections", self.base_url);
+        let url = self.collections_url();
 
         let body = json!({
             "name": name,
@@ -128,10 +157,7 @@ impl ChromaClient {
         document: Option<String>,
     ) -> Result<(), ChromaError> {
         let collection_id = self.get_collection_id(collection).await?;
-        let url = format!(
-            "{}/api/v1/collections/{}/upsert",
-            self.base_url, collection_id
-        );
+        let url = self.collection_operation_url(&collection_id, "upsert");
 
         let request = ChromaUpsertRequest {
             ids: vec![id.to_string()],
@@ -143,7 +169,7 @@ impl ChromaClient {
         let response = self.client.post(&url).json(&request).send().await?;
 
         match response.status() {
-            StatusCode::OK => {
+            StatusCode::OK | StatusCode::CREATED => {
                 tracing::trace!("Successfully upserted vector: {}", id);
                 Ok(())
             }
@@ -166,10 +192,7 @@ impl ChromaClient {
         filters: Option<Value>,
     ) -> Result<Vec<ScoredResult>, ChromaError> {
         let collection_id = self.get_collection_id(collection).await?;
-        let url = format!(
-            "{}/api/v1/collections/{}/query",
-            self.base_url, collection_id
-        );
+        let url = self.collection_operation_url(&collection_id, "query");
 
         let request = ChromaQueryRequest {
             query_embeddings: vec![embedding],
@@ -198,10 +221,7 @@ impl ChromaClient {
     /// Delete vectors from collection
     pub async fn delete(&self, collection: &str, ids: Vec<String>) -> Result<(), ChromaError> {
         let collection_id = self.get_collection_id(collection).await?;
-        let url = format!(
-            "{}/api/v1/collections/{}/delete",
-            self.base_url, collection_id
-        );
+        let url = self.collection_operation_url(&collection_id, "delete");
 
         let body = json!({ "ids": ids });
 
@@ -224,7 +244,7 @@ impl ChromaClient {
 
     /// Get collection ID by name
     async fn get_collection_id(&self, name: &str) -> Result<String, ChromaError> {
-        let url = format!("{}/api/v1/collections/{}", self.base_url, name);
+        let url = self.collection_url(name);
 
         let response = self.client.get(&url).send().await?;
 
@@ -283,9 +303,10 @@ impl ChromaClient {
 
         Ok(results)
     }
-    // Health check method
+    
+    /// Health check method - uses v2 API
     pub async fn ping(&self) -> Result<(), ChromaError> {
-        let url = format!("{}/api/v1/heartbeat", self.base_url);
+        let url = format!("{}/api/v2/heartbeat", self.base_url);
         self.client.get(&url).send().await?.error_for_status()?;
         Ok(())
     }
@@ -304,14 +325,14 @@ mod tests {
 
         // Mock GET collections (empty)
         Mock::given(method("GET"))
-            .and(path("/api/v1/collections"))
+            .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
             .respond_with(ResponseTemplate::new(200).set_body_json(vec![] as Vec<Value>))
             .mount(&mock_server)
             .await;
 
         // Mock POST collection creation
         Mock::given(method("POST"))
-            .and(path("/api/v1/collections"))
+            .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "test-id" })))
             .mount(&mock_server)
             .await;
