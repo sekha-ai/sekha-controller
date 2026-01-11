@@ -319,8 +319,14 @@ async fn start_server(port: u16) -> anyhow::Result<()> {
         // Apply CORS
         .layer(cors);
 
-    // Start server (use port parameter)
-    let addr_str = format!("127.0.0.1:{}", port);
+    // Get host and port from config
+    let server_host = config.read().await.server_host.clone();
+    let server_port = config.read().await.server_port;
+    
+    // Use CLI port if provided, otherwise use config port
+    let actual_port = if port != 8080 { port } else { server_port };
+    
+    let addr_str = format!("{}:{}", server_host, actual_port);
     let addr: SocketAddr = addr_str.parse().expect("Invalid address");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
