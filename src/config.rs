@@ -3,6 +3,8 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate, Clone, Default)]
 pub struct Config {
+    pub server_host: String,
+
     #[validate(range(min = 1024, max = 65535))]
     pub server_port: u16,
 
@@ -50,6 +52,7 @@ fn default_cors_enabled() -> bool {
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         let settings = config::Config::builder()
+            .set_default("server_host", "127.0.0.1")?
             .set_default("server_port", 8080)?
             .set_default("max_connections", 10)?
             .set_default("log_level", "info")?
@@ -128,6 +131,7 @@ mod tests {
     #[test]
     fn test_get_rest_api_key_fallback() {
         let config = Config {
+            server_host: "127.0.0.1".to_string(),
             server_port: 8080,
             mcp_api_key: "mcp_key_12345678901234567890123456789012".to_string(),
             database_url: "sqlite://test.db".to_string(),
@@ -155,6 +159,7 @@ mod tests {
     #[test]
     fn test_get_rest_api_key_explicit() {
         let config = Config {
+            server_host: "127.0.0.1".to_string(),
             server_port: 8080,
             mcp_api_key: "mcp_key_12345678901234567890123456789012".to_string(),
             database_url: "sqlite://test.db".to_string(),
@@ -182,6 +187,7 @@ mod tests {
     #[test]
     fn test_get_all_api_keys() {
         let config = Config {
+            server_host: "127.0.0.1".to_string(),
             server_port: 8080,
             mcp_api_key: "key1".to_string(),
             database_url: "sqlite://test.db".to_string(),
@@ -210,6 +216,7 @@ mod tests {
     #[test]
     fn test_is_valid_api_key() {
         let config = Config {
+            server_host: "127.0.0.1".to_string(),
             server_port: 8080,
             mcp_api_key: "valid_key".to_string(),
             database_url: "sqlite://test.db".to_string(),
