@@ -3,8 +3,8 @@ use mockall::automock;
 
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, DatabaseBackend, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
-    Statement, TransactionTrait, Value,
+    prelude::*, DatabaseBackend, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder,
+    QuerySelect, Set, Statement, TransactionTrait, Value,
 };
 use serde_json::json;
 use serde_json::Value as JsonValue;
@@ -308,7 +308,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 )
                 .await
             {
-                Ok(id) => Some(id.to_string()),
+                Ok(id) => Some(ToString::to_string(&id)),
                 Err(e) => {
                     tracing::warn!("Embedding generation failed (ok in tests): {}", e);
                     None
@@ -327,7 +327,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
             message.insert(&self.db).await.map_err(|e| {
                 tracing::error!("Failed to insert message {}: {:?}", idx, e);
-                RepositoryError::DbError(e)
+                RepositoryError::DbErr(e)
             })?;
             
             // Insert into FTS index
@@ -340,7 +340,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             // Execute FTS SQL
             self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
                 tracing::error!("Failed to insert FTS for message {}: {:?}", idx, e);
-                RepositoryError::DbError(e)
+                RepositoryError::DbErr(e)
             })?;
 
             tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
@@ -386,7 +386,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             .filter(conversations::Column::Folder.eq(folder))
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;
+            .map_err(|e| RepositoryError::DbErr(e))?;
 
         Ok(count)
     }
@@ -395,7 +395,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         let count = conversations::Entity::find()
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;
+            .map_err(|e| RepositoryError::DbErr(e))?;
 
         Ok(count)
     }
@@ -619,7 +619,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             metadata: String,
         }
 
-        let results = MessageResult::find_by_statement(Statement::from_sql_and_values(
+        let results: Vec<MessageResult> = MessageResult::find_by_statement(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             r#"
             SELECT 
@@ -922,7 +922,7 @@ impl SeaOrmConversationRepository {
 
         message.insert(&self.db).await.map_err(|e| {
             tracing::error!("Failed to insert message: {:?}", e);
-            RepositoryError::DbError(e)
+            RepositoryError::DbErr(e)
         })?;
 
         // FIX: Use cloned content here
@@ -935,7 +935,7 @@ impl SeaOrmConversationRepository {
         // Execute FTS SQL
         self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
             tracing::error!("Failed to insert FTS for message: {:?}", e);
-            RepositoryError::DbError(e)
+            RepositoryError::DbErr(e)
         })?;
 
         Ok(msg_id)
