@@ -315,6 +315,9 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 }
             };
 
+            // Capture before move
+            let has_embedding = embedding_id.is_some();
+
             let message = messages::ActiveModel {
                 id: Set(msg_id),
                 conversation_id: Set(conv_id),
@@ -344,7 +347,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
             }
 
             tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
-                msg_id, conv_id, embedding_id.is_some());
+                msg_id, conv_id, has_embedding);
         }
 
         Ok(conv_id)
