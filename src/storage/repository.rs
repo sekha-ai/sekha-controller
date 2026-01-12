@@ -325,10 +325,10 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 metadata: Set(Some(msg.metadata)),
             };
 
-            message.insert(&self.db).await.map_err(|e| {
+            if let Err(e) = message.insert(&self.db).await {
                 tracing::error!("Failed to insert message {}: {:?}", idx, e);
-                RepositoryError::DbErr(e)
-            })?;
+                return Err(RepositoryError::DbError(e));
+            }
             
             // Insert into FTS index
             let fts_sql = format!(
@@ -338,10 +338,10 @@ impl ConversationRepository for SeaOrmConversationRepository {
             );
             
             // Execute FTS SQL
-            self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
+            if let Err(e) = self.db.execute_unprepared(&fts_sql).await {
                 tracing::error!("Failed to insert FTS for message {}: {:?}", idx, e);
-                RepositoryError::DbErr(e)
-            })?;
+                return Err(RepositoryError::DbError(e));
+            }
 
             tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
                 msg_id, conv_id, embedding_id.is_some());
@@ -385,8 +385,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         let count = conversations::Entity::find()
             .filter(conversations::Column::Folder.eq(folder))
             .count(&self.db)
-            .await
-            .map_err(|e| RepositoryError::DbErr(e))?;
+            .await?;
 
         Ok(count)
     }
@@ -394,8 +393,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
     async fn count_all(&self) -> Result<u64, RepositoryError> {
         let count = conversations::Entity::find()
             .count(&self.db)
-            .await
-            .map_err(|e| RepositoryError::DbErr(e))?;
+            .await?;
 
         Ok(count)
     }
@@ -920,10 +918,10 @@ impl SeaOrmConversationRepository {
             metadata: Set(metadata_value),
         };
 
-        message.insert(&self.db).await.map_err(|e| {
+        if let Err(e) = message.insert(&self.db).await {
             tracing::error!("Failed to insert message: {:?}", e);
-            RepositoryError::DbErr(e)
-        })?;
+            return Err(RepositoryError::DbError(e));
+        }
 
         // FIX: Use cloned content here
         let fts_sql = format!(
@@ -933,10 +931,10 @@ impl SeaOrmConversationRepository {
         );
         
         // Execute FTS SQL
-        self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
+        if let Err(e) = self.db.execute_unprepared(&fts_sql).await {
             tracing::error!("Failed to insert FTS for message: {:?}", e);
-            RepositoryError::DbErr(e)
-        })?;
+            return Err(RepositoryError::DbError(e));
+        }
 
         Ok(msg_id)
     }
