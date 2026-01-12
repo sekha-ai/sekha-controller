@@ -284,9 +284,36 @@ impl ConversationRepository for SeaOrmConversationRepository {
 
         tracing::info!("Created conversation: {}", conv_id);
 
-        // Process messages with explicit error handling
+        // Process messages with explicit error handling and embedding generation
         for (idx, msg) in messages.into_iter().enumerate() {
             let msg_id = Uuid::new_v4();
+            let now = chrono::Utc::now().naive_utc();
+            
+            // Clone content for embedding and FTS
+            let content_clone = msg.content.clone();
+            let content_for_fts = msg.content.clone();
+            
+            // Generate embedding via service (graceful degradation if service is down)
+            let embedding_id = match self
+                .embedding_service
+                .process_message(
+                    msg_id,
+                    &content_clone,
+                    conv_id,
+                    serde_json::json!({
+                        "role": msg.role.clone(),
+                        "conversation_id": conv_id.to_string(),
+                        "timestamp": now,
+                    }),
+                )
+                .await
+            {
+                Ok(id) => Some(id.to_string()),
+                Err(e) => {
+                    tracing::warn!("Embedding generation failed (ok in tests): {}", e);
+                    None
+                }
+            };
 
             let message = messages::ActiveModel {
                 id: Set(msg_id),
@@ -294,7 +321,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 role: Set(msg.role),
                 content: Set(msg.content),
                 timestamp: Set(msg.timestamp),
-                embedding_id: Set(None),
+                embedding_id: Set(embedding_id),  // ✅ NOW POPULATED
                 metadata: Set(Some(msg.metadata)),
             };
 
@@ -302,8 +329,22 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 tracing::error!("Failed to insert message {}: {:?}", idx, e);
                 RepositoryError::DbError(e)
             })?;
+            
+            // Insert into FTS index
+            let fts_sql = format!(
+                "INSERT INTO messages_fts(rowid, content) VALUES ((SELECT rowid FROM messages WHERE id = '{}'), '{}')",
+                msg_id,
+                content_for_fts.replace("'", "''")
+            );
+            
+            // Execute FTS SQL
+            self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
+                tracing::error!("Failed to insert FTS for message {}: {:?}", idx, e);
+                RepositoryError::DbError(e)
+            })?;
 
-            tracing::debug!("Inserted message {} for conversation {}", msg_id, conv_id);
+            tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
+                msg_id, conv_id, embedding_id.is_some());
         }
 
         Ok(conv_id)
@@ -898,6 +939,12 @@ impl SeaOrmConversationRepository {
             msg_id,
             content_for_fts.replace("'", "''")
         );
+        
+        // Execute FTS SQL - ✅ NOW EXECUTED
+        self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
+            tracing::error!("Failed to insert FTS for message: {:?}", e);
+            RepositoryError::DbError(e)
+        })?;
 
         Ok(msg_id)
     }
