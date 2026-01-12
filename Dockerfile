@@ -1,6 +1,7 @@
 # Multi-stage build for Sekha Controller
 # Stage 1: Build
-FROM rustlang/rust:nightly-slim as builder
+# Pin to 2025-12-15 nightly to avoid compiler ICE in newer nightlies
+FROM rustlang/rust:nightly-2025-12-15-slim as builder
 
 WORKDIR /app
 
