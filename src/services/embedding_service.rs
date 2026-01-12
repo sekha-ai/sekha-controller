@@ -147,13 +147,34 @@ impl EmbeddingService {
         // Generate embedding via provider
         let embedding = self.generate_embedding(content).await?;
 
-        // Prepare Chroma metadata
-        let chroma_metadata = json!({
+        // Flatten metadata for Chroma (Chroma only accepts flat key-value pairs with simple types)
+        let mut chroma_metadata = json!({
             "conversation_id": conversation_id.to_string(),
             "message_id": message_id.to_string(),
             "content_preview": &content[..content.len().min(100)],
-            "metadata": metadata,
         });
+
+        // Extract and flatten nested metadata fields
+        if let Some(meta_obj) = metadata.as_object() {
+            for (key, value) in meta_obj {
+                // Only include simple types that Chroma accepts
+                match value {
+                    Value::String(s) => {
+                        chroma_metadata[key] = Value::String(s.clone());
+                    }
+                    Value::Number(n) => {
+                        chroma_metadata[key] = Value::Number(n.clone());
+                    }
+                    Value::Bool(b) => {
+                        chroma_metadata[key] = Value::Bool(*b);
+                    }
+                    // Convert other types to strings
+                    _ => {
+                        chroma_metadata[key] = Value::String(value.to_string());
+                    }
+                }
+            }
+        }
 
         // Store in Chroma
         let embedding_id = message_id.to_string();
