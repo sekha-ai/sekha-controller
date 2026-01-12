@@ -321,7 +321,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 role: Set(msg.role),
                 content: Set(msg.content),
                 timestamp: Set(msg.timestamp),
-                embedding_id: Set(embedding_id),  // ✅ NOW POPULATED
+                embedding_id: Set(embedding_id),
                 metadata: Set(Some(msg.metadata)),
             };
 
@@ -353,7 +353,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         if let Ok(Some(_conv)) = self.find_by_id(id).await {
             let messages = messages::Entity::find()
-                .filter(messages::Column::ConversationId.eq(id)) // CHANGED: Remove .to_string()
+                .filter(messages::Column::ConversationId.eq(id))
                 .all(&self.db)
                 .await?;
 
@@ -382,26 +382,20 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn count_by_folder(&self, folder: &str) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::conversations; // ✅ Use entity, not internal model
-        use sea_orm::{EntityTrait, QueryFilter};
-
         let count = conversations::Entity::find()
             .filter(conversations::Column::Folder.eq(folder))
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?; // ✅ Correct error variant
+            .map_err(|e| RepositoryError::DbError(e))?;
 
         Ok(count)
     }
 
     async fn count_all(&self) -> Result<u64, RepositoryError> {
-        use crate::storage::entities::conversations; // ✅ Use entity, not internal model
-        use sea_orm::EntityTrait;
-
         let count = conversations::Entity::find()
             .count(&self.db)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?; // ✅ Correct error variant
+            .map_err(|e| RepositoryError::DbError(e))?;
 
         Ok(count)
     }
@@ -520,7 +514,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         conversation_id: Uuid,
     ) -> Result<Vec<Message>, RepositoryError> {
         let msg_models = messages::Entity::find()
-            .filter(messages::Column::ConversationId.eq(conversation_id)) // CHANGED: Remove .to_string()
+            .filter(messages::Column::ConversationId.eq(conversation_id))
             .order_by_asc(messages::Column::Timestamp)
             .all(&self.db)
             .await?;
@@ -615,9 +609,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         query: &str,
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
-        use sea_orm::{DatabaseBackend, FromQueryResult, Statement};
-
-        #[derive(FromQueryResult)]
+        #[derive(sea_orm::FromQueryResult)]
         struct MessageResult {
             id: String,
             conversation_id: String,
@@ -922,9 +914,9 @@ impl SeaOrmConversationRepository {
             id: Set(msg_id),
             conversation_id: Set(conversation_id),
             role: Set(new_msg.role),
-            content: Set(new_msg.content), // ← Content moved here
+            content: Set(new_msg.content),
             timestamp: Set(new_msg.timestamp),
-            embedding_id: Set(embedding_id.map(|id| ToString::to_string(&id))), // FIX: Explicit disambiguation
+            embedding_id: Set(embedding_id.map(|id| ToString::to_string(&id))),
             metadata: Set(metadata_value),
         };
 
@@ -940,7 +932,7 @@ impl SeaOrmConversationRepository {
             content_for_fts.replace("'", "''")
         );
         
-        // Execute FTS SQL - ✅ NOW EXECUTED
+        // Execute FTS SQL
         self.db.execute_unprepared(&fts_sql).await.map_err(|e| {
             tracing::error!("Failed to insert FTS for message: {:?}", e);
             RepositoryError::DbError(e)
