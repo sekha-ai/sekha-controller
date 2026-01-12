@@ -289,9 +289,8 @@ impl ConversationRepository for SeaOrmConversationRepository {
             let msg_id = Uuid::new_v4();
             let now = chrono::Utc::now().naive_utc();
             
-            // Clone content for embedding and FTS
+            // Clone content for embedding
             let content_clone = msg.content.clone();
-            let content_for_fts = msg.content.clone();
             
             // Generate embedding via service (graceful degradation if service is down)
             let embedding_id = match self
@@ -333,18 +332,8 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 return Err(RepositoryError::DbError(e));
             }
             
-            // Insert into FTS index
-            let fts_sql = format!(
-                "INSERT INTO messages_fts(rowid, content) VALUES ((SELECT rowid FROM messages WHERE id = '{}'), '{}')",
-                msg_id,
-                content_for_fts.replace("'", "''")
-            );
-            
-            // Execute FTS SQL
-            if let Err(e) = self.db.execute_unprepared(&fts_sql).await {
-                tracing::error!("Failed to insert FTS for message {}: {:?}", idx, e);
-                return Err(RepositoryError::DbError(e));
-            }
+            // FTS insertion is handled automatically by database triggers (see 007_create_fts.sql)
+            // No need for manual FTS insertion here
 
             tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
                 msg_id, conv_id, has_embedding);
@@ -900,9 +889,6 @@ impl SeaOrmConversationRepository {
 
         let has_embedding = embedding_id.is_some();
 
-        // FIX: Clone content before moving it
-        let content_for_fts = new_msg.content.clone();
-
         // FIX: Pass metadata directly as JsonValue
         let metadata_value = if new_msg.metadata.is_null() {
             None
@@ -926,18 +912,11 @@ impl SeaOrmConversationRepository {
             return Err(RepositoryError::DbError(e));
         }
 
-        // FIX: Use cloned content here
-        let fts_sql = format!(
-            "INSERT INTO messages_fts(rowid, content) VALUES ((SELECT rowid FROM messages WHERE id = '{}'), '{}')",
-            msg_id,
-            content_for_fts.replace("'", "''")
-        );
-        
-        // Execute FTS SQL
-        if let Err(e) = self.db.execute_unprepared(&fts_sql).await {
-            tracing::error!("Failed to insert FTS for message: {:?}", e);
-            return Err(RepositoryError::DbError(e));
-        }
+        // FTS insertion is handled automatically by database triggers (see 007_create_fts.sql)
+        // No need for manual FTS insertion here
+
+        tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
+            msg_id, conversation_id, has_embedding);
 
         Ok(msg_id)
     }
