@@ -1,7 +1,6 @@
 # Multi-stage build for Sekha Controller
 # Stage 1: Build
-# Pin to 2025-12-15 nightly to avoid compiler ICE in newer nightlies
-FROM rustlang/rust:nightly-2025-12-15-slim as builder
+FROM rustlang/rust:nightly-slim as builder
 
 WORKDIR /app
 
@@ -12,13 +11,13 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Copy manifests and rust-toolchain.toml (controls nightly version)
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 
 # Copy source (including patches)
 COPY . .
 
-# Build for release
+# Build for release (rust-toolchain.toml will ensure correct nightly is used)
 RUN cargo build --release --bin sekha-controller
 
 # Stage 2: Runtime
