@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 async fn create_test_app() -> AppState {
     let config = Arc::new(RwLock::new(Config {
+        server_host: "127.0.0.1".to_string(),
+        llm_bridge_url: "http://localhost:5001".to_string(),
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
         rest_api_key: None,

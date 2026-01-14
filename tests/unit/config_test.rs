@@ -120,6 +120,8 @@ fn test_rate_limit_validation() {
 #[test]
 fn test_get_all_api_keys_deduplication() {
     let config = Config {
+        server_host: "127.0.0.1".to_string(),
+        llm_bridge_url: "http://localhost:5001".to_string(),
         server_port: 8080,
         mcp_api_key: "key1".to_string(),
         database_url: "sqlite://test.db".to_string(),
