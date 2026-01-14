@@ -71,6 +71,7 @@ async fn test_budget_edge_cases() {
 
 /// Test privacy filtering with folders
 #[tokio::test]
+#[allow(clippy::absurd_extreme_comparisons)]
 async fn test_privacy_folder_exclusion() {
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
