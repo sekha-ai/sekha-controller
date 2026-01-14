@@ -68,6 +68,8 @@ pub async fn is_chroma_running() -> bool {
 
 pub async fn create_test_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
+        server_host: "127.0.0.1".to_string(),
+        llm_bridge_url: "http://localhost:5001".to_string(),
         server_port: 8080,
         mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
         rest_api_key: Some("rest_test_key_123456789012345678901234".to_string()),
