@@ -72,14 +72,21 @@ async fn test_upsert_success() {
 
     // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id": "col-123", "name": "test_collection"})),
+        )
         .mount(&mock_server)
         .await;
 
     // Mock upsert - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/upsert"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/upsert",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
@@ -104,14 +111,21 @@ async fn test_query_success() {
 
     // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id": "col-123", "name": "test_collection"})),
+        )
         .mount(&mock_server)
         .await;
 
     // Mock query - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/query"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/query",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "ids": [["vec-1", "vec-2"]],
             "distances": [[0.1, 0.3]],
@@ -136,14 +150,21 @@ async fn test_delete_success() {
 
     // Mock collection lookup - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"id": "col-123", "name": "test_collection"})))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/test_collection",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(json!({"id": "col-123", "name": "test_collection"})),
+        )
         .mount(&mock_server)
         .await;
 
     // Mock delete - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/delete"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/col-123/delete",
+        ))
         .respond_with(ResponseTemplate::new(200))
         .mount(&mock_server)
         .await;
@@ -161,7 +182,9 @@ async fn test_collection_not_found() {
 
     // Mock collection not found - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/nonexistent"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/nonexistent",
+        ))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -177,14 +200,18 @@ async fn test_ensure_collection_creates_if_missing() {
 
     // Mock collection not found - V2 API
     Mock::given(method("GET"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections/new_collection"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections/new_collection",
+        ))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
 
     // Mock collection creation - V2 API
     Mock::given(method("POST"))
-        .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
+        .and(path(
+            "/api/v2/tenants/default_tenant/databases/default_database/collections",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "col-new",
             "name": "new_collection"

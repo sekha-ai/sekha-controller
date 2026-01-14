@@ -94,7 +94,7 @@ impl ChromaClient {
 
         // List all collections
         let response = self.client.get(&url).send().await?;
-        
+
         match response.status() {
             StatusCode::OK => {
                 let collections: Vec<Value> = response.json().await?;
@@ -303,7 +303,7 @@ impl ChromaClient {
 
         Ok(results)
     }
-    
+
     /// Health check method - uses v2 API
     pub async fn ping(&self) -> Result<(), ChromaError> {
         let url = format!("{}/api/v2/heartbeat", self.base_url);
@@ -325,14 +325,18 @@ mod tests {
 
         // Mock GET collections (empty)
         Mock::given(method("GET"))
-            .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
+            .and(path(
+                "/api/v2/tenants/default_tenant/databases/default_database/collections",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(vec![] as Vec<Value>))
             .mount(&mock_server)
             .await;
 
         // Mock POST collection creation
         Mock::given(method("POST"))
-            .and(path("/api/v2/tenants/default_tenant/databases/default_database/collections"))
+            .and(path(
+                "/api/v2/tenants/default_tenant/databases/default_database/collections",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "id": "test-id" })))
             .mount(&mock_server)
             .await;

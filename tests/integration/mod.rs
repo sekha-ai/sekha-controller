@@ -27,7 +27,7 @@ pub mod concurrency;
 pub mod file_watcher;
 pub mod mcp;
 pub mod orchestrator;
-pub mod orchestrator_edge_cases;  // NEW: Edge case tests
+pub mod orchestrator_edge_cases; // NEW: Edge case tests
 pub mod repository;
 // pub mod search;
 

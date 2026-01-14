@@ -288,10 +288,10 @@ impl ConversationRepository for SeaOrmConversationRepository {
         for (idx, msg) in messages.into_iter().enumerate() {
             let msg_id = Uuid::new_v4();
             let now = chrono::Utc::now().naive_utc();
-            
+
             // Clone content for embedding
             let content_clone = msg.content.clone();
-            
+
             // Generate embedding via service (graceful degradation if service is down)
             let embedding_id = match self
                 .embedding_service
@@ -331,12 +331,16 @@ impl ConversationRepository for SeaOrmConversationRepository {
                 tracing::error!("Failed to insert message {}: {:?}", idx, e);
                 return Err(RepositoryError::DbError(e));
             }
-            
+
             // FTS insertion is handled automatically by database triggers (see 007_create_fts.sql)
             // No need for manual FTS insertion here
 
-            tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
-                msg_id, conv_id, has_embedding);
+            tracing::debug!(
+                "Inserted message {} for conversation {} with embedding: {}",
+                msg_id,
+                conv_id,
+                has_embedding
+            );
         }
 
         Ok(conv_id)
@@ -383,9 +387,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
     }
 
     async fn count_all(&self) -> Result<u64, RepositoryError> {
-        let count = conversations::Entity::find()
-            .count(&self.db)
-            .await?;
+        let count = conversations::Entity::find().count(&self.db).await?;
 
         Ok(count)
     }
@@ -609,9 +611,10 @@ impl ConversationRepository for SeaOrmConversationRepository {
             metadata: String,
         }
 
-        let results: Vec<MessageResult> = MessageResult::find_by_statement(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            r#"
+        let results: Vec<MessageResult> =
+            MessageResult::find_by_statement(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                r#"
             SELECT 
                 hex(m.id) as id,
                 hex(m.conversation_id) as conversation_id,
@@ -625,13 +628,13 @@ impl ConversationRepository for SeaOrmConversationRepository {
             )
             LIMIT ?2
             "#,
-            vec![
-                Value::String(Some(query.to_string())),
-                Value::BigInt(Some(limit as i64)),
-            ],
-        ))
-        .all(&self.db)
-        .await?;
+                vec![
+                    Value::String(Some(query.to_string())),
+                    Value::BigInt(Some(limit as i64)),
+                ],
+            ))
+            .all(&self.db)
+            .await?;
 
         Ok(results
             .into_iter()
@@ -915,8 +918,12 @@ impl SeaOrmConversationRepository {
         // FTS insertion is handled automatically by database triggers (see 007_create_fts.sql)
         // No need for manual FTS insertion here
 
-        tracing::debug!("Inserted message {} for conversation {} with embedding: {}", 
-            msg_id, conversation_id, has_embedding);
+        tracing::debug!(
+            "Inserted message {} for conversation {} with embedding: {}",
+            msg_id,
+            conversation_id,
+            has_embedding
+        );
 
         Ok(msg_id)
     }
