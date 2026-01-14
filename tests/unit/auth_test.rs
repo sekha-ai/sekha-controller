@@ -13,12 +13,14 @@ use tokio::sync::RwLock;
 
 async fn create_test_state(api_key: String) -> AppState {
     let config = Arc::new(RwLock::new(Config {
+        server_host: "127.0.0.1".to_string(),
         server_port: 8080,
         mcp_api_key: api_key,
         rest_api_key: None,
         database_url: "sqlite::memory:".to_string(),
         ollama_url: "http://localhost:11434".to_string(),
         chroma_url: "http://localhost:8000".to_string(),
+        llm_bridge_url: "http://localhost:5001".to_string(),
         additional_api_keys: vec![],
         cors_enabled: true,
         rate_limit_per_minute: 60,
@@ -43,7 +45,7 @@ async fn create_test_state(api_key: String) -> AppState {
         chroma.clone(),
         embedding_service.clone(),
     ));
-    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:11434".to_string()));
+    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
 
     AppState {
         config,
