@@ -119,7 +119,7 @@ ollama-rs = "0.3.3"
 ndarray = "0.17.1"
 
 # Optional: Better XML parsing
-quick-xml = { version = "0.38", optional = true }
+quick-xml = { version = "0.39", optional = true }
 mockall = "0.13"
 
 [features]
