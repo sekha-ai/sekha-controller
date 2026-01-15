@@ -127,7 +127,8 @@ cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
 
 [patch.crates-io]
-# sea-orm = { path = "patches/sea-orm-2.0.0-rc.22" }
+# Pin sea-query-sqlx to avoid edition 2024 incompatibility in rc.11
+sea-query-sqlx = "=0.8.0-rc.10"
 sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
 
 [dev-dependencies]
