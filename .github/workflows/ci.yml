@@ -33,6 +33,15 @@ jobs:
         image: chromadb/chroma:latest
         ports:
           - 8000:8000
+        env:
+          IS_PERSISTENT: "TRUE"
+          ANONYMIZED_TELEMETRY: "FALSE"
+        options: >-
+          --health-cmd="curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+          --health-start-period=30s
       redis:
         image: redis:7-alpine
         ports:
