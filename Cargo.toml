@@ -36,7 +36,7 @@ tokio = { version = "1.35", features = ["full"] }
 libc = "0.2"
 
 # HTTP server
-axum = "=0.8"
+axum = "0.8"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -120,7 +120,6 @@ ndarray = "0.17.2"
 
 # Optional: Better XML parsing
 quick-xml = { version = "0.39", optional = true }
-mockall = "0.13"
 
 [features]
 cli = []  # Enable CLI tool
