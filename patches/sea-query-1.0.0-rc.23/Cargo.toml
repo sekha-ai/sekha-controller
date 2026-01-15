@@ -10,8 +10,8 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2024"
-rust-version = "1.85.0"
+edition = "2021"
+rust-version = "1.75.0"
 name = "sea-query"
 version = "1.0.0-rc.23"
 authors = [
