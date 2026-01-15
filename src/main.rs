@@ -101,7 +101,7 @@ async fn start_daemon(port: u16) -> anyhow::Result<()> {
         .create(true)
         .append(true)
         .open(stdout_path)?;
-    
+
     let stderr_file = OpenOptions::new()
         .create(true)
         .append(true)
