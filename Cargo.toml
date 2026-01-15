@@ -2,9 +2,9 @@
 name = "sekha-controller"
 version = "1.0.0"
 edition = "2021"
-authors = ["Sekha AI <hello@sekha.ai>"]
+authors = ["Sekha AI <hello@sekha-ai.dev>"]
 description = "Persistent AI memory controller for context management"
-homepage = "https://sekha.ai"
+homepage = "https://sekha-ai.dev"
 repository = "https://github.com/sekha-ai/sekha-controller"
 license = "AGPL-3.0"
 keywords = ["ai", "memory", "llm", "context", "ml"]
@@ -105,7 +105,7 @@ sea-orm-codegen = "=2.0.0-rc.22"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite"] }
 
 # Daemon requirements
-daemonize = "0.5"
+daemonize-me = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
 # CHROMA INTEGRATION - Vector Database
@@ -113,13 +113,14 @@ chromadb = "^2.3"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
 # EMBEDDING GENERATION - Ollama
-ollama-rs = "0.3.3"
+ollama-rs = "0.3"
 
 # VECTOR MATH (if needed)
 ndarray = "0.17.2"
 
 # Optional: Better XML parsing
 quick-xml = { version = "0.39", optional = true }
+audit = "0.7.3"
 
 [features]
 cli = []  # Enable CLI tool

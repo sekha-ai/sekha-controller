@@ -85,20 +85,36 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start_daemon(port: u16) -> anyhow::Result<()> {
-    use daemonize::Daemonize;
+    use daemonize_me::Daemon;
+    use std::fs::OpenOptions;
 
     let home_dir = dirs::home_dir().expect("Failed to get home directory");
     let pid_file = home_dir.join(".sekha/sekha.pid");
     let log_dir = home_dir.join(".sekha/logs");
+    let stdout_path = log_dir.join("sekha.log");
+    let stderr_path = log_dir.join("sekha.err");
 
     std::fs::create_dir_all(&log_dir)?;
 
-    let daemonize = Daemonize::new()
-        .pid_file(pid_file)
-        .working_directory(home_dir)
-        .umask(0o027);
+    // Open log files
+    let stdout_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(stdout_path)?;
+    
+    let stderr_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(stderr_path)?;
 
-    match daemonize.start() {
+    let daemon = Daemon::new()
+        .pid_file(pid_file, Some(false))
+        .work_dir(home_dir)
+        .umask(0o027)
+        .stdout(stdout_file)
+        .stderr(stderr_file);
+
+    match daemon.start() {
         Ok(_) => {
             tracing::info!("🔧 Sekha Controller started as daemon on port {}", port);
             start_server(port).await

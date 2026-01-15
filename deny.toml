@@ -8,7 +8,7 @@ yanked = "deny"
 ignore = [
     "RUSTSEC-2023-0071",  # rsa: Transitive from sea-orm->sqlx-mysql (compile-time only)
     "RUSTSEC-2025-0134",  # rustls-pemfile: From chromadb->reqwest (waiting for upstream)
-    "RUSTSEC-2025-0069",  # daemonize` is Unmaintained
+    "RUSTSEC-2026-0001",  # rkyv - transitive, affects unused code path
 ]
 
 [licenses]
