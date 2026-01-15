@@ -1,0 +1,52 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Rust security
+      - name: Rust security audit
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          cargo install cargo-audit cargo-deny
+          cargo audit
+          cargo deny check
+      
+      # Python security
+      - name: Python security scan
+        if: hashFiles('requirements.txt') != '' || hashFiles('pyproject.toml') != ''
+        run: |
+          pip install safety bandit
+          safety check
+          bandit -r . -f json -o bandit-report.json
+      
+      # JavaScript security
+      - name: npm audit
+        if: hashFiles('package.json') != ''
+        run: npm audit
+      
+      # Container security
+      - name: Trivy scan
+        if: hashFiles('Dockerfile') != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results
+        if: hashFiles('Dockerfile') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'

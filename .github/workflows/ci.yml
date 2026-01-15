@@ -137,7 +137,7 @@ jobs:
           repository: sekha-ai/sekha-llm-bridge
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -182,9 +182,9 @@ jobs:
           poetry run pytest tests/ -v --cov=llm_bridge --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: llm-bridge-tests
           name: sekha-bridge
 
@@ -224,7 +224,7 @@ jobs:
           path: python-sdk
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -249,7 +249,7 @@ jobs:
           path: js-sdk
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"

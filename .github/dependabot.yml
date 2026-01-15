@@ -1,0 +1,66 @@
+version: 2
+updates:
+  # Rust dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "jefftraylor"
+    labels:
+      - "dependencies"
+      - "rust"
+    
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "jefftraylor"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Python dependencies (for Python repos)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "jefftraylor"
+    labels:
+      - "dependencies"
+      - "python"
+
+  # npm dependencies (for JS/TS repos)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "jefftraylor"
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "jefftraylor"
+    labels:
+      - "dependencies"
+      - "docker"
