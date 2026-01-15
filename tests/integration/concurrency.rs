@@ -9,10 +9,11 @@ use tokio::time::{timeout, Duration};
 async fn test_concurrent_conversation_creation() {
     // Wrap test in timeout to prevent hanging
     let result = timeout(
-        Duration::from_secs(60),  // 60 second timeout
-        run_concurrent_test()
-    ).await;
-    
+        Duration::from_secs(60), // 60 second timeout
+        run_concurrent_test(),
+    )
+    .await;
+
     assert!(result.is_ok(), "Test timed out after 60 seconds");
     assert!(result.unwrap().is_ok(), "Test failed");
 }
@@ -64,6 +65,6 @@ async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
     let (conversations, count) = repo.find_with_filters(None, 100, 0).await?;
     assert_eq!(count, 10);
     assert_eq!(conversations.len(), 10);
-    
+
     Ok(())
 }
