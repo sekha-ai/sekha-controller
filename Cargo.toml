@@ -116,7 +116,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 ollama-rs = "0.3.3"
 
 # VECTOR MATH (if needed)
-ndarray = "0.17.1"
+ndarray = "0.17.2"
 
 # Optional: Better XML parsing
 quick-xml = { version = "0.39", optional = true }
