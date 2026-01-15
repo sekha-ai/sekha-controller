@@ -1,19 +1,21 @@
 // tests/integration/concurrency.rs
 use super::{create_test_services, Arc, ConversationRepository};
-use sekha_controller::models::internal::{NewConversation, NewMessage};
-use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
-use sekha_controller::services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient};
-use sekha_controller::storage::chroma_client::ChromaClient;
-use serde_json::json;
-use tokio::time::{timeout, Duration};
+use async_trait::async_trait;
 use mockall::mock;
 use mockall::predicate::*;
-use async_trait::async_trait;
+use sekha_controller::models::internal::{NewConversation, NewMessage};
+use sekha_controller::services::{
+    embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient,
+};
+use sekha_controller::storage::chroma_client::ChromaClient;
+use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
+use serde_json::json;
+use tokio::time::{timeout, Duration};
 
 // Mock ChromaClient for testing
 mock! {
     pub ChromaClientTest {}
-    
+
     #[async_trait]
     impl sekha_controller::storage::chroma_client::ChromaClientTrait for ChromaClientTest {
         async fn create_collection(&self, name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -55,7 +57,7 @@ async fn test_concurrent_conversation_creation() {
 async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
     // Test that multiple conversations can be created concurrently
     let db = init_db("sqlite::memory:").await?;
-    
+
     // Use actual services but disable embedding generation to avoid external calls
     // The EmbeddingService will attempt connections but we're testing DB concurrency,
     // not embedding generation
@@ -64,7 +66,7 @@ async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
         "http://localhost:11434".to_string(),
         "http://localhost:8000".to_string(),
     ));
-    
+
     let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
         SeaOrmConversationRepository::new(db, chroma_client, embedding_service),
     );
@@ -111,7 +113,10 @@ async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
 
     // If external services are running, we should have 10 successes
     // If not, we just verify no panics occurred (concurrency safety)
-    println!("Successfully created {} conversations concurrently", success_count);
+    println!(
+        "Successfully created {} conversations concurrently",
+        success_count
+    );
 
     Ok(())
 }
@@ -120,7 +125,7 @@ async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_concurrent_conversation_creation_no_external_services() {
     // This test verifies concurrent database access without requiring external services
     // It creates conversations without messages to avoid embedding service calls
-    
+
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
     let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
