@@ -33,11 +33,13 @@ fn create_test_services() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
 
 async fn create_test_config() -> Arc<RwLock<config::Config>> {
     let config_str = r#"
+        server_host = "127.0.0.1"
         server_port = 8080
         mcp_api_key = "test_key_12345678901234567890123456789012"
         database_url = "sqlite::memory:"
         ollama_url = "http://localhost:11434"
         chroma_url = "http://localhost:8000"
+        llm_bridge_url = "http://localhost:5001"
         max_connections = 10
         log_level = "info"
         summarization_enabled = true
