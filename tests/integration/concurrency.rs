@@ -3,11 +3,23 @@ use super::{create_test_services, Arc, ConversationRepository};
 use sekha_controller::models::internal::{NewConversation, NewMessage};
 use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
 use serde_json::json;
+use tokio::time::{timeout, Duration};
 
 #[tokio::test]
 async fn test_concurrent_conversation_creation() {
+    // Wrap test in timeout to prevent hanging
+    let result = timeout(
+        Duration::from_secs(60),  // 60 second timeout
+        run_concurrent_test()
+    ).await;
+    
+    assert!(result.is_ok(), "Test timed out after 60 seconds");
+    assert!(result.unwrap().is_ok(), "Test failed");
+}
+
+async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
     // Test that multiple conversations can be created concurrently
-    let db = init_db("sqlite::memory:").await.unwrap();
+    let db = init_db("sqlite::memory:").await?;
     let (chroma_client, embedding_service) = create_test_services();
     let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
         SeaOrmConversationRepository::new(db, chroma_client, embedding_service),
@@ -45,11 +57,13 @@ async fn test_concurrent_conversation_creation() {
 
     // Wait for all to complete
     for handle in handles {
-        assert!(handle.await.unwrap().is_ok());
+        assert!(handle.await?.is_ok());
     }
 
     // Verify all 10 were created
-    let (conversations, count) = repo.find_with_filters(None, 100, 0).await.unwrap();
+    let (conversations, count) = repo.find_with_filters(None, 100, 0).await?;
     assert_eq!(count, 10);
     assert_eq!(conversations.len(), 10);
+    
+    Ok(())
 }
