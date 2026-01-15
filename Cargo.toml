@@ -48,7 +48,7 @@ dotenvy = "0.15.0"
 
 # File watching
 notify = "8.2.0"
-dirs = "5.0"  # For home directory detection
+dirs = "6.0"  # For home directory detection
 
 # Logging
 tracing = "0.1"
