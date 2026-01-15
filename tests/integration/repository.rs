@@ -130,7 +130,6 @@ async fn test_repository_very_long_message() {
     assert!(result.is_ok());
 }
 
-#[tokio::test]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_concurrent_inserts() {
     let db = init_db("sqlite::memory:").await.unwrap();
