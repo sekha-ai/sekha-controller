@@ -20,7 +20,7 @@ jobs:
         run: |
           cargo install cargo-audit cargo-deny
           cargo audit
-          cargo deny check
+          cargo deny check -c deny.toml
       
       # Python security
       - name: Python security scan
