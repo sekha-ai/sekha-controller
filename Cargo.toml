@@ -121,7 +121,6 @@ ndarray = "0.17.2"
 
 # Optional: Better XML parsing
 quick-xml = { version = "0.39", optional = true }
-audit = "0.7.3"
 
 [features]
 cli = []  # Enable CLI tool
