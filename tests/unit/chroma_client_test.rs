@@ -198,12 +198,13 @@ async fn test_ensure_collection_creates_if_missing() {
     let mock_server = MockServer::start().await;
     let client = ChromaClient::new(mock_server.uri());
 
-    // Mock collection not found - V2 API
+    // Mock GET collections - returns empty list (collection doesn't exist)
+    // This is what ensure_collection actually calls - it lists ALL collections
     Mock::given(method("GET"))
         .and(path(
-            "/api/v2/tenants/default_tenant/databases/default_database/collections/new_collection",
+            "/api/v2/tenants/default_tenant/databases/default_database/collections",
         ))
-        .respond_with(ResponseTemplate::new(404))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
         .mount(&mock_server)
         .await;
 
