@@ -9,7 +9,7 @@ use tokio::time::{timeout, Duration};
 async fn test_concurrent_conversation_creation() {
     // This test verifies concurrent database access without requiring external services
     // It creates conversations without messages to avoid embedding service calls
-    
+
     let result = timeout(
         Duration::from_secs(10), // 10 second timeout should be plenty
         run_concurrent_test(),
@@ -70,7 +70,7 @@ async fn run_concurrent_test() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_concurrent_conversation_creation_with_messages() {
     // This test requires external services to be running
     // Run with: cargo test -- --ignored --test-threads=1
-    
+
     let db = init_db("sqlite::memory:").await.unwrap();
     let (chroma_client, embedding_service) = create_test_services();
     let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
