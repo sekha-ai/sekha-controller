@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -132,7 +132,7 @@ jobs:
 
     steps:
       - name: Checkout llm-bridge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: sekha-ai/sekha-llm-bridge
 
@@ -200,7 +200,7 @@ jobs:
 
     steps:
       - name: Checkout controller
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: controller
 
@@ -218,7 +218,7 @@ jobs:
           done
 
       - name: Checkout Python SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: sekha-ai/sekha-python-sdk
           path: python-sdk
@@ -243,7 +243,7 @@ jobs:
           pytest tests/integration/ -v
 
       - name: Checkout JavaScript SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: sekha-ai/sekha-js-sdk
           path: js-sdk
@@ -270,7 +270,7 @@ jobs:
           npm run test:integration
 
       - name: Checkout MCP Server
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: sekha-ai/sekha-mcp
           path: mcp
@@ -298,12 +298,12 @@ jobs:
 
     steps:
       - name: Checkout controller repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: sekha-controller
 
       - name: Checkout docker repo (for Dockerfiles)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: sekha-ai/sekha-docker
           path: sekha-docker
@@ -354,7 +354,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
