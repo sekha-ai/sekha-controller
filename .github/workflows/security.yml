@@ -20,9 +20,6 @@ jobs:
         run: |
           cargo install cargo-audit cargo-deny
           cargo audit
-          echo "Running security audit (advisories only)..."
-          cargo deny check advisories --show-warnings || true
-          echo "Running license and dependency audit..."
           cargo deny check licenses bans sources
           
       # Python security
