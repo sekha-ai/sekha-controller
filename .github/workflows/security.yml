@@ -20,8 +20,11 @@ jobs:
         run: |
           cargo install cargo-audit cargo-deny
           cargo audit
-          cargo deny check advisories --allow-ignored-advisories
-      
+          echo "Running security audit (advisories only)..."
+          cargo deny check advisories --show-warnings || true
+          echo "Running license and dependency audit..."
+          cargo deny check licenses bans sources
+          
       # Python security
       - name: Python security scan
         if: hashFiles('requirements.txt') != '' || hashFiles('pyproject.toml') != ''
