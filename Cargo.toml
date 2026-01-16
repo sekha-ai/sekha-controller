@@ -1,12 +1,13 @@
 [package]
 name = "sekha-controller"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
-authors = ["Sekha AI <hello@sekha-ai.dev>"]
+authors = ["Sekha AI <dev@sekha-ai.dev>"]
+rust-version = "1.75"
 description = "Persistent AI memory controller for context management"
 homepage = "https://sekha-ai.dev"
 repository = "https://github.com/sekha-ai/sekha-controller"
-license = "AGPL-3.0"
+license = "AGPL-3.0-or-later"
 keywords = ["ai", "memory", "llm", "context", "ml"]
 categories = ["command-line-utilities", "web-programming"]
 readme = "README.md"
