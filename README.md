@@ -156,6 +156,7 @@ Advanced orchestration that automatically:
 │ └─ config/ │ │ via file copy│
 └──────────────┘ └──────────────┘
 
+---
 
 ### **Data Flow: How Memory Works**
 
