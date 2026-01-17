@@ -231,31 +231,27 @@ open http://localhost:8080/swagger-ui/
 What This Starts:
 
 Sekha Controller (port 8080) - Core memory engine
-
 Sekha LLM Bridge (port 5001) - LLM operations
-
 ChromaDB (port 8000) - Vector database
-
 Ollama (port 11434) - Local LLM runtime
-
 Option 2: Local Development
 
-# 1. Clone the controller
+### 1. Clone the controller
 git clone https://github.com/sekha-ai/sekha-controller.git
 cd sekha-controller
 
-# 2. Start dependencies (Chroma + Ollama)
+### 2. Start dependencies (Chroma + Ollama)
 docker run -d --name chroma -p 8000:8000 chromadb/chroma
 docker run -d --name ollama -p 11434:11434 ollama/ollama
 
-# 3. Install embedding model
+### 3. Install embedding model
 docker exec ollama ollama pull nomic-embed-text
 
-# 4. Build and run the controller
+### 4. Build and run the controller
 cargo build --release
 cargo run --release
 
-# 5. Test the installation
+### 5. Test the installation
 curl -X POST http://localhost:8080/api/v1/conversations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer dev-key-replace-in-production" \
@@ -274,13 +270,13 @@ curl -X POST http://localhost:8080/api/v1/conversations \
     ]
   }'
 
-# Expected: {"id": "uuid...", "conversation_id": "uuid...", ...}
+### Expected: {"id": "uuid...", "conversation_id": "uuid...", ...}
 
 📖 How to Use Sekha
 1. Storing Conversations
 Every time you chat with an AI, store the conversation in Sekha:
 
-# Store a conversation
+### Store a conversation
 curl -X POST http://localhost:8080/api/v1/conversations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-api-key" \
@@ -381,7 +377,7 @@ curl -X POST http://localhost:8080/api/v1/prune/dry-run \
 6. Generating Summaries
 Create hierarchical summaries to compress long conversation histories:
 
-# Daily summary
+### Daily summary
 curl -X POST http://localhost:8080/api/v1/summarize \
   -H "Content-Type: application/json" \
   -d '{
@@ -389,7 +385,7 @@ curl -X POST http://localhost:8080/api/v1/summarize \
     "level": "daily"
   }'
 
-# Weekly digest
+### Weekly digest
 curl -X POST http://localhost:8080/api/v1/summarize \
   -H "Content-Type: application/json" \
   -d '{
@@ -419,17 +415,11 @@ Sekha includes native Model Context Protocol support. Add to your Claude Desktop
 Now you can use these tools in Claude:
 
 memory_store - Save conversations
-
 memory_query - Search your memory
-
 memory_get_context - Retrieve relevant context
-
 memory_create_label - Organize conversations
-
 memory_prune_suggest - Get cleanup recommendations
-
 memory_export - Export your data
-
 memory_stats - View usage statistics
 
 
@@ -495,138 +485,92 @@ export SEKHA_LOG_LEVEL="info"
 Core Storage & Retrieval:
 
  SQLite database with full ACID guarantees
-
  ChromaDB vector storage for semantic search
-
  Full-text search via SQLite FTS5
-
  Label and folder hierarchical organization
-
  Importance scoring (1-10 scale)
-
  Status tracking (active/archived)
-
  Conversation metadata (word count, timestamps, sessions)
 
 APIs:
 
  17 REST endpoints (create, query, update, delete, search, stats)
-
  7 MCP protocol tools for Claude Desktop integration
-
  OpenAPI/Swagger documentation
-
  Rate limiting and CORS
-
  Bearer token authentication
 
 Orchestration:
 
  Context assembly with semantic + recency + importance ranking
-
  Hierarchical summarization (daily → weekly → monthly)
-
  AI-powered label suggestions
-
  Pruning recommendations
-
  Deduplication and token budget optimization
 
 LLM Integration:
 
  Ollama support (nomic-embed-text for embeddings)
-
  Llama 3.1 for summarization
-
  Async embedding pipeline with retry logic
 
 Production Features:
 
  Docker multi-arch builds (amd64/arm64)
-
  Comprehensive CI/CD with 85%+ coverage
-
  Security audits (cargo-deny, cargo-audit)
-
  Health checks and Prometheus metrics
-
  Hot config reload
-
  Structured logging (JSON + pretty)
 
 🎯 Roadmap 2026-2029
 Q1 2026 - Multi-LLM Support
 
  OpenAI API integration (GPT-4, embeddings)
-
  Anthropic Claude integration
-
  Google Gemini support
-
  Plug-and-play LLM configuration
-
  LLM provider abstraction layer
 
 Q2 2026 - Scale & Performance
 
  PostgreSQL backend option (multi-user)
-
  Redis caching layer
-
  Horizontal scaling architecture
-
  Kubernetes Helm charts
-
  Performance benchmarks published (academic paper submission)
 
 Q3 2026 - Advanced Features
 
  Knowledge graph extraction from conversations
-
  Relationship mapping between conversations
-
  Temporal reasoning (time-aware context)
-
  Multi-modal memory (images, audio, video)
-
  Federated sync (S3, R2, self-hosted)
 
 Q4 2026 - Enterprise & Collaboration
 
  Multi-tenant architecture
-
  Team collaboration features
-
  Role-based access control (RBAC)
-
  Audit logging and compliance (HIPAA, SOC2)
-
  WebSocket real-time updates
 
 2027 - AI Agent Ecosystem
 
  Agent-to-agent memory sharing
-
  Autonomous agent memory management
-
  Self-improving agent frameworks
-
  Agent learning from collective experiences
-
  Cross-agent knowledge transfer
 
 2028-2029 - Advanced Intelligence
 
  CRDT-based conflict resolution for distributed memory
-
  GPU-accelerated vector operations
-
  Plugin system for custom LLM backends
-
  Zero-knowledge encryption for privacy
-
  Blockchain-based provenance tracking (optional)
-
  Research: Contributions toward AGI architectures
 
 🧪 Testing & Quality
