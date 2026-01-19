@@ -60,7 +60,7 @@ utoipa = { version = "5.4.0", features = ["uuid"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 
 # Error handling
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 anyhow = "1.0"
 
 # UUIDs
