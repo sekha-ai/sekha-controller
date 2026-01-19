@@ -2,6 +2,7 @@
 
 > **The Universal Memory System for AI That Never Forgets**
 
+[![CI](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml/badge.svg)](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml)
 [![CI Status](https://github.com/sekha-ai/sekha-controller/workflows/CI/badge.svg)](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sekha-ai/sekha-controller/branch/main/graph/badge.svg)](https://codecov.io/gh/sekha-ai/sekha-controller)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
