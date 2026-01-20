@@ -21,6 +21,4 @@ Dockerfile
 tarpaulin-report.html
 lcov.info
 .coverage
-
-# Don't ignore the patch!
-# Make sure patches/ is NOT in .gitignore
+.cargo/*
