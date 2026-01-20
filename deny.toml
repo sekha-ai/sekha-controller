@@ -38,4 +38,6 @@ deny = []
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = []
+allow-git = [
+    "git+https://github.com/sekha-ai/sea-query?branch=sekha-controller-compat",
+]
