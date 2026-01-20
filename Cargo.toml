@@ -128,7 +128,8 @@ cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
 
 [patch.crates-io]
-sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
+# sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
+sea-query = { git = "https://github.com/sekha-ai/sea-query", branch = "sekha-controller-compat" }
 
 [dev-dependencies]
 tempfile = "3.23.0"

@@ -3329,6 +3329,7 @@ dependencies = [
 [[package]]
 name = "sea-query"
 version = "1.0.0-rc.23"
+source = "git+https://github.com/sekha-ai/sea-query?branch=sekha-controller-compat#138f4fa36ad304cc4602dc7538c366c1d4c991a3"
 dependencies = [
  "bigdecimal",
  "chrono",
