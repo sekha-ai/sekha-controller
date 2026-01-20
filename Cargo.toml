@@ -3,7 +3,7 @@ name = "sekha-controller"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sekha AI <dev@sekha-ai.dev>"]
-rust-version = "1.75"
+rust-version = "1.77"
 description = "Persistent AI memory controller for context management"
 homepage = "https://sekha-ai.dev"
 repository = "https://github.com/sekha-ai/sekha-controller"
@@ -49,7 +49,7 @@ dotenvy = "0.15.0"
 
 # File watching
 notify = "8.2.0"
-dirs = "5.0"  # For home directory detection
+dirs = "6.0"  # Upgraded from 5.0
 
 # Logging
 tracing = "0.1"
@@ -86,8 +86,7 @@ tower = "0.5.3"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 governor = "0.10"
 
-# Database - Pin sea-query-sqlx to avoid edition 2024 issues in rc.11
-sea-query-sqlx = "=0.8.0-rc.10"
+# Database - Use sea-orm rc.22 which will pull compatible sea-query
 sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
     "sqlx-sqlite",
     # "sqlx-postgres",  # Disabled for now
@@ -98,7 +97,6 @@ sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
     "with-uuid",
     "with-bigdecimal",
     "with-time",
-    # Removed: with-rust_decimal,
 ] }
 
 sea-orm-migration = { version = "=2.0.0-rc.22", default-features = false }
@@ -127,16 +125,13 @@ quick-xml = { version = "0.39", optional = true }
 cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
 
-[patch.crates-io]
-sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
-
 [dev-dependencies]
 tempfile = "3.23.0"
 toml = "0.9.11"
 tower-test = "0.4"
 wiremock = "0.6.5"
 sea-orm-cli = "=2.0.0-rc.22"
-mockall = "0.13"
+mockall = "0.14"  # Upgraded from 0.13
 tokio = { version = "1.49", features = ["full"] }
 serde_json = "1.0"
 hex = "0.4"
