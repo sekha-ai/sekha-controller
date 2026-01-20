@@ -1,12 +1,13 @@
 [package]
 name = "sekha-controller"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
-authors = ["Sekha AI <hello@sekha.ai>"]
+authors = ["Sekha AI <dev@sekha-ai.dev>"]
+rust-version = "1.75"
 description = "Persistent AI memory controller for context management"
-homepage = "https://sekha.ai"
+homepage = "https://sekha-ai.dev"
 repository = "https://github.com/sekha-ai/sekha-controller"
-license = "AGPL-3.0"
+license = "AGPL-3.0-or-later"
 keywords = ["ai", "memory", "llm", "context", "ml"]
 categories = ["command-line-utilities", "web-programming"]
 readme = "README.md"
@@ -31,12 +32,12 @@ path = "src/lib.rs"
 
 [dependencies]
 # Core async runtime
-tokio = { version = "1.35", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 
 libc = "0.2"
 
 # HTTP server
-axum = "=0.8"
+axum = "0.8"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -59,7 +60,7 @@ utoipa = { version = "5.4.0", features = ["uuid"] }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 
 # Error handling
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 anyhow = "1.0"
 
 # UUIDs
@@ -81,11 +82,12 @@ validator = { version = "0.20.0", features = ["derive"] }
 # Utilities
 once_cell = "1.19"
 futures = "0.3"
-tower = "0.5.2"
+tower = "0.5.3"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 governor = "0.10"
 
-# Database
+# Database - Pin sea-query-sqlx to avoid edition 2024 issues in rc.11
+sea-query-sqlx = "=0.8.0-rc.10"
 sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
     "sqlx-sqlite",
     # "sqlx-postgres",  # Disabled for now
@@ -105,7 +107,7 @@ sea-orm-codegen = "=2.0.0-rc.22"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite"] }
 
 # Daemon requirements
-daemonize = "0.5"
+daemonize-me = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
 # CHROMA INTEGRATION - Vector Database
@@ -113,31 +115,32 @@ chromadb = "^2.3"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
 # EMBEDDING GENERATION - Ollama
-ollama-rs = "0.3.3"
+ollama-rs = "0.3"
 
 # VECTOR MATH (if needed)
-ndarray = "0.17.1"
+ndarray = "0.17.2"
 
 # Optional: Better XML parsing
-quick-xml = { version = "0.38", optional = true }
+quick-xml = { version = "0.39", optional = true }
 mockall = "0.14"
+
 
 [features]
 cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
 
 [patch.crates-io]
-# sea-orm = { path = "patches/sea-orm-2.0.0-rc.22" }
-sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
+# sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  
+sea-query = { git = "https://github.com/sekha-ai/sea-query", branch = "sekha-controller-compat" }
 
 [dev-dependencies]
 tempfile = "3.23.0"
-toml = "0.9.8"
+toml = "0.9.11"
 tower-test = "0.4"
 wiremock = "0.6.5"
 sea-orm-cli = "=2.0.0-rc.22"
 mockall = "0.14"
-tokio = { version = "1.42", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 serde_json = "1.0"
 hex = "0.4"
 futures = "0.3"
