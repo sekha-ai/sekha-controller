@@ -801,7 +801,7 @@ Special thanks to the Rust, AI, and open-source communities.
 - **Test Coverage:** 85% (controller), 82% (bridge)
 - **Dependencies:** 47 Rust crates, 23 Python packages
 - **First Commit:** December 11, 2025
-- **Current Version:** v1.0.0
+- **Current Version:** v0.1.0
 - **Contributors:** Seeking contributors! Join us.
 - **License:** AGPL-3.0 / Commercial
 
