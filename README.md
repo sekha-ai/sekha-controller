@@ -194,6 +194,18 @@ Folder = think directories
 - `10`: Pinned, never prune
 
 ---
+**Note**: The Rust crate is not yet on crates.io due to upstream dependency issues. 
+Use one of these methods:
+
+### Docker (Recommended)
+docker pull ghcr.io/sekha-ai/sekha-controller:latest
+
+### From Source
+cargo install --git https://github.com/sekha-ai/sekha-controller
+
+### Pre-built Binaries
+Download from [GitHub Releases](https://github.com/sekha-ai/sekha-controller/releases)
+
 
 ## 🚀 **Quick Start**
 
