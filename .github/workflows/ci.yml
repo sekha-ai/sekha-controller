@@ -22,7 +22,7 @@ env:
 
 
 jobs:
-  
+
   # ============================================================
   # PHASE 1: Test Controller
   # ============================================================
@@ -286,11 +286,11 @@ jobs:
       - name: Cleanup
         working-directory: controller
         run: docker-compose down -v
-
+        
   # ============================================================
   # PHASE 4: Build & Push (Release)
   # ============================================================
-   docker-build-test:
+  docker-build-test:
     name: Test Docker Build
     runs-on: ubuntu-latest
     needs: [test-controller]
