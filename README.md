@@ -1,6 +1,6 @@
 # Sekha Controller
 
-> **The Universal Memory System for AI That Never Forgets**
+> **The Universal AI Memory System - Rust Core Engine**
 
 [![CI](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sekha-ai/sekha-controller/branch/main/graph/badge.svg)](https://codecov.io/gh/sekha-ai/sekha-controller)
@@ -8,824 +8,179 @@
 [![Rust](https://img.shields.io/badge/rust-1.83%2B-orange.svg)](https://www.rust-lang.org)
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://github.com/orgs/sekha-ai/packages)
 
-
 ---
 
-## 🎯 **What is Sekha?**
+## What is Sekha Controller?
 
-**Sekha Controller is a production-ready AI memory system that solves the fundamental limitations of conversational AI.**
+**Sekha Controller is the core memory engine** that gives AI persistent, searchable, infinite memory. Written in Rust for maximum performance and reliability.
 
-### **The Problems It Solves**
+This is the **main repository** for Sekha's memory orchestration engine:
 
-Every AI conversation today faces critical failures:
-
-1. **🔥 Broken Context** - Your LLM runs out of memory mid-conversation, losing critical details
-2. **🧠 Forgotten Context** - Long-running conversations forget everything from earlier sessions
-3. **⏱️ Agent Breakdowns** - AI agents fail on complex, multi-step tasks spanning hours or days
-4. **🚫 No Continuity** - Each new chat starts from zero, wasting time re-explaining context
-5. **📊 Lost Knowledge** - Years of valuable interactions vanish when you hit token limits
-
-### **The Solution**
-
-Sekha gives AI **persistent, searchable, infinite memory** - like a second brain that never forgets. Your conversations, whether they span minutes or years, maintain perfect continuity and context.
-
-**Use Cases:**
-- 💼 **Professionals**: Career-spanning AI assistant that remembers every project, decision, and insight
-- 🤖 **AI Agents**: Self-improving agents that learn from every interaction and never repeat mistakes
-- 🔬 **Researchers**: Persistent research assistant across multiple studies and experiments
-- 👨‍💻 **Developers**: Code assistant that remembers your entire codebase evolution and decisions
-- 📚 **Students**: Study companion that builds on months/years of coursework
-- 🏥 **Healthcare**: Patient history tracking with perfect recall (HIPAA-ready architecture)
-- 💡 **Creative Work**: Brainstorming partner that remembers every idea, draft, and iteration
+- ✅ REST API (17 endpoints)
+- ✅ MCP Protocol server
+- ✅ Semantic + full-text search
+- ✅ Context assembly & summarization
+- ✅ SQLite + ChromaDB storage
+- ✅ 85%+ test coverage
+- ✅ Sub-100ms queries at scale
 
 **For important things that actually need to be completed. For problems that actually need to be solved.**
 
-Sekha is NOT:
-- A chatbot
-- An LLM
-- An agent framework
+---
 
-Sekha IS:
-- A memory protocol layer
-- Sits BETWEEN user/agent and LLM
-- Captures, organizes, retrieves context
-- Makes infinite context windows possible
+## 📚 Documentation
+
+**Complete documentation is at [docs.sekha.dev](https://docs.sekha.dev)**
+
+- [Quickstart](https://docs.sekha.dev/getting-started/quickstart/) - Get running in 5 minutes
+- [Installation](https://docs.sekha.dev/getting-started/installation/) - Docker, binaries, from source
+- [Architecture](https://docs.sekha.dev/architecture/overview/) - How Sekha works
+- [API Reference](https://docs.sekha.dev/api-reference/rest-api/) - Complete REST API docs
+- [Deployment](https://docs.sekha.dev/deployment/docker-compose/) - Production deployment
+- [Contributing](https://docs.sekha.dev/development/contributing/) - How to contribute
 
 ---
 
-## ✨ **Key Features**
-
-### **🔒 Sovereign Memory**
-Your conversations are **your intellectual property**. Self-hosted, local-first architecture means your data never leaves your infrastructure.
-
-### **♾️ Infinite Context Windows**
-Never hit token limits again. Conversations can span:
-- Days → Weeks → Months → **Years**
-- 100 messages → 1,000 messages → **1,000,000+ messages**
-- Career-spanning interactions with perfect recall
-
-### **🧠 Intelligent Context Assembly**
-Advanced orchestration that automatically:
-- Retrieves relevant past conversations via semantic search
-- Prioritizes recent, important, and pinned messages
-- Builds hierarchical summaries (daily → weekly → monthly)
-- Suggests labels and organization strategies
-- Recommends pruning low-value conversations
-
-### **🔌 LLM Agnostic**
-**Plug-and-play architecture** - use any LLM while retaining perfect memory:
-- ✅ **Currently Implemented**: Ollama (local models: Llama, Mistral, etc.)
-- 🔜 **Roadmap**: OpenAI, Anthropic, Google, Cohere, custom models
-- 🎯 **Vision**: Switch between LLMs mid-conversation without losing context
-
-### **🚀 Production Ready**
-- 80%+ test coverage with comprehensive CI/CD
-- Docker deployment with multi-arch support (amd64/arm64)
-- RESTful API + Model Context Protocol (MCP) support
-- Sub-100ms semantic queries on millions of messages
-- Real-world benchmarks prepared for academic publication
-
-### **🌐 Multi-Interface Support**
-- REST API for any programming language
-- MCP protocol for Claude Desktop, Cline, and compatible tools
-- Python SDK for data science workflows
-- JavaScript SDK for web applications
-- VS Code extension for in-editor memory
-- CLI tool for terminal power users
-
----
-## 🏗️ **Architecture**
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        SEKHA CONTROLLER (Rust)                       │
-│                   Single Binary, Portable, ~50MB                     │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-         ┌─────────────────────┼─────────────────────┐
-         │                     │                     │
-         ▼                     ▼                     ▼
-    ┌─────────┐          ┌──────────┐         ┌────────────┐
-    │   REST  │          │   MCP    │         │  Internal  │
-    │   API   │          │  Server  │         │  Services  │
-    │ (17 eps)│          │ (7 tools)│         │            │
-    └────┬────┘          └─────┬────┘         └──────┬─────┘
-         │                     │                     │
-         └─────────────────────┼─────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   MEMORY ORCHESTRATION ENGINE                        │
-│                                                                       │
-│  ┌──────────────────┬────────────────────┬────────────────────────┐ │
-│  │ Context Assembly │  Hierarchical      │  Intelligent           │ │
-│  │                  │  Summarization     │  Organization          │ │
-│  ├──────────────────┼────────────────────┼────────────────────────┤ │
-│  │ -  Semantic +     │ -  Daily rollups    │ -  Label suggestions    │ │
-│  │   recency +      │ -  Weekly digests   │ -  Folder hierarchy     │ │
-│  │   importance     │ -  Monthly reports  │ -  Importance scoring   │ │
-│  │ -  Deduplication  │ -  Recursive        │ -  Pruning              │ │
-│  │ -  Token limits   │   compression      │   recommendations      │ │
-│  └──────────────────┴────────────────────┴────────────────────────┘ │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-          ┌─────────────────────┼─────────────────────┐
-          │                     │                     │
-          ▼                     ▼                     ▼
-    ┌────────────┐       ┌─────────────┐      ┌──────────────┐
-    │   SQLite   │       │  ChromaDB   │      │  LLM Bridge  │
-    │  (SeaORM)  │       │   Vectors   │      │   (Python)   │
-    └────────────┘       └─────────────┘      └──────────────┘
-    │                    │                    │
-    │ -  Metadata         │ -  768-dim          │ -  Ollama (v1)
-    │ -  Relations        │   embeddings       │ -  Future: Any LLM
-    │ -  Labels           │ -  Semantic         │ -  Summarization
-    │ -  Folders          │   similarity       │ -  Embeddings
-    │ -  Status           │ -  Sub-100ms        │ -  Tool calling
-    │ -  Importance       │   queries          │
-    │ -  Timestamps       │ -  Millions of      │
-    │                    │   vectors          │
-    └────────────────────┴────────────────────┴──────────────────┘
-                                │
-                   ┌────────────┴─────────────┐
-                   │                          │
-                   ▼                          ▼
-            ┌─────────────┐           ┌──────────────┐
-            │ File-based  │           │   Portable   │
-            │   Storage   │           │  Single-file │
-            │             │           │   Database   │
-            │ ~/.sekha/   │           │   sekha.db   │
-            │  ├─ data/   │           │              │
-            │  ├─ logs/   │           │ Full backup  │
-            │  └─ config/ │           │ via file copy│
-            └─────────────┘           └──────────────┘
-```
-
-### **Data Flow: How Memory Works**
-
-1. **Storage** → User sends conversation to `/api/v1/conversations`
-2. **Embedding** → LLM Bridge generates vector embeddings via Ollama
-3. **Indexing** → SQLite stores metadata, ChromaDB stores vectors
-4. **Query** → User searches via semantic query or keywords
-5. **Retrieval** → Orchestrator combines semantic + recency + importance
-6. **Assembly** → Context builder creates optimal payload for LLM
-7. **Interaction** → User gets perfectly contextualized AI response
-
-### **Label & Folder Organization**
-```
-Label = think tags
-Folder = think directories
-
-/work
-  /project-alpha         # Folder structure
-    (label: planning)    # Labels within folders
-    (label: technical)
-/personal
-  /learning
-    (label: rust)
-    (label: ai)
-```
-
-**Importance Scoring** (1-10 scale):
-- `1-3`: Low priority, candidate for pruning
-- `4-6`: Normal conversations
-- `7-9`: High value, frequently referenced
-- `10`: Pinned, never prune
-
----
-**Note**: The Rust crate is not yet on crates.io due to upstream dependency issues. 
-Use one of these methods:
+## 🚀 Quick Start
 
 ### Docker (Recommended)
-docker pull ghcr.io/sekha-ai/sekha-controller:latest
-
-### From Source
-cargo install --git https://github.com/sekha-ai/sekha-controller
-
-### Pre-built Binaries
-Download from [GitHub Releases](https://github.com/sekha-ai/sekha-controller/releases)
-
-
-## 🚀 **Quick Start**
-
-### **Prerequisites**
-
-- **Docker & Docker Compose** (recommended) OR
-- **Rust 1.75+** + SQLite3 (for local development)
-
-### **Option 1: Docker (Recommended for Users)**
 
 ```bash
-# 1. Clone the deployment repository
+# Use the full stack deployment
 git clone https://github.com/sekha-ai/sekha-docker.git
 cd sekha-docker
+docker compose up -d
 
-# 2. Start the full stack (controller + LLM bridge + dependencies)
-docker compose -f docker-compose.prod.yml up -d
-
-# 3. Verify it's running
+# Verify
 curl http://localhost:8080/health
-
-# Expected output:
-# {
-#   "status": "healthy",
-#   "timestamp": "2026-01-09T...",
-#   "checks": {
-#     "database": {"status": "ok"},
-#     "chroma": {"status": "ok"}
-#   }
-# }
-
-# 4. View interactive API documentation
-open http://localhost:8080/swagger-ui/
 ```
 
-**What This Starts:**
-
-- **Sekha Controller** (port 8080) - Core memory engine
-- **Sekha LLM Bridge** (port 5001) - LLM operations
-- **ChromaDB** (port 8000) - Vector database
-- **Ollama** (port 11434) - Local LLM runtime
-
-### **Option 2: Local Development**
+### From Source
 
 ```bash
-# 1. Clone the controller
+# Clone this repo
 git clone https://github.com/sekha-ai/sekha-controller.git
 cd sekha-controller
 
-# 2. Start dependencies (Chroma + Ollama)
+# Start dependencies
 docker run -d --name chroma -p 8000:8000 chromadb/chroma
 docker run -d --name ollama -p 11434:11434 ollama/ollama
 
-# 3. Install embedding model
-docker exec ollama ollama pull nomic-embed-text
-
-# 4. Build and run the controller
+# Build and run
 cargo build --release
 cargo run --release
 
-# 5. Test the installation
+# Test it
 curl -X POST http://localhost:8080/api/v1/conversations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer dev-key-replace-in-production" \
-  -d '{
-    "label": "First Conversation",
-    "folder": "/personal/test",
-    "messages": [
-      {
-        "role": "user",
-        "content": "Hello Sekha! This is my first message."
-      },
-      {
-        "role": "assistant",
-        "content": "Hello! I will remember this conversation forever."
-      }
-    ]
-  }'
+  -d '{"label": "Test", "messages": [{"role": "user", "content": "Hello Sekha!"}]}'
+```
 
-# Expected: {"id": "uuid...", "conversation_id": "uuid...", ...}
+**See [Installation Guide](https://docs.sekha.dev/getting-started/installation/) for detailed instructions.**
+
+---
+
+## 🏗️ Repository Structure
+
+```
+sekha-controller/
+├── src/
+│   ├── api/           # REST API endpoints
+│   ├── models/        # Database models (SeaORM)
+│   ├── services/      # Business logic
+│   ├── orchestration/ # Memory orchestration
+│   ├── mcp/          # MCP protocol server
+│   └── main.rs       # Entry point
+├── tests/
+│   ├── unit/         # Pure logic tests
+│   ├── integration/  # DB + API tests
+│   └── e2e/          # Full stack tests
+├── migrations/       # Database migrations
+└── Cargo.toml        # Dependencies
 ```
 
 ---
 
-## 📖 **How to Use Sekha**
-
-### **1. Storing Conversations**
-
-Every time you chat with an AI, store the conversation in Sekha:
-
-```bash
-# Store a conversation
-curl -X POST http://localhost:8080/api/v1/conversations \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
-  -d '{
-    "label": "Project Planning",
-    "folder": "/work/new-feature",
-    "messages": [
-      {"role": "user", "content": "We need to build a new API endpoint"},
-      {"role": "assistant", "content": "I recommend starting with..."}
-    ]
-  }'
-```
-
-**Response:**
-```json
-{
-  "id": "123e4567-e89b-12d3-a456-426614174000",
-  "conversation_id": "123e4567-e89b-12d3-a456-426614174000",
-  "label": "Project Planning",
-  "folder": "/work/new-feature",
-  "status": "active",
-  "message_count": 2,
-  "created_at": "2026-01-09T16:30:00"
-}
-```
-
-### **2. Searching Your Memory**
-
-**Semantic Search** (finds meaning, not just keywords):
-
-```bash
-curl -X POST http://localhost:8080/api/v1/query \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
-  -d '{
-    "query": "What did we discuss about API design?",
-    "limit": 5
-  }'
-```
-
-**Full-Text Search** (exact keywords):
-
-```bash
-curl -X POST http://localhost:8080/api/v1/search/fts \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
-  -d '{
-    "query": "API endpoint",
-    "limit": 10
-  }'
-```
-
-### **3. Building Context for Your Next AI Chat**
-
-Get the most relevant past conversations to include in your next LLM prompt:
-
-```bash
-curl -X POST http://localhost:8080/api/v1/context/assemble \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-api-key" \
-  -d '{
-    "query": "Continue working on the new feature",
-    "preferred_labels": ["Project Planning", "Technical Design"],
-    "context_budget": 8000
-  }'
-```
-
-This returns intelligently selected messages that fit within your token budget, prioritizing:
-
-- Semantic relevance to your query
-- Recent conversations
-- High importance scores
-- Preferred labels
-
-### **4. Organizing Memory**
-
-**Update Labels:**
-```bash
-curl -X PUT http://localhost:8080/api/v1/conversations/{id}/label \
-  -H "Content-Type: application/json" \
-  -d '{"label": "Completed Feature", "folder": "/work/archive"}'
-```
-
-**Pin Important Conversations:**
-```bash
-curl -X PUT http://localhost:8080/api/v1/conversations/{id}/pin
-```
-
-**Archive Old Conversations:**
-```bash
-curl -X PUT http://localhost:8080/api/v1/conversations/{id}/archive
-```
-
-### **5. Getting AI-Powered Suggestions**
-
-**Suggest Labels** (AI analyzes content and suggests organization):
-
-```bash
-curl -X POST http://localhost:8080/api/v1/labels/suggest \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_id": "uuid-here"}'
-```
-
-**Pruning Recommendations** (find low-value conversations to archive):
-
-```bash
-curl -X POST http://localhost:8080/api/v1/prune/dry-run \
-  -H "Content-Type: application/json" \
-  -d '{"threshold_days": 90}'
-```
-
-### **6. Generating Summaries**
-
-Create hierarchical summaries to compress long conversation histories:
-
-```bash
-# Daily summary
-curl -X POST http://localhost:8080/api/v1/summarize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "conversation_id": "uuid-here",
-    "level": "daily"
-  }'
-
-# Weekly digest
-curl -X POST http://localhost:8080/api/v1/summarize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "conversation_id": "uuid-here",
-    "level": "weekly"
-  }'
-```
-
-### **7. Using with Claude Desktop (MCP)**
-
-Sekha includes native Model Context Protocol support. Add to your Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "sekha": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "--network=host",
-        "ghcr.io/sekha-ai/sekha-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-Now you can use these tools in Claude:
-
-- `memory_store` - Save conversations
-- `memory_query` - Search your memory
-- `memory_get_context` - Retrieve relevant context
-- `memory_create_label` - Organize conversations
-- `memory_prune_suggest` - Get cleanup recommendations
-- `memory_export` - Export your data
-- `memory_stats` - View usage statistics
-
----
-
-## ⚙️ **Configuration**
-
-Sekha auto-generates `~/.sekha/config.toml` on first run. Customize it for your needs:
-
-```toml
-[server]
-port = 8080
-host = "0.0.0.0"
-# IMPORTANT: Change this to a secure random string (min 32 characters)
-api_key = "your-production-api-key-min-32-chars-long"
-
-[database]
-url = "sqlite://~/.sekha/data/sekha.db"
-max_connections = 100
-
-[vector_store]
-chroma_url = "http://localhost:8000"
-collection_name = "sekha_memory"
-
-[llm]
-# Current implementation: Ollama
-ollama_url = "http://localhost:11434"
-embedding_model = "nomic-embed-text:latest"
-summarization_model = "llama3.1:8b"
-
-# Future: Plug-and-play any LLM
-# provider = "openai" | "anthropic" | "google" | "custom"
-# api_key = "..."
-
-[features]
-# Enable/disable orchestration features
-summarization_enabled = true
-pruning_enabled = true
-auto_embed = true
-label_suggestions = true
-
-[logging]
-level = "info"  # trace | debug | info | warn | error
-format = "json"  # json | pretty
-output = "~/.sekha/logs/controller.log"
-
-[rate_limiting]
-requests_per_second = 100
-burst_size = 200
-
-[cors]
-allowed_origins = ["http://localhost:3000", "https://your-app.com"]
-```
-
-**Environment Variables** (override config.toml):
-
-```bash
-export SEKHA_SERVER_PORT=8080
-export SEKHA_API_KEY="production-key-change-this"
-export SEKHA_DATABASE_URL="sqlite:///opt/sekha/data/sekha.db"
-export SEKHA_CHROMA_URL="http://chroma:8000"
-export SEKHA_OLLAMA_URL="http://ollama:11434"
-export SEKHA_LOG_LEVEL="info"
-```
-
----
-
-## 📊 **Current Status & Roadmap**
-
-### ✅ **Production Ready (Current)**
-
-**Core Storage & Retrieval:**
-
-- ✅ SQLite database with full ACID guarantees
-- ✅ ChromaDB vector storage for semantic search
-- ✅ Full-text search via SQLite FTS5
-- ✅ Label and folder hierarchical organization
-- ✅ Importance scoring (1-10 scale)
-- ✅ Status tracking (active/archived)
-- ✅ Conversation metadata (word count, timestamps, sessions)
-
-**APIs:**
-
-- ✅ 17 REST endpoints (create, query, update, delete, search, stats)
-- ✅ 7 MCP protocol tools for Claude Desktop integration
-- ✅ OpenAPI/Swagger documentation
-- ✅ Rate limiting and CORS
-- ✅ Bearer token authentication
-
-**Orchestration:**
-
-- ✅ Context assembly with semantic + recency + importance ranking
-- ✅ Hierarchical summarization (daily → weekly → monthly)
-- ✅ AI-powered label suggestions
-- ✅ Pruning recommendations
-- ✅ Deduplication and token budget optimization
-
-**LLM Integration:**
-
-- ✅ Ollama support (nomic-embed-text for embeddings)
-- ✅ Llama 3.1 for summarization
-- ✅ Async embedding pipeline with retry logic
-
-**Production Features:**
-
-- ✅ Docker multi-arch builds (amd64/arm64)
-- ✅ Comprehensive CI/CD with 85%+ coverage
-- ✅ Security audits (cargo-deny, cargo-audit)
-- ✅ Health checks and Prometheus metrics
-- ✅ Hot config reload
-- ✅ Structured logging (JSON + pretty)
-
-### 🎯 **Roadmap 2026-2029**
-
-**Q1 2026 - Multi-LLM Support**
-
-- ⬜ OpenAI API integration (GPT-4, embeddings)
-- ⬜ Anthropic Claude integration
-- ⬜ Google Gemini support
-- ⬜ Plug-and-play LLM configuration
-- ⬜ LLM provider abstraction layer
-
-**Q2 2026 - Scale & Performance**
-
-- ⬜ PostgreSQL backend option (multi-user)
-- ⬜ Redis caching layer
-- ⬜ Horizontal scaling architecture
-- ⬜ Kubernetes Helm charts
-- ⬜ Performance benchmarks published (academic paper submission)
-
-**Q3 2026 - Advanced Features**
-
-- ⬜ Knowledge graph extraction from conversations
-- ⬜ Relationship mapping between conversations
-- ⬜ Temporal reasoning (time-aware context)
-- ⬜ Multi-modal memory (images, audio, video)
-- ⬜ Federated sync (S3, R2, self-hosted)
-
-**Q4 2026 - Enterprise & Collaboration**
-
-- ⬜ Multi-tenant architecture
-- ⬜ Team collaboration features
-- ⬜ Role-based access control (RBAC)
-- ⬜ Audit logging and compliance (HIPAA, SOC2)
-- ⬜ WebSocket real-time updates
-
-**2027 - AI Agent Ecosystem**
-
-- ⬜ Agent-to-agent memory sharing
-- ⬜ Autonomous agent memory management
-- ⬜ Self-improving agent frameworks
-- ⬜ Agent learning from collective experiences
-- ⬜ Cross-agent knowledge transfer
-
-**2028-2029 - Advanced Intelligence**
-
-- ⬜ CRDT-based conflict resolution for distributed memory
-- ⬜ GPU-accelerated vector operations
-- ⬜ Plugin system for custom LLM backends
-- ⬜ Zero-knowledge encryption for privacy
-- ⬜ Blockchain-based provenance tracking (optional)
-- ⬜ Research: Contributions toward AGI architectures
-
----
-
-## 🧪 **Testing & Quality**
-
-### **Test Coverage**
+## 🧪 Development
 
 ```bash
 # Run all tests
 cargo test
 
-# Run with coverage report
-cargo tarpaulin --out Html --output-dir coverage
-open coverage/index.html
+# Run with coverage
+cargo tarpaulin --out Html
 
-# Run specific test suites
-cargo test --test unit          # Pure logic tests
-cargo test --test integration   # Database + API tests
-cargo test --test api_test      # Full API validation
-cargo test --test benchmark     # Performance tests
-```
+# Run lints
+cargo fmt -- --check
+cargo clippy -- -D warnings
 
-**Current Coverage:** 85%+ across all modules
+# Run security audit
+cargo deny check advisories
 
-**Test Structure:**
-```
-tests/
-├── unit/           # Fast, no I/O, pure logic
-├── integration/    # Database + Chroma + Ollama
-├── api_test.rs     # Full REST API validation
-├── benchmarks/     # Performance measurement
-└── e2e/           # Docker stack smoke tests
-```
-
-### **Benchmarks**
-
-Performance benchmarks are in preparation for academic and industry paper submissions. Current focus:
-
-- Long-running conversation stability (days/weeks)
-- Million+ message scalability
-- Multi-user concurrent access patterns
-- Cross-repository integration latency
-- Real-world production workload simulation
-
----
-
-## 🛠️ **Development**
-
-### **Contributing**
-
-We are seeking contributors! 
-
-**How to Contribute:**
-1. Check open issues
-2. Fork the repo and create a feature branch
-3. Write tests for new functionality
-4. Ensure `cargo test` passes with 80%+ coverage
-5. Run `cargo fmt` and `cargo clippy`
-6. Submit a pull request
-
-See **CONTRIBUTING.md** for detailed guidelines.
-
-### **Code Quality Standards**
-
-All code must pass:
-
-```bash
-cargo fmt -- --check          # Formatting
-cargo clippy -- -D warnings   # Linting
-cargo test                    # All tests pass
-cargo tarpaulin --out Html    # 80%+ coverage
-cargo deny check advisories   # Security audit
-```
-
-### **Development Setup**
-
-```bash
-# 1. Install Rust (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# 2. Clone the repo
-git clone https://github.com/sekha-ai/sekha-controller.git
-cd sekha-controller
-
-# 3. Start dependencies
-docker compose -f docker-compose.dev.yml up -d
-
-# 4. Run in development mode (auto-reload)
+# Run in dev mode with auto-reload
 cargo watch -x run
-
-# 5. Run tests on file changes
-cargo watch -x test
 ```
 
----
-
-## 📚 **Multi-Repository Ecosystem**
-
-Sekha is built as a modular ecosystem. This README covers the controller (core engine). See other repos for additional components:
-
-| Repository       | Purpose                   | Status        |
-| ---------------- | ------------------------- | ------------- |
-| sekha-controller | Core memory engine (Rust) | ✅ Production  |
-| sekha-llm-bridge | LLM operations (Python)   | ✅ Production  |
-| sekha-docker     | Production deployment     | ✅ Production  |
-| sekha-python-sdk | Python client library     | 🔜 Publishing |
-| sekha-js-sdk     | JavaScript/TypeScript SDK | 🔜 Publishing |
-| sekha-mcp        | MCP server for Claude     | 🔜 Publishing |
-| sekha-vscode     | VS Code extension         | 🚧 Beta       |
-| sekha-cli        | Command-line tool         | 🚧 Beta       |
+**See [Contributing Guide](https://docs.sekha.dev/development/contributing/) for detailed development setup.**
 
 ---
 
-## 🔒 **Privacy & Security**
+## 🌐 Sekha Ecosystem
 
-### **Local-First Architecture**
-
-By default, all data stays on your machine:
-
-- SQLite database: `~/.sekha/data/sekha.db`
-- ChromaDB vectors: Docker volume or local directory
-- No telemetry, no phone-home, no analytics (opt-in only)
-
-### **Self-Hosted Deployment**
-
-Full control over your infrastructure:
-
-- Deploy on your own servers
-- Use your own LLMs (Ollama, vLLM, custom)
-- Air-gapped environments supported
-- GDPR/HIPAA-ready architecture
-
-### **Security Features**
-
-- Bearer token authentication
-- Rate limiting (per-IP, configurable)
-- CORS protection
-- Audit logging of all operations
-- Security audits via `cargo-deny` and `cargo-audit`
-- No external dependencies in production binary
-
-**Vulnerability Reporting:** security@sekha.dev
+| Repository | Purpose | Status |
+|------------|---------|--------|
+| **[sekha-controller](https://github.com/sekha-ai/sekha-controller)** | **Core memory engine (Rust)** | ✅ **Production** |
+| [sekha-llm-bridge](https://github.com/sekha-ai/sekha-llm-bridge) | LLM operations (Python) | ✅ Production |
+| [sekha-docker](https://github.com/sekha-ai/sekha-docker) | Deployment configs | ✅ Production |
+| [sekha-mcp](https://github.com/sekha-ai/sekha-mcp) | MCP protocol server | ✅ Production |
+| [sekha-python-sdk](https://github.com/sekha-ai/sekha-python-sdk) | Python client | 🔜 Publishing |
+| [sekha-js-sdk](https://github.com/sekha-ai/sekha-js-sdk) | JavaScript/TypeScript SDK | 🔜 Publishing |
+| [sekha-vscode](https://github.com/sekha-ai/sekha-vscode) | VS Code extension | 🚧 Beta |
+| [sekha-cli](https://github.com/sekha-ai/sekha-cli) | Terminal tool | 🚧 Beta |
+| [sekha-obsidian](https://github.com/sekha-ai/sekha-obsidian) | Obsidian plugin | 🚧 Beta |
 
 ---
 
-## 📄 **License**
+## 📄 License
 
 **Dual License:**
-- **Open Source:** AGPL-3.0 for personal, educational, and non-commercial use
-- **Commercial:** Contact hello@sekha.dev for enterprise licensing
+
+- **AGPL-3.0** - Free for personal, educational, and small business use (<50 employees)
+- **Commercial License** - For enterprises, contact [hello@sekha.dev](mailto:hello@sekha.dev)
+
+**See [License Details](https://docs.sekha.dev/about/license/) for full information.**
 
 ---
 
-## 🌐 **Links & Resources**
+## 🔗 Links
 
-- **Website:** https://sekha.dev - Product info, blog, use cases
-- **Documentation:** https://docs.sekha.dev - Full guides and API reference
-- **GitHub:** https://github.com/sekha-ai - All repositories
-- **Discord:** https://discord.gg/sekha - Community support
-- **API Docs:** http://localhost:8080/swagger-ui/ - Interactive API explorer (when running locally)
-
----
-
-## 🙏 **Acknowledgments**
-
-Built with world-class open-source tools:
-- **Axum** - Ergonomic async web framework
-- **SeaORM** - Rust async ORM
-- **ChromaDB** - Vector database for embeddings
-- **Ollama** - Local LLM runtime
-- **SQLite** - World's most deployed database
-- **Utoipa** - OpenAPI documentation generator
-
-Special thanks to the Rust, AI, and open-source communities.
-
----
-
-## 📞 **Support**
-
-- **Issues:** [GitHub Issues](https://github.com/sekha-ai/sekha-controller/issues)
-- **Discord:** https://discord.gg/sekha
-- **Email:** hello@sekha.dev
+- **Website:** [sekha.dev](https://sekha.dev)
+- **Documentation:** [docs.sekha.dev](https://docs.sekha.dev)
+- **Discord:** [discord.gg/sekha](https://discord.gg/sekha)
 - **Discussions:** [GitHub Discussions](https://github.com/sekha-ai/sekha-controller/discussions)
+- **Issues:** [GitHub Issues](https://github.com/sekha-ai/sekha-controller/issues)
 
 ---
 
-## 📈 **Project Stats**
+## 🙏 Acknowledgments
 
-- **Lines of Code:** ~15,000 (Rust controller) + ~5,000 (Python bridge)
-- **Test Coverage:** 85% (controller), 82% (bridge)
-- **Dependencies:** 47 Rust crates, 23 Python packages
-- **First Commit:** December 11, 2025
-- **Current Version:** v0.1.0
-- **Contributors:** Seeking contributors! Join us.
-- **License:** AGPL-3.0 / Commercial
+Built with:
+
+- [Axum](https://github.com/tokio-rs/axum) - Async web framework
+- [SeaORM](https://github.com/SeaQL/sea-orm) - Rust ORM
+- [ChromaDB](https://github.com/chroma-core/chroma) - Vector database
+- [SQLite](https://sqlite.org) - Embedded database
+- [Ollama](https://ollama.ai) - Local LLM runtime
 
 ---
 
 <div align="center">
 
-**Built to enable AI that never forgets**
+**Built for AI that never forgets**
 
-*From solving broken context windows to enabling career-spanning AI assistants and self-improving agents*
+[⭐ Star us on GitHub](https://github.com/sekha-ai/sekha-controller) • [📖 Read the Docs](https://docs.sekha.dev) • [💬 Join Discord](https://discord.gg/sekha)
 
-⭐ **Star us on GitHub** • 📖 **Read the Docs** • 💬 **Join Discord**
-
-**Sekha Project** • [Website](https://sekha.dev) • [GitHub](https://github.com/sekha-ai) • December 2025 - Present
+*Sekha Project • 2025-2026*
 
 </div>
