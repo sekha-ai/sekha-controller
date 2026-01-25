@@ -79,7 +79,7 @@ Advanced orchestration that automatically:
 - 🎯 **Vision**: Switch between LLMs mid-conversation without losing context
 
 ### **🚀 Production Ready**
-- 85%+ test coverage with comprehensive CI/CD
+- 80%+ test coverage with comprehensive CI/CD
 - Docker deployment with multi-arch support (amd64/arm64)
 - RESTful API + Model Context Protocol (MCP) support
 - Sub-100ms semantic queries on millions of messages
