@@ -88,7 +88,7 @@ governor = "0.10"
 
 # Database - Pin sea-query-sqlx to avoid edition 2024 issues in rc.11
 sea-query-sqlx = "=0.8.0-rc.10"
-sea-orm = { version = "=2.0.0-rc.22", default-features = false, features = [
+sea-orm = { version = "=2.0.0-rc.29", default-features = false, features = [
     "sqlx-sqlite",
     # "sqlx-postgres",  # Disabled for now
     "runtime-tokio-rustls",
