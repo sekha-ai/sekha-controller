@@ -19,7 +19,7 @@ Sekha Controller is a **high-performance memory orchestration engine** written i
 - **Intelligent Context Assembly**: 4-phase retrieval algorithm combining semantic search, recency, and importance
 - **Dual Storage**: SQLite for metadata + ChromaDB for vector embeddings
 - **REST API + MCP Protocol**: 17 REST endpoints + native Claude Desktop integration
-- **Production Ready**: 85%+ test coverage, <100ms query times, scales to millions of messages
+- **Production Ready**: 80%+ test coverage, <100ms query times, scales to millions of messages
 
 ---
 
@@ -39,31 +39,31 @@ Sekha Controller is the **central orchestration engine** in a three-component ar
 
 ```
 ┌───────────────────────────────────────────────┐
-│          Applications & Clients              │
-│   (Claude Desktop, ChatGPT, custom apps)     │
-└─────────────────┬──────────────────────────────┘
-                 │
-     ┌───────────┼──────────┐
+│          Applications & Clients               │
+│   (Claude Desktop, ChatGPT, custom apps)      │
+└─────────────────┬─────────────────────────────┘
+                  │
+     ┌────────────┼───────────┐
      │            │           │
      ▼            ▼           ▼
   REST API      MCP       Proxy
   Direct     Protocol   (Optional)
      │            │           │
-     └───────────┼──────────┘
-                 ▼
+     └──────────-─┼──-────────┘
+                  ▼
 ┌───────────────────────────────────────────────┐
-│       Sekha Controller (Port 8080)          │
-│                                             │
-│  • Memory Orchestration                    │
-│  • Context Assembly (4-phase algorithm)    │
-│  • Storage Management (SQLite + Chroma)    │
-│  • Pruning & Summarization                 │
-│  • Label Intelligence                      │
+│       Sekha Controller (Port 8080)            │
+│                                               │
+│  • Memory Orchestration                       │
+│  • Context Assembly (4-phase algorithm)       │
+│  • Storage Management (SQLite + Chroma)       │
+│  • Pruning & Summarization                    │
+│  • Label Intelligence                         │
 └────────────────┬──────────────────────────────┘
                  │
-     ┌───────────┼──────────┐
-     │            │           │
-     ▼            ▼           ▼
+     ┌───────────┼─────────────┐
+     │           │             │
+     ▼           ▼             ▼
 ┌────────┐  ┌────────┐  ┌──────────┐
 │  LLM   │  │ SQLite │  │ ChromaDB │
 │ Bridge │  │  FTS5  │  │  Vectors │
