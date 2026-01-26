@@ -324,21 +324,7 @@ sekha-controller/
 
 ## Performance Benchmarks
 
-**Test Environment**: M1 MacBook Pro, 1M messages in database
-
-| Operation | Latency | Notes |
-|-----------|---------|-------|
-| Store Conversation | ~50ms | Including embedding generation |
-| Semantic Search | ~30ms | ChromaDB vector similarity |
-| Full-Text Search | ~10ms | SQLite FTS5 index |
-| Context Assembly | ~100ms | Full 4-phase retrieval |
-| Daily Summary | ~2s | LLM-dependent |
-
-**Scalability:**
-- SQLite handles billions of rows
-- ChromaDB scales to millions of vectors
-- Search performance remains sub-100ms at scale
-
+**Coming Soon**: Benchmarking is in progress
 ---
 
 ## Ecosystem
@@ -380,7 +366,7 @@ Sekha Controller is free for:
 - Businesses with fewer than 50 employees
 
 ### Commercial License (Required)
-Businesses with 50 or more employees (including frontier labs) require a commercial license.
+Businesses with 50 or more employees require a commercial license.
 
 **Contact**: [hello@sekha.dev](mailto:hello@sekha.dev)  
 **Details**: [docs.sekha.dev/about/license](https://docs.sekha.dev/about/license/)
