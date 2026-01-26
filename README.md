@@ -30,7 +30,7 @@ Sekha Controller is a **high-performance memory orchestration engine** written i
 - 📚 **[Full Documentation](https://docs.sekha.dev)** - Complete guides and API reference
 - 🐳 **[Deployment Options](https://github.com/sekha-ai/sekha-docker)** - Docker Compose, Kubernetes, local binary
 - 🐛 **[Report Issues](https://github.com/sekha-ai/sekha-controller/issues)** - Bug reports and feature requests
-- 💬 **[Community]([https://discord.gg/sekha](https://discord.gg/gZb7U9deKH))** - Discord, discussions, and support
+- 💬 **[Community](https://discord.gg/gZb7U9deKH)** - Discord, discussions, and support
 
 ---
 
