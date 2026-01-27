@@ -103,7 +103,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         r#"
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
             content,
-            tokenize='porter'
+            tokenize = 'porter'
         );
         "#,
     )
@@ -140,7 +140,7 @@ mod tests {
         // Verify migrations table was created (proves migrations ran)
         let result = db
             .execute_unprepared(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations',
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
             )
             .await
             .unwrap();
@@ -159,7 +159,7 @@ mod tests {
         // Verify conversations table exists
         let result = db
             .execute_unprepared(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations',
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
             )
             .await
             .unwrap();
