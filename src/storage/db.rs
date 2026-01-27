@@ -51,7 +51,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Check if migrations table exists by querying sqlite_master directly
     let migrations_need_setup = db
         .execute_unprepared(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
         )
         .await
         .map(|result| result.rows_affected() == 0)
@@ -88,7 +88,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')" ,
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
