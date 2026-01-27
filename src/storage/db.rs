@@ -60,6 +60,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     if migrations_need_setup {
         tracing::info!("First run: executing all migration SQL files");
 
+        // FIX: Removed migration 007 from this list - it's now handled separately below
         let migrations = [
             include_str!("../../migrations/001_create_conversations.sql"),
             include_str!("../../migrations/002_create_messages.sql"),
@@ -139,7 +140,7 @@ mod tests {
         // Verify migrations table was created (proves migrations ran)
         let result = db
             .execute_unprepared(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations',
             )
             .await
             .unwrap();
@@ -158,7 +159,7 @@ mod tests {
         // Verify conversations table exists
         let result = db
             .execute_unprepared(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations',
             )
             .await
             .unwrap();
