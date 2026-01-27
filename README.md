@@ -1,5 +1,8 @@
 # Sekha Controller
 
+Sekha fi haieroglyph enek. (Memory is the record of you.)
+
+
 > **The Memory Engine for AI - Persistent, Searchable, Infinite Context**
 
 [![CI](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sekha-ai/sekha-controller/actions/workflows/ci.yml)
