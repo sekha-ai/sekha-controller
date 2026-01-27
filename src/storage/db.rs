@@ -103,7 +103,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         r#"
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
             content,
-            tokenize = 'porter'
+            tokenize='porter'
         );
         "#,
     )
