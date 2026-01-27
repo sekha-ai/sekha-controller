@@ -48,17 +48,19 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     // Apply migrations if needed
     tracing::info!("Applying migrations...");
-    let schema_manager = SchemaManager::new(&db);
 
-    let migrations_need_setup = schema_manager
-        .has_table("seaql_migrations")
+    // Check if migrations have been applied by querying the actual database
+    let migrations_table_exists = db
+        .execute_unprepared(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
+        )
         .await
+        .map(|result| result.rows_affected() > 0)
         .unwrap_or(false);
 
-    if !migrations_need_setup {
+    if !migrations_table_exists {
         tracing::info!("First run: executing all migration SQL files");
 
-        // FIX: Removed migration 007 from this list - it's now handled separately below
         let migrations = [
             include_str!("../../migrations/001_create_conversations.sql"),
             include_str!("../../migrations/002_create_messages.sql"),
@@ -86,11 +88,13 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
         }
+
+        tracing::info!("All migrations applied successfully");
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
