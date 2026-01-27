@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
-use sea_orm_migration::SchemaManager;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -49,16 +48,16 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Apply migrations if needed
     tracing::info!("Applying migrations...");
 
-    // Check if migrations have been applied by querying the actual database
-    let migrations_table_exists = db
+    // Check if migrations table exists by querying sqlite_master directly
+    let migrations_need_setup = db
         .execute_unprepared(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
         )
         .await
-        .map(|result| result.rows_affected() > 0)
-        .unwrap_or(false);
+        .map(|result| result.rows_affected() == 0)
+        .unwrap_or(true);
 
-    if !migrations_table_exists {
+    if migrations_need_setup {
         tracing::info!("First run: executing all migration SQL files");
 
         let migrations = [
@@ -93,8 +92,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             ))
             .await?;
         }
-
-        tracing::info!("All migrations applied successfully");
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
