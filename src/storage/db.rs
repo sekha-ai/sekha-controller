@@ -90,10 +90,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             let version = format!("m20241211_{:08}", i * 100000);
-            let sql = format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
-                version
-            );
+            let sql = format!("INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')", version);
             db.execute_unprepared(&sql).await?;
         }
     } else {
@@ -113,7 +110,7 @@ pub async fn get_connection() -> Option<DatabaseConnection> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+use tempfile::TempDir;
 
     #[tokio::test]
     async fn test_init_db_creates_file() {
