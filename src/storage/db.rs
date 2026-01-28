@@ -92,9 +92,10 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         .await?;
 
         for i in 1..=migrations.len() {
+            let version = format!("m20241211_{:08}", i * 100000);
             db.execute_unprepared(&format!(
                 "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
-                format!("m20241211_{:08}", i * 100000)
+                version
             ))
             .await?;
         }
