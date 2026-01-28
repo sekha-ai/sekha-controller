@@ -91,7 +91,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         for i in 1..=migrations.len() {
             let version = format!("m20241211_{:08}", i * 100000);
             let sql = format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
                 version
             );
             db.execute_unprepared(&sql).await?;
@@ -99,16 +99,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
-
-    db.execute_unprepared(
-        r#"
-        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-            content,
-            tokenize="porter"
-        );
-        "#,
-    )
-    .await?;
 
     let mut conn = DB_CONN.lock().await;
     *conn = Some(db.clone());
