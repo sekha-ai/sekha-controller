@@ -94,11 +94,12 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
         }
+
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
