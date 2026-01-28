@@ -99,7 +99,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             ))
             .await?;
         }
-
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
