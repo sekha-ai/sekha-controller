@@ -94,7 +94,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')" ,
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
@@ -189,7 +189,7 @@ mod tests {
 
         // First init - creates everything
         let db1 = init_db(&url).await.unwrap();
-        
+
         // Get migration count after first init
         let result1 = db1
             .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
@@ -199,14 +199,14 @@ mod tests {
 
         // Second init - should skip migrations
         let db2 = init_db(&url).await.unwrap();
-        
+
         // Verify migration count is the same (no duplicates)
         let result2 = db2
             .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
             .await
             .unwrap();
         let count2 = result2.rows_affected();
-        
+
         assert_eq!(count1, count2);
         assert!(count2 > 0);
     }
@@ -238,7 +238,7 @@ mod tests {
 
         // First init
         init_db(&url).await.unwrap();
-        
+
         // Second init - FTS creation should not fail
         let result = init_db(&url).await;
         assert!(result.is_ok());
@@ -264,6 +264,9 @@ mod tests {
     async fn test_init_db_invalid_url() {
         let result = init_db("invalid://path").await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid SQLite URL format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid SQLite URL format"));
     }
 }
