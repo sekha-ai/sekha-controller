@@ -49,14 +49,17 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Applying migrations...");
 
     // Check if migrations table exists by trying to query it
-    let migrations_need_setup = match db.query_one(Statement::from_string(
-        sea_orm::DatabaseBackend::Sqlite,
-        "SELECT COUNT(*) FROM seaql_migrations".to_string(),
-    )).await {
+    let migrations_need_setup = match db
+        .query_one(Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) FROM seaql_migrations".to_string(),
+        ))
+        .await
+    {
         Ok(_) => {
             tracing::info!("Migrations table exists, skipping setup");
             false
-        },
+        }
         Err(_) => {
             tracing::info!("Migrations table does not exist, will create");
             true
@@ -94,7 +97,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')" ,
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
