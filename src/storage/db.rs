@@ -94,7 +94,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
@@ -173,12 +173,97 @@ mod tests {
         assert_eq!(result.rows_affected(), 1);
 
         // Verify migrations tracking table exists and has entries
-        // Use execute_unprepared with manual counting since query_one has API issues
         let result = db
             .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
             .await
             .unwrap();
 
         assert!(result.rows_affected() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_init_db_skips_existing_migrations() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        // First init - creates everything
+        let db1 = init_db(&url).await.unwrap();
+        
+        // Get migration count after first init
+        let result1 = db1
+            .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
+            .await
+            .unwrap();
+        let count1 = result1.rows_affected();
+
+        // Second init - should skip migrations
+        let db2 = init_db(&url).await.unwrap();
+        
+        // Verify migration count is the same (no duplicates)
+        let result2 = db2
+            .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
+            .await
+            .unwrap();
+        let count2 = result2.rows_affected();
+        
+        assert_eq!(count1, count2);
+        assert!(count2 > 0);
+    }
+
+    #[tokio::test]
+    async fn test_init_db_creates_fts_table() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        let db = init_db(&url).await.unwrap();
+
+        // Verify FTS table exists
+        let result = db
+            .execute_unprepared(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.rows_affected(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_init_db_fts_idempotent() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        // First init
+        init_db(&url).await.unwrap();
+        
+        // Second init - FTS creation should not fail
+        let result = init_db(&url).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_connection() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        // Before init, connection should be None
+        let conn_before = get_connection().await;
+        assert!(conn_before.is_none());
+
+        // After init, connection should be available
+        init_db(&url).await.unwrap();
+        let conn_after = get_connection().await;
+        assert!(conn_after.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_init_db_invalid_url() {
+        let result = init_db("invalid://path").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid SQLite URL format"));
     }
 }
