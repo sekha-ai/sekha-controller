@@ -66,7 +66,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     if migrations_need_setup {
         tracing::info!("First run: executing all migration SQL files");
 
-        // FIX: Removed migration 007 from this list - it's now handled separately below
         let migrations = [
             include_str!("../../migrations/001_create_conversations.sql"),
             include_str!("../../migrations/002_create_messages.sql"),
@@ -103,13 +102,12 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         tracing::info!("Migrations already applied, skipping");
     }
 
-    // FIX: Create FTS table unconditionally and separately from migrations
-    // This avoids SeaORM's migration runner bugs with virtual tables
+    // Create FTS table unconditionally and separately from migrations
     db.execute_unprepared(
         r#"
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
             content,
-            tokenize='porter'
+            tokenize="porter"
         );
         "#,
     )
@@ -129,7 +127,6 @@ pub async fn get_connection() -> Option<DatabaseConnection> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::{DatabaseBackend, Statement};
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -140,10 +137,8 @@ mod tests {
 
         let db = init_db(&url).await.unwrap();
 
-        // Verify file exists
         assert!(db_path.exists());
 
-        // Verify migrations table was created (proves migrations ran)
         let result = db
             .execute_unprepared(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
@@ -162,7 +157,6 @@ mod tests {
 
         let db = init_db(&url).await.unwrap();
 
-        // Verify conversations table exists
         let result = db
             .execute_unprepared(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'",
@@ -172,7 +166,6 @@ mod tests {
 
         assert_eq!(result.rows_affected(), 1);
 
-        // Verify migrations tracking table exists and has entries
         let result = db
             .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
             .await
@@ -187,11 +180,8 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        // First init - creates everything
         init_db(&url).await.unwrap();
 
-        // Second init - should skip migrations and not error
-        // This tests the else branch at line 102
         let result = init_db(&url).await;
         assert!(result.is_ok());
     }
@@ -204,7 +194,6 @@ mod tests {
 
         let db = init_db(&url).await.unwrap();
 
-        // Verify FTS table exists
         let result = db
             .execute_unprepared(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'",
@@ -221,10 +210,8 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        // First init
         init_db(&url).await.unwrap();
 
-        // Second init - FTS creation should not fail
         let result = init_db(&url).await;
         assert!(result.is_ok());
     }
@@ -235,11 +222,9 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        // Before init, connection should be None
         let conn_before = get_connection().await;
         assert!(conn_before.is_none());
 
-        // After init, connection should be available
         init_db(&url).await.unwrap();
         let conn_after = get_connection().await;
         assert!(conn_after.is_some());
