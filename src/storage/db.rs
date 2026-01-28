@@ -9,7 +9,6 @@ static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
 
-    // Handle special SQLite URL formats
     let db = if database_url == "sqlite::memory:" {
         Database::connect(database_url)
             .await
@@ -45,10 +44,8 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     tracing::info!("WAL mode enabled for database");
 
-    // Apply migrations if needed
     tracing::info!("Applying migrations...");
 
-    // Check if migrations table exists by trying to query it
     let migrations_need_setup = match db
         .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
         .await
@@ -93,17 +90,13 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             let version = format!("m20241211_{:08}", i * 100000);
-            db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
-                version
-            ))
-            .await?;
+            let sql = format!("INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')", version);
+            db.execute_unprepared(&sql).await?;
         }
     } else {
         tracing::info!("Migrations already applied, skipping");
     }
 
-    // Create FTS table unconditionally and separately from migrations
     db.execute_unprepared(
         r#"
         CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -114,7 +107,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     )
     .await?;
 
-    // Store connection
     let mut conn = DB_CONN.lock().await;
     *conn = Some(db.clone());
 
