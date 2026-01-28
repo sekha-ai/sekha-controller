@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr, Statement};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -48,14 +48,20 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Apply migrations if needed
     tracing::info!("Applying migrations...");
 
-    // Check if migrations table exists by querying sqlite_master directly
-    let migrations_need_setup = db
-        .execute_unprepared(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='seaql_migrations'",
-        )
-        .await
-        .map(|result| result.rows_affected() == 0)
-        .unwrap_or(true);
+    // Check if migrations table exists by trying to query it
+    let migrations_need_setup = match db.query_one(Statement::from_string(
+        sea_orm::DatabaseBackend::Sqlite,
+        "SELECT COUNT(*) FROM seaql_migrations".to_string(),
+    )).await {
+        Ok(_) => {
+            tracing::info!("Migrations table exists, skipping setup");
+            false
+        },
+        Err(_) => {
+            tracing::info!("Migrations table does not exist, will create");
+            true
+        }
+    };
 
     if migrations_need_setup {
         tracing::info!("First run: executing all migration SQL files");
@@ -88,7 +94,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
         for i in 1..=migrations.len() {
             db.execute_unprepared(&format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
+                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}'),
                 format!("m20241211_{:08}", i * 100000)
             ))
             .await?;
