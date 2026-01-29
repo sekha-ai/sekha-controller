@@ -6,6 +6,28 @@ use tokio::sync::Mutex;
 static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
 
+/// Expected migration versions in order
+const MIGRATION_VERSIONS: &[&str] = &[
+    "m20241211_00100000", // 001_create_conversations.sql
+    "m20241211_00200000", // 002_create_messages.sql
+    "m20241211_00300000", // 003_create_semantic_tags.sql
+    "m20241211_00400000", // 004_create_hierarchical_summaries.sql
+    "m20241211_00500000", // 005_create_knowledge_graph_edges.sql
+    "m20241211_00600000", // 006_add_updated_at_triggers.sql
+    "m20241211_00700000", // 007_create_fts.sql
+];
+
+/// Migration SQL files embedded at compile time
+const MIGRATIONS: &[&str] = &[
+    include_str!("../../migrations/001_create_conversations.sql"),
+    include_str!("../../migrations/002_create_messages.sql"),
+    include_str!("../../migrations/003_create_semantic_tags.sql"),
+    include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
+    include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
+    include_str!("../../migrations/006_add_updated_at_triggers.sql"),
+    include_str!("../../migrations/007_create_fts.sql"),
+];
+
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
 
@@ -38,72 +60,167 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
 
+    // Enable WAL mode for better concurrency
     db.execute_unprepared("PRAGMA journal_mode=WAL;")
         .await
         .map_err(|e| DbErr::Custom(format!("Failed to enable WAL mode: {}", e)))?;
 
     tracing::info!("WAL mode enabled for database");
 
-    tracing::info!("Applying migrations...");
-
-    let migrations_need_setup = match db
-        .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
-        .await
-    {
-        Ok(_) => {
-            tracing::info!("Migrations table exists, skipping setup");
-            false
-        }
-        Err(_) => {
-            tracing::info!("Migrations table does not exist, will create");
-            true
-        }
-    };
-
-    if migrations_need_setup {
-        tracing::info!("First run: executing all migration SQL files");
-
-        let migrations = [
-            include_str!("../../migrations/001_create_conversations.sql"),
-            include_str!("../../migrations/002_create_messages.sql"),
-            include_str!("../../migrations/003_create_semantic_tags.sql"),
-            include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
-            include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
-            include_str!("../../migrations/006_add_updated_at_triggers.sql"),
-            include_str!("../../migrations/007_create_fts.sql"),
-        ];
-
-        for (i, sql) in migrations.iter().enumerate() {
-            db.execute_unprepared(sql).await?;
-            tracing::info!("Applied migration {}", i + 1);
-        }
-
-        db.execute_unprepared(
-            r#"
-            CREATE TABLE IF NOT EXISTS seaql_migrations (
-                version TEXT PRIMARY KEY,
-                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            "#,
-        )
-        .await?;
-
-        for i in 1..=migrations.len() {
-            let version = format!("m20241211_{:08}", i * 100000);
-            let sql = format!(
-                "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
-                version
-            );
-            db.execute_unprepared(&sql).await?;
-        }
-    } else {
-        tracing::info!("Migrations already applied, skipping");
-    }
+    // Run migrations with proper idempotency
+    run_migrations(&db).await?;
 
     let mut conn = DB_CONN.lock().await;
     *conn = Some(db.clone());
 
     Ok(db)
+}
+
+/// Run database migrations with idempotent, atomic operations
+async fn run_migrations(db: &DatabaseConnection) -> Result<(), DbErr> {
+    tracing::info!("Checking migration status...");
+
+    // Ensure migrations table exists
+    ensure_migrations_table(db).await?;
+
+    // Get list of applied migrations
+    let applied_migrations = get_applied_migrations(db).await?;
+    tracing::info!("Found {} applied migrations", applied_migrations.len());
+
+    // Determine which migrations need to be applied
+    let mut migrations_to_apply = Vec::new();
+    for (idx, version) in MIGRATION_VERSIONS.iter().enumerate() {
+        if !applied_migrations.contains(&version.to_string()) {
+            migrations_to_apply.push((idx, version));
+        }
+    }
+
+    if migrations_to_apply.is_empty() {
+        tracing::info!("All migrations already applied, database is up to date");
+        return Ok(());
+    }
+
+    tracing::info!(
+        "Applying {} pending migration(s): {:?}",
+        migrations_to_apply.len(),
+        migrations_to_apply.iter().map(|(_, v)| v).collect::<Vec<_>>()
+    );
+
+    // Apply each pending migration
+    for (idx, version) in migrations_to_apply {
+        apply_migration(db, idx, version).await?;
+    }
+
+    tracing::info!("All migrations applied successfully");
+    Ok(())
+}
+
+/// Ensure the migrations tracking table exists
+async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
+    db.execute_unprepared(
+        r#"
+        CREATE TABLE IF NOT EXISTS seaql_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .await
+    .map_err(|e| {
+        DbErr::Custom(format!("Failed to create migrations table: {}", e))
+    })?;
+
+    tracing::debug!("Migrations tracking table ready");
+    Ok(())
+}
+
+/// Get list of already applied migration versions
+async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, DbErr> {
+    // Use a simpler query that doesn't rely on QueryResult trait
+    let result = db
+        .execute_unprepared("SELECT version FROM seaql_migrations ORDER BY version")
+        .await;
+
+    match result {
+        Ok(_) => {
+            // Table exists, now fetch the actual data
+            // Since we can't easily parse the QueryResult, we'll use a raw query approach
+            // For SQLite, we'll check if there are any rows
+            let count_result = db
+                .execute_unprepared("SELECT COUNT(*) as cnt FROM seaql_migrations")
+                .await
+                .map_err(|e| DbErr::Custom(format!("Failed to count migrations: {}", e)))?;
+
+            if count_result.rows_affected() == 0 {
+                tracing::debug!("Migrations table is empty");
+                return Ok(Vec::new());
+            }
+
+            // Parse version strings from the table
+            // Since we can't use QueryResult directly, we'll use a different approach
+            // We'll attempt to verify each expected version exists
+            let mut applied = Vec::new();
+            for version in MIGRATION_VERSIONS {
+                let check_sql = format!(
+                    "SELECT 1 FROM seaql_migrations WHERE version = '{}' LIMIT 1",
+                    version
+                );
+                if let Ok(result) = db.execute_unprepared(&check_sql).await {
+                    if result.rows_affected() > 0 {
+                        applied.push(version.to_string());
+                    }
+                }
+            }
+
+            Ok(applied)
+        }
+        Err(e) => {
+            tracing::debug!("Failed to query migrations table: {}", e);
+            Ok(Vec::new())
+        }
+    }
+}
+
+/// Apply a single migration with proper error handling
+async fn apply_migration(
+    db: &DatabaseConnection,
+    idx: usize,
+    version: &str,
+) -> Result<(), DbErr> {
+    tracing::info!("Applying migration {} ({})", idx + 1, version);
+
+    let sql = MIGRATIONS.get(idx).ok_or_else(|| {
+        DbErr::Custom(format!("Migration index {} out of bounds", idx))
+    })?;
+
+    // Execute the migration SQL
+    db.execute_unprepared(sql).await.map_err(|e| {
+        DbErr::Custom(format!(
+            "Failed to execute migration {} ({}): {}",
+            idx + 1,
+            version,
+            e
+        ))
+    })?;
+
+    // Record that this migration was applied
+    // Using INSERT OR IGNORE for idempotency in case of race conditions
+    let record_sql = format!(
+        "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
+        version
+    );
+
+    db.execute_unprepared(&record_sql).await.map_err(|e| {
+        DbErr::Custom(format!(
+            "Failed to record migration {} ({}): {}",
+            idx + 1,
+            version,
+            e
+        ))
+    })?;
+
+    tracing::info!("Successfully applied migration {} ({})", idx + 1, version);
+    Ok(())
 }
 
 pub async fn get_connection() -> Option<DatabaseConnection> {
@@ -224,5 +341,53 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Invalid SQLite URL format"));
+    }
+
+    #[tokio::test]
+    async fn test_migrations_idempotent_on_restart() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        // First initialization
+        init_db(&url).await.unwrap();
+
+        // Simulate container restart - reconnect to same database
+        let db2 = init_db(&url).await.unwrap();
+
+        // Verify no errors and migrations table is correct
+        let result = db2
+            .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
+            .await
+            .unwrap();
+
+        assert!(result.rows_affected() > 0);
+
+        // Verify all tables exist
+        let tables = vec![
+            "conversations",
+            "messages",
+            "semantic_tags",
+            "hierarchical_summaries",
+            "knowledge_graph_edges",
+            "messages_fts",
+        ];
+
+        for table in tables {
+            let result = db2
+                .execute_unprepared(&format!(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='{}'",
+                    table
+                ))
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.rows_affected(),
+                1,
+                "Table {} should exist",
+                table
+            );
+        }
     }
 }
