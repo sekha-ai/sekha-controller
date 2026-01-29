@@ -260,7 +260,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(result.rows_affected(), 1, "First migration should be recorded");
+        assert_eq!(
+            result.rows_affected(),
+            1,
+            "First migration should be recorded"
+        );
     }
 
     #[tokio::test]
