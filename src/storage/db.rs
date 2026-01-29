@@ -144,21 +144,7 @@ async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, 
 
     match result {
         Ok(_) => {
-            // Table exists, now fetch the actual data
-            // Since we can't easily parse the QueryResult, we'll use a raw query approach
-            // For SQLite, we'll check if there are any rows
-            let count_result = db
-                .execute_unprepared("SELECT COUNT(*) as cnt FROM seaql_migrations")
-                .await
-                .map_err(|e| DbErr::Custom(format!("Failed to count migrations: {}", e)))?;
-
-            if count_result.rows_affected() == 0 {
-                tracing::debug!("Migrations table is empty");
-                return Ok(Vec::new());
-            }
-
-            // Parse version strings from the table
-            // Since we can't use QueryResult directly, we'll use a different approach
+            // Table exists, now check which migrations have been applied
             // We'll attempt to verify each expected version exists
             let mut applied = Vec::new();
             for version in MIGRATION_VERSIONS {
@@ -266,12 +252,15 @@ mod tests {
 
         assert_eq!(result.rows_affected(), 1);
 
+        // Verify migrations were recorded by checking a specific version exists
         let result = db
-            .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
+            .execute_unprepared(
+                "SELECT version FROM seaql_migrations WHERE version = 'm20241211_00100000' LIMIT 1",
+            )
             .await
             .unwrap();
 
-        assert!(result.rows_affected() > 0);
+        assert_eq!(result.rows_affected(), 1, "First migration should be recorded");
     }
 
     #[tokio::test]
@@ -352,15 +341,21 @@ mod tests {
         // Simulate container restart - reconnect to same database
         let db2 = init_db(&url).await.unwrap();
 
-        // Verify no errors and migrations table is correct
+        // Verify migrations table exists and has records by checking a specific version
         let result = db2
-            .execute_unprepared("SELECT COUNT(*) FROM seaql_migrations")
+            .execute_unprepared(
+                "SELECT version FROM seaql_migrations WHERE version = 'm20241211_00100000' LIMIT 1",
+            )
             .await
             .unwrap();
 
-        assert!(result.rows_affected() > 0);
+        assert_eq!(
+            result.rows_affected(),
+            1,
+            "First migration record should exist after restart"
+        );
 
-        // Verify all tables exist
+        // Verify all expected tables exist
         let tables = vec![
             "conversations",
             "messages",
@@ -380,6 +375,24 @@ mod tests {
                 .unwrap();
 
             assert_eq!(result.rows_affected(), 1, "Table {} should exist", table);
+        }
+
+        // Verify all migration versions are recorded
+        for version in MIGRATION_VERSIONS {
+            let result = db2
+                .execute_unprepared(&format!(
+                    "SELECT version FROM seaql_migrations WHERE version = '{}' LIMIT 1",
+                    version
+                ))
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.rows_affected(),
+                1,
+                "Migration {} should be recorded",
+                version
+            );
         }
     }
 }
