@@ -380,7 +380,10 @@ mod tests {
                     table
                 ))
                 .await
-                .expect(&format!("Should be able to query sqlite_master for {}", table));
+                .expect(&format!(
+                    "Should be able to query sqlite_master for {}",
+                    table
+                ));
 
             assert_eq!(
                 result.rows_affected(),
