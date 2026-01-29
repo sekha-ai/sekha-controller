@@ -151,13 +151,14 @@ async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, 
         "SELECT version FROM seaql_migrations ORDER BY version".to_string(),
     );
 
-    match MigrationRecord::find_by_statement(stmt)
-        .all(db)
-        .await
-    {
+    match MigrationRecord::find_by_statement(stmt).all(db).await {
         Ok(records) => {
             let versions: Vec<String> = records.into_iter().map(|r| r.version).collect();
-            tracing::debug!("Found {} applied migration(s): {:?}", versions.len(), versions);
+            tracing::debug!(
+                "Found {} applied migration(s): {:?}",
+                versions.len(),
+                versions
+            );
             Ok(versions)
         }
         Err(e) => {
