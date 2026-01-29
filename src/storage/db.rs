@@ -103,7 +103,10 @@ async fn run_migrations(db: &DatabaseConnection) -> Result<(), DbErr> {
     tracing::info!(
         "Applying {} pending migration(s): {:?}",
         migrations_to_apply.len(),
-        migrations_to_apply.iter().map(|(_, v)| v).collect::<Vec<_>>()
+        migrations_to_apply
+            .iter()
+            .map(|(_, v)| v)
+            .collect::<Vec<_>>()
     );
 
     // Apply each pending migration
@@ -126,9 +129,7 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
         "#,
     )
     .await
-    .map_err(|e| {
-        DbErr::Custom(format!("Failed to create migrations table: {}", e))
-    })?;
+    .map_err(|e| DbErr::Custom(format!("Failed to create migrations table: {}", e)))?;
 
     tracing::debug!("Migrations tracking table ready");
     Ok(())
@@ -182,16 +183,12 @@ async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, 
 }
 
 /// Apply a single migration with proper error handling
-async fn apply_migration(
-    db: &DatabaseConnection,
-    idx: usize,
-    version: &str,
-) -> Result<(), DbErr> {
+async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> Result<(), DbErr> {
     tracing::info!("Applying migration {} ({})", idx + 1, version);
 
-    let sql = MIGRATIONS.get(idx).ok_or_else(|| {
-        DbErr::Custom(format!("Migration index {} out of bounds", idx))
-    })?;
+    let sql = MIGRATIONS
+        .get(idx)
+        .ok_or_else(|| DbErr::Custom(format!("Migration index {} out of bounds", idx)))?;
 
     // Execute the migration SQL
     db.execute_unprepared(sql).await.map_err(|e| {
@@ -382,12 +379,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(
-                result.rows_affected(),
-                1,
-                "Table {} should exist",
-                table
-            );
+            assert_eq!(result.rows_affected(), 1, "Table {} should exist", table);
         }
     }
 }
