@@ -1,5 +1,8 @@
 use once_cell::sync::Lazy;
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
+use sea_orm::{
+    sea_query::{Expr, Query},
+    ConnectionTrait, Database, DatabaseConnection, DbErr, FromQueryResult,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -27,6 +30,11 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/006_add_updated_at_triggers.sql"),
     include_str!("../../migrations/007_create_fts.sql"),
 ];
+
+#[derive(Debug, FromQueryResult)]
+struct MigrationRecord {
+    version: String,
+}
 
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
@@ -137,32 +145,24 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
 
 /// Get list of already applied migration versions
 async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, DbErr> {
-    // Use a simpler query that doesn't rely on QueryResult trait
-    let result = db
-        .execute_unprepared("SELECT version FROM seaql_migrations ORDER BY version")
-        .await;
+    // Use proper query method that returns actual data
+    let stmt = sea_orm::Statement::from_string(
+        sea_orm::DatabaseBackend::Sqlite,
+        "SELECT version FROM seaql_migrations ORDER BY version".to_string(),
+    );
 
-    match result {
-        Ok(_) => {
-            // Table exists, now check which migrations have been applied
-            // We'll attempt to verify each expected version exists
-            let mut applied = Vec::new();
-            for version in MIGRATION_VERSIONS {
-                let check_sql = format!(
-                    "SELECT 1 FROM seaql_migrations WHERE version = '{}' LIMIT 1",
-                    version
-                );
-                if let Ok(result) = db.execute_unprepared(&check_sql).await {
-                    if result.rows_affected() > 0 {
-                        applied.push(version.to_string());
-                    }
-                }
-            }
-
-            Ok(applied)
+    match MigrationRecord::find_by_statement(stmt)
+        .all(db)
+        .await
+    {
+        Ok(records) => {
+            let versions: Vec<String> = records.into_iter().map(|r| r.version).collect();
+            tracing::debug!("Found {} applied migration(s): {:?}", versions.len(), versions);
+            Ok(versions)
         }
         Err(e) => {
-            tracing::debug!("Failed to query migrations table: {}", e);
+            // Table might not exist yet or be empty
+            tracing::debug!("Could not query migrations table: {}", e);
             Ok(Vec::new())
         }
     }
@@ -221,7 +221,8 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        init_db(&url).await.unwrap();
+        let _db = init_db(&url).await.unwrap();
+
         assert!(db_path.exists());
     }
 
@@ -231,8 +232,21 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        init_db(&url).await.unwrap();
-        // If we get here, migrations ran successfully
+        let db = init_db(&url).await.unwrap();
+
+        // Verify migrations were actually applied by checking migration records
+        let applied = get_applied_migrations(&db).await.unwrap();
+        assert_eq!(
+            applied.len(),
+            MIGRATION_VERSIONS.len(),
+            "All migrations should be recorded"
+        );
+
+        // Verify first migration was recorded
+        assert!(
+            applied.contains(&"m20241211_00100000".to_string()),
+            "First migration should be in applied list"
+        );
     }
 
     #[tokio::test]
@@ -242,6 +256,7 @@ mod tests {
         let url = format!("sqlite://{}", db_path.display());
 
         init_db(&url).await.unwrap();
+
         let result = init_db(&url).await;
         assert!(result.is_ok());
     }
@@ -252,7 +267,7 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let url = format!("sqlite://{}", db_path.display());
 
-        init_db(&url).await.unwrap();
+        let _db = init_db(&url).await.unwrap();
         // If we get here, FTS table was created successfully
     }
 
@@ -263,6 +278,7 @@ mod tests {
         let url = format!("sqlite://{}", db_path.display());
 
         init_db(&url).await.unwrap();
+
         let result = init_db(&url).await;
         assert!(result.is_ok());
     }
@@ -291,9 +307,8 @@ mod tests {
             .contains("Invalid SQLite URL format"));
     }
 
-    /// Critical bug fix test: Verify container restart doesn't cause UNIQUE constraint error
-    /// Before fix: Second init_db would fail with "UNIQUE constraint failed: seaql_migrations.version"
-    /// After fix: Both init_db calls succeed without error
+    /// Critical bug fix test: container restart must not cause UNIQUE constraint error
+    /// This test verifies that migrations are properly detected and skipped on restart
     #[tokio::test]
     async fn test_migrations_idempotent_on_restart() {
         let temp_dir = TempDir::new().unwrap();
@@ -301,19 +316,45 @@ mod tests {
         let url = format!("sqlite://{}", db_path.display());
 
         // First initialization - fresh database
-        init_db(&url).await.expect("First init should succeed");
+        let db1 = init_db(&url).await.expect("First init should succeed");
+
+        // Verify all migrations were applied
+        let applied_first = get_applied_migrations(&db1).await.unwrap();
+        assert_eq!(
+            applied_first.len(),
+            MIGRATION_VERSIONS.len(),
+            "All migrations should be applied on first init"
+        );
+
+        drop(db1);
 
         // Simulate container restart - reconnect to same database file
-        // Before fix: This would fail with UNIQUE constraint error
-        // After fix: This succeeds
-        init_db(&url)
+        let db2 = init_db(&url)
             .await
-            .expect("Second init (restart) should succeed - this proves the bug is fixed");
+            .expect("Second init (restart) should succeed without UNIQUE constraint error");
 
-        // If we reach this point, the bug is fixed
-        // The migration system correctly:
-        // 1. Detected which migrations were already applied
-        // 2. Skipped re-running them
-        // 3. Did not attempt duplicate INSERTs into seaql_migrations
+        // Verify migrations are still recorded (and weren't re-run)
+        let applied_second = get_applied_migrations(&db2).await.unwrap();
+        assert_eq!(
+            applied_second.len(),
+            MIGRATION_VERSIONS.len(),
+            "All migrations should still be recorded after restart"
+        );
+
+        // Verify specific migrations are present
+        for version in MIGRATION_VERSIONS {
+            assert!(
+                applied_second.contains(&version.to_string()),
+                "Migration {} should be recorded after restart",
+                version
+            );
+        }
+
+        // Verify database is functional
+        db2.execute_unprepared(
+            "INSERT INTO conversations (id, label, folder) VALUES ('test-restart', 'Test', 'default')",
+        )
+        .await
+        .expect("Should be able to insert into conversations table");
     }
 }
