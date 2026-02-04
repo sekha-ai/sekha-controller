@@ -3,6 +3,7 @@
 pub mod api;
 pub mod auth;
 pub mod config;
+pub mod llm;
 pub mod models;
 pub mod orchestrator;
 pub mod services;
@@ -11,6 +12,14 @@ pub mod storage;
 // Re-export for convenience
 pub use services::embedding_service::EmbeddingService;
 pub use services::llm_bridge_client::LlmBridgeClient;
+
+// LLM module exports
+pub use llm::{
+    BridgeClient,
+    ChatMessage,
+    RoutingResponse,
+    ModelInfo,
+};
 
 // MCP tool support
 pub use api::mcp::{create_mcp_router, McpToolResponse};
