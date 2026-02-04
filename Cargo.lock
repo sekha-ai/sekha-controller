@@ -3231,9 +3231,9 @@ dependencies = [
 
 [[package]]
 name = "sea-orm"
-version = "2.0.0-rc.22"
+version = "2.0.0-rc.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38cb08645b287dde889794834dedbcb706cfabb2c5e4239b2828ddc8cd32f84d"
+checksum = "7c0bd18a658e2b86d6d4a95972904fce25a7201e177eda4707cd109775c357d6"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -3300,11 +3300,12 @@ dependencies = [
 
 [[package]]
 name = "sea-orm-macros"
-version = "2.0.0-rc.28"
+version = "2.0.0-rc.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "719c5ba754a5cb517f9ac6fc9f581bfb791ed1aabfc4e72faa9ab810922b87ad"
+checksum = "1a2688c437a2529a06e4e6dad2f11cc500b141da112ff971db6289fd9a2e1961"
 dependencies = [
  "heck 0.5.0",
+ "itertools",
  "pluralizer",
  "proc-macro2",
  "quote",
@@ -3328,8 +3329,9 @@ dependencies = [
 
 [[package]]
 name = "sea-query"
-version = "1.0.0-rc.23"
-source = "git+https://github.com/sekha-ai/sea-query?branch=sekha-controller-compat#138f4fa36ad304cc4602dc7538c366c1d4c991a3"
+version = "1.0.0-rc.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93948054fb2d208555a96d03d2c887591deb42ffe3210eedbd8a3234c6fb6d34"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -5328,3 +5330,8 @@ dependencies = [
  "log",
  "simd-adler32",
 ]
+
+[[patch.unused]]
+name = "sea-query"
+version = "1.0.0-rc.23"
+source = "git+https://github.com/sekha-ai/sea-query?branch=sekha-controller-compat#138f4fa36ad304cc4602dc7538c366c1d4c991a3"
