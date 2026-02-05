@@ -59,7 +59,7 @@ impl LlmBridgeClient {
         let bridge = BridgeClient::new(config)?;
         Ok(Self {
             bridge,
-            base_url: config.bridge_url.clone(),
+            base_url: config.llm_bridge_url.clone(),
         })
     }
 
