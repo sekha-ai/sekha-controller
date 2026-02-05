@@ -7,6 +7,7 @@ mod llm_bridge_test;
 
 // Unit tests for orchestrator
 mod importance_engine_test;
+mod memory_orchestrator_test;
 mod pruning_engine_test;
 // mod label_intelligence_test;
 
