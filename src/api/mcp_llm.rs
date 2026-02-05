@@ -75,26 +75,17 @@ pub async fn mcp_llm_status(
         Ok(response) => {
             let result = serde_json::to_value(&response).unwrap_or_default();
             Json(McpToolResponse {
-                content: vec![serde_json::json!({
-                    "type": "text",
-                    "text": format!("LLM Providers: {} total, {} healthy",
-                        response.total_providers,
-                        response.healthy_providers
-                    )
-                })],
-                result: Some(result),
-                is_error: false,
+                success: true,
+                data: Some(result),
+                error: None,
             })
         }
         Err(e) => {
             error!("Failed to get LLM provider status: {}", e);
             Json(McpToolResponse {
-                content: vec![serde_json::json!({
-                    "type": "text",
-                    "text": format!("Error getting LLM provider status: {}", e)
-                })],
-                result: None,
-                is_error: true,
+                success: false,
+                data: None,
+                error: Some(format!("Error getting LLM provider status: {}", e)),
             })
         }
     }
@@ -115,28 +106,17 @@ pub async fn mcp_llm_routing(
         Ok(response) => {
             let result = serde_json::to_value(&response).unwrap_or_default();
             Json(McpToolResponse {
-                content: vec![serde_json::json!({
-                    "type": "text",
-                    "text": format!(
-                        "Routing: {}/{} (${:.4})",
-                        response.provider_id,
-                        response.model_id,
-                        response.estimated_cost
-                    )
-                })],
-                result: Some(result),
-                is_error: false,
+                success: true,
+                data: Some(result),
+                error: None,
             })
         }
         Err(e) => {
             error!("Failed to get routing info: {}", e);
             Json(McpToolResponse {
-                content: vec![serde_json::json!({
-                    "type": "text",
-                    "text": format!("Error getting routing info: {}", e)
-                })],
-                result: None,
-                is_error: true,
+                success: false,
+                data: None,
+                error: Some(format!("Error getting routing info: {}", e)),
             })
         }
     }
