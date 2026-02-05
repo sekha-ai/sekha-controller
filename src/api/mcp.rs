@@ -476,7 +476,7 @@ pub struct MemoryGetContextArgs {
 pub async fn memory_get_context(
     _auth: McpAuth,
     State(state): State<AppState>,
-    Json<MemoryGetContextArgs>(args): Json<MemoryGetContextArgs>,
+    Json(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
         .repo
