@@ -23,10 +23,10 @@ mod tests {
     use super::*;
     use crate::orchestrator::MemoryOrchestrator;
     use crate::services::embedding_service::EmbeddingService;
+    use crate::services::llm_bridge_client::LlmBridgeClient;
     use crate::storage::chroma_client::ChromaClient;
     use crate::storage::repository::MockConversationRepository;
     use crate::storage::repository::SearchResult;
-    use crate::LlmBridgeClient;
     use axum::body::Body;
     use axum::http::{header, Request as HttpRequest};
     use chrono::Utc;
@@ -56,8 +56,9 @@ mod tests {
             .expect_semantic_search()
             .returning(move |_, _, _| Ok(mock_results.clone()));
 
-        // Create AppState with both services
-        let config = Arc::new(RwLock::new(Config::default()));
+        // Create config used by both AppState and LlmBridgeClient
+        let base_config = Config::default();
+        let config = Arc::new(RwLock::new(base_config.clone()));
         let repo = Arc::new(mock_repo);
 
         // Create EmbeddingService for AppState
@@ -67,10 +68,10 @@ mod tests {
         ));
 
         // Create LlmBridgeClient for Orchestrator
-        let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:1".to_string()));
+        let llm_bridge = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
 
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-        let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge));
+        let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge.clone()));
 
         let state = AppState {
             config,
@@ -413,9 +414,14 @@ pub async fn memory_prune(
     use crate::orchestrator::pruning_engine::PruningEngine;
     use crate::services::llm_bridge_client::LlmBridgeClient;
 
-    // Create LLM bridge client from config
-    let config = state.config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(config.ollama_url.clone()));
+    // Create LLM bridge client from full Config in state
+    let config_guard = state.config.read().await;
+    let llm_bridge = Arc::new(
+        LlmBridgeClient::new(&*config_guard).map_err(|e| {
+            tracing::error!("Failed to create LlmBridgeClient: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
+    );
 
     // Create pruning engine
     let pruning_engine = PruningEngine::new(state.repo.clone(), llm_bridge);
