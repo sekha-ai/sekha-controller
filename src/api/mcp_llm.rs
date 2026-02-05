@@ -12,7 +12,7 @@ use crate::api::mcp::McpToolResponse;
 use crate::api::routes::AppState;
 
 /// Request for LLM provider status
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct LlmStatusRequest {
     /// Optional provider ID to get specific provider status
     pub provider_id: Option<String>,
@@ -37,7 +37,7 @@ pub struct ProviderStatus {
 }
 
 /// Request for routing information
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct RoutingInfoRequest {
     pub task: String,
     pub preferred_model: Option<String>,
