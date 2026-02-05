@@ -51,10 +51,29 @@ pub enum MessageContent {
     Parts(Vec<ContentPart>),
 }
 
-impl MessageDto {
-    /// Extract text content from the message
-    pub fn get_text(&self) -> String {
-        match &self.content {
+impl MessageContent {
+    /// Get the length of text content (character count)
+    pub fn len(&self) -> usize {
+        match self {
+            MessageContent::Text(s) => s.len(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::Text { text } => Some(text.len()),
+                    _ => None,
+                })
+                .sum(),
+        }
+    }
+
+    /// Check if content is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Convert content to a String (extract text parts)
+    pub fn as_string(&self) -> String {
+        match self {
             MessageContent::Text(s) => s.clone(),
             MessageContent::Parts(parts) => parts
                 .iter()
@@ -65,6 +84,13 @@ impl MessageDto {
                 .collect::<Vec<_>>()
                 .join(" "),
         }
+    }
+}
+
+impl MessageDto {
+    /// Extract text content from the message
+    pub fn get_text(&self) -> String {
+        self.content.as_string()
     }
 
     /// Check if message contains images
