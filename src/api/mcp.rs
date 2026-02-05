@@ -13,9 +13,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{
-    api::dto::*, auth::McpAuth, models::internal::Conversation,
-};
+use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};
 
 #[cfg(test)]
 mod tests {

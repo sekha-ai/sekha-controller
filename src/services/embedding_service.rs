@@ -276,7 +276,12 @@ impl EmbeddingService {
         // Search in Chroma - clone before first use since it's used multiple times
         let results = self
             .chroma
-            .query("conversations", query_embedding.clone(), limit as u32, filters.clone())
+            .query(
+                "conversations",
+                query_embedding.clone(),
+                limit as u32,
+                filters.clone(),
+            )
             .await?;
 
         // If primary collection has no results, try secondary collections
@@ -284,10 +289,15 @@ impl EmbeddingService {
             // Try fallback collections if needed
             let fallback_results = self
                 .chroma
-                .query("conversations_backup", query_embedding.clone(), limit as u32, filters)
+                .query(
+                    "conversations_backup",
+                    query_embedding.clone(),
+                    limit as u32,
+                    filters,
+                )
                 .await
                 .unwrap_or_default();
-            
+
             if !fallback_results.is_empty() {
                 return Ok(fallback_results);
             }
