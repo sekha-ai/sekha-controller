@@ -8,7 +8,9 @@ use crate::models::internal::Message;
 /// Error type for validation failures
 #[derive(Debug, thiserror::Error)]
 pub enum ValidationError {
-    #[error("Images cannot be stored in messages. Images are processed in real-time but not persisted.")]
+    #[error(
+        "Images cannot be stored in messages. Images are processed in real-time but not persisted."
+    )]
     ImageStorageNotAllowed,
 }
 
@@ -50,7 +52,10 @@ pub fn validate_no_images(message: &Message) -> Result<(), ValidationError> {
 
         // Check if metadata suggests image content
         if let Some(content_type) = metadata.get("content_type") {
-            if content_type.as_str().map_or(false, |s| s.starts_with("image/")) {
+            if content_type
+                .as_str()
+                .map_or(false, |s| s.starts_with("image/"))
+            {
                 return Err(ValidationError::ImageStorageNotAllowed);
             }
         }
@@ -113,7 +118,10 @@ pub fn strip_images(message: &mut Message) -> bool {
 
         // Check and remove image content_type
         if let Some(content_type) = metadata.get("content_type") {
-            if content_type.as_str().map_or(false, |s| s.starts_with("image/")) {
+            if content_type
+                .as_str()
+                .map_or(false, |s| s.starts_with("image/"))
+            {
                 metadata.remove("content_type");
                 modified = true;
             }
@@ -187,9 +195,8 @@ mod tests {
 
     #[test]
     fn test_reject_base64_image() {
-        let message = create_test_message(
-            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==".to_string(),
-        );
+        let message =
+            create_test_message("data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==".to_string());
         assert!(validate_no_images(&message).is_err());
     }
 
@@ -245,9 +252,7 @@ mod tests {
         assert!(validate_messages_no_images(&messages).is_ok());
 
         let mut messages_with_image = messages;
-        messages_with_image.push(create_test_message(
-            "data:image/png;base64,abc".to_string(),
-        ));
+        messages_with_image.push(create_test_message("data:image/png;base64,abc".to_string()));
 
         assert!(validate_messages_no_images(&messages_with_image).is_err());
     }

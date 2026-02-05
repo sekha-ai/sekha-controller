@@ -17,13 +17,9 @@ pub struct CreateConversationRequest {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContentPart {
     #[serde(rename = "text")]
-    Text {
-        text: String,
-    },
+    Text { text: String },
     #[serde(rename = "image_url")]
-    ImageUrl {
-        image_url: ImageUrl,
-    },
+    ImageUrl { image_url: ImageUrl },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
@@ -61,16 +57,14 @@ impl MessageDto {
     pub fn get_text(&self) -> String {
         match &self.content {
             MessageContent::Text(s) => s.clone(),
-            MessageContent::Parts(parts) => {
-                parts
-                    .iter()
-                    .filter_map(|part| match part {
-                        ContentPart::Text { text } => Some(text.as_str()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
         }
     }
 
@@ -78,7 +72,9 @@ impl MessageDto {
     pub fn has_images(&self) -> bool {
         match &self.content {
             MessageContent::Text(_) => false,
-            MessageContent::Parts(parts) => parts.iter().any(|part| matches!(part, ContentPart::ImageUrl { .. })),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .any(|part| matches!(part, ContentPart::ImageUrl { .. })),
         }
     }
 
@@ -86,15 +82,13 @@ impl MessageDto {
     pub fn get_image_urls(&self) -> Vec<String> {
         match &self.content {
             MessageContent::Text(_) => vec![],
-            MessageContent::Parts(parts) => {
-                parts
-                    .iter()
-                    .filter_map(|part| match part {
-                        ContentPart::ImageUrl { image_url } => Some(image_url.url.clone()),
-                        _ => None,
-                    })
-                    .collect()
-            }
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::ImageUrl { image_url } => Some(image_url.url.clone()),
+                    _ => None,
+                })
+                .collect(),
         }
     }
 }
