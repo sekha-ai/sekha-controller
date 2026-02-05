@@ -2,11 +2,7 @@ use sekha_controller::{
     api::routes::AppState,
     config::Config,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
-    storage::{
-        chroma_client::ChromaClient, 
-        repository::SeaOrmConversationRepository,
-        init_db,
-    },
+    storage::{chroma_client::ChromaClient, init_db, repository::SeaOrmConversationRepository},
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -31,12 +27,12 @@ pub fn create_test_conversation(label: &str, folder: &str) -> Value {
 #[allow(dead_code)]
 pub async fn create_test_services() -> AppState {
     let config = Arc::new(RwLock::new(Config::default()));
-    
+
     // Use in-memory SQLite for integration tests
     let db = init_db("sqlite::memory:")
         .await
         .expect("Failed to initialize test database");
-    
+
     let embedding_service = Arc::new(EmbeddingService::new(
         "http://localhost:11434".to_string(),
         "http://localhost:8000".to_string(),
