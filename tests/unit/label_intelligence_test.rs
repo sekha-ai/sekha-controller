@@ -160,7 +160,7 @@ async fn test_suggest_labels_db_error() {
 
     mock_repo.expect_find_by_id().returning(|_| {
         Err(RepositoryError::DbError(sea_orm::DbErr::ConnectionAcquire(
-            sea_orm::RuntimeErr::Internal("Connection failed".to_string()),
+            sea_orm::ConnAcquireErr::Timeout,
         )))
     });
 
@@ -291,7 +291,7 @@ async fn test_suggest_labels_message_retrieval_error() {
 
     mock_repo.expect_get_conversation_messages().returning(|_| {
         Err(RepositoryError::DbError(sea_orm::DbErr::ConnectionAcquire(
-            sea_orm::RuntimeErr::Internal("Connection failed".to_string()),
+            sea_orm::ConnAcquireErr::Timeout,
         )))
     });
 
