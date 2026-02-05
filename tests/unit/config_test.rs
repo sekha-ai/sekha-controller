@@ -320,7 +320,7 @@ fn test_config_port_validation_valid() {
     let mut config = Config::default();
     config.server_port = 8080; // Valid
     assert!(config.validate().is_ok());
-    
+
     config.server_port = 65535; // Max valid u16
     assert!(config.validate().is_ok());
 }
