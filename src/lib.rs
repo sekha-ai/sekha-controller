@@ -23,7 +23,7 @@ pub use api::mcp::{create_mcp_router, McpToolResponse};
 // Validation exports
 pub use validation::{strip_images, validate_no_images, ValidationError};
 
-// Re-export main types for convenience - use routes (plural) as the main source
+// Re-export main types for convenience
 pub use crate::api::dto::*;
 pub use crate::api::routes::{create_router, AppState};
 pub use crate::config::Config;
@@ -31,6 +31,10 @@ pub use crate::models::internal::{Conversation, Message, NewConversation, NewMes
 pub use crate::storage::chroma_client::ChromaClient;
 pub use crate::storage::db::init_db;
 pub use crate::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
+
+// Export mock for integration tests (tests/ directory)
+#[cfg(test)]
+pub use crate::storage::repository::MockConversationRepository;
 
 #[cfg(test)]
 mod tests {

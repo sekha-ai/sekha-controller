@@ -8,7 +8,7 @@ pub use db::init_db;
 pub use entities::{conversations, messages};
 pub use repository::{ConversationRepository, SeaOrmConversationRepository};
 
-// Export mock for testing
+// Re-export MockConversationRepository for integration tests
 #[cfg(test)]
 pub use repository::MockConversationRepository;
 
