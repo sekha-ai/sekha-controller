@@ -4,6 +4,7 @@ mod embedding_queue_test;
 mod embedding_service_test;
 mod file_watcher_test;
 mod llm_bridge_test;
+mod llm_bridge_comprehensive_test;
 
 // Unit tests for orchestrator - comprehensive coverage
 mod context_assembly_test;
