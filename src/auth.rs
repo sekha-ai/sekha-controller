@@ -12,7 +12,7 @@ use crate::api::routes::AppState;
 use crate::config::Config;
 
 // Change from unit struct to holding validated token
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct McpAuth {
     pub token: String,
 }
