@@ -129,6 +129,12 @@ mockall = "0.14"
 [features]
 cli = []  # Enable CLI tool
 xml = ["quick-xml"]  # Better XML parsing
+test-utils = []  # Enable mocks for testing
+
+# Automatically enable test-utils when testing
+[dev-dependencies.sekha-controller]
+path = "."
+features = ["test-utils"]
 
 [patch.crates-io]
 # sea-query = { path = "patches/sea-query-1.0.0-rc.23" }  

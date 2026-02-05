@@ -8,8 +8,8 @@ pub use db::init_db;
 pub use entities::{conversations, messages};
 pub use repository::{ConversationRepository, SeaOrmConversationRepository};
 
-// Re-export MockConversationRepository for integration tests
-#[cfg(test)]
+// Re-export MockConversationRepository for tests and test-utils feature
+#[cfg(any(test, feature = "test-utils"))]
 pub use repository::MockConversationRepository;
 
 #[cfg(test)]

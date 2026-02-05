@@ -32,8 +32,8 @@ pub use crate::storage::chroma_client::ChromaClient;
 pub use crate::storage::db::init_db;
 pub use crate::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
 
-// Export mock for integration tests (tests/ directory)
-#[cfg(test)]
+// Export mock for integration tests (via test-utils feature)
+#[cfg(any(test, feature = "test-utils"))]
 pub use crate::storage::repository::MockConversationRepository;
 
 #[cfg(test)]
