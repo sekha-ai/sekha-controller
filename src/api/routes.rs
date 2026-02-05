@@ -98,7 +98,7 @@ pub async fn list_conversations(
 ) -> Result<Json<Value>, (StatusCode, String)> {
     let page = params.page.unwrap_or(1);
     let page_size = params.page_size.unwrap_or(20);
-    
+
     match state.repo.list_conversations(page, page_size).await {
         Ok(conversations) => Ok(Json(json!({
             "conversations": conversations,
@@ -115,7 +115,11 @@ pub async fn update_conversation_label(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLabelRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    match state.repo.update_conversation_label(id, &req.label, &req.folder).await {
+    match state
+        .repo
+        .update_conversation_label(id, &req.label, &req.folder)
+        .await
+    {
         Ok(_) => Ok(Json(json!({ "success": true }))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
