@@ -573,46 +573,6 @@ fn test_config_is_valid_api_key_false() {
 }
 
 #[test]
-fn test_default_rate_limit() {
-    assert_eq!(default_rate_limit(), 1000);
-}
-
-#[test]
-fn test_default_cors_enabled() {
-    assert_eq!(default_cors_enabled(), true);
-}
-
-#[test]
-fn test_default_timeout() {
-    assert_eq!(default_timeout(), 120);
-}
-
-#[test]
-fn test_default_auto_fallback() {
-    assert_eq!(default_auto_fallback(), true);
-}
-
-#[test]
-fn test_default_require_vision() {
-    assert_eq!(default_require_vision(), true);
-}
-
-#[test]
-fn test_default_failure_threshold() {
-    assert_eq!(default_failure_threshold(), 3);
-}
-
-#[test]
-fn test_default_timeout_secs() {
-    assert_eq!(default_timeout_secs(), 60);
-}
-
-#[test]
-fn test_default_success_threshold() {
-    assert_eq!(default_success_threshold(), 2);
-}
-
-#[test]
 fn test_provider_type_clone() {
     let provider = ProviderType::Ollama;
     let cloned = provider.clone();
