@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 mod api;
 mod orchestrator_edge_cases;
+mod orchestrator_integration;
 
 #[allow(dead_code)]
 pub fn create_test_conversation(label: &str, folder: &str) -> Value {
