@@ -43,6 +43,12 @@ pub struct FilterParams {
     archived: Option<bool>,
 }
 
+#[derive(Deserialize)]
+pub struct CountParams {
+    label: Option<String>,
+    folder: Option<String>,
+}
+
 // ==================== ROUTE HANDLERS ====================
 
 /// Health check endpoint
@@ -65,29 +71,104 @@ pub async fn metrics(State(_state): State<AppState>) -> Json<Value> {
 pub async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
-) -> Result<Json<ConversationResponse>, (StatusCode, String)> {
-    match state.orchestrator.create_conversation(&req).await {
-        Ok(conversation) => Ok(Json(ConversationResponse {
-            id: conversation.id,
-            label: conversation.label,
-            folder: conversation.folder,
-            status: conversation.status,
-            message_count: req.messages.len(),
-            created_at: conversation.created_at,
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<ErrorResponse>)> {
+    let id = Uuid::new_v4();
+    let now = chrono::Utc::now().naive_utc();
+
+    let word_count: i32 = req.messages.iter().map(|m| m.content.len() as i32).sum();
+
+    let new_messages: Vec<_> = req
+        .messages
+        .into_iter()
+        .map(|m| crate::models::internal::NewMessage {
+            role: m.role,
+            content: m.content.as_string(),
+            metadata: serde_json::json!({}),
+            timestamp: now,
+        })
+        .collect();
+
+    let message_count = new_messages.len();
+
+    let new_conv = crate::models::internal::NewConversation {
+        id: Some(id),
+        label: req.label.clone(),
+        folder: req.folder.clone(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count,
+        session_count: Some(1),
+        created_at: now,
+        updated_at: now,
+        messages: new_messages,
+    };
+
+    state
+        .repo
+        .create_with_messages(new_conv)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": id,
+            "conversation_id": id,
+            "label": req.label,
+            "folder": req.folder,
+            "status": "active",
+            "message_count": message_count,
+            "created_at": now,
         })),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-    }
+    ))
 }
 
 /// Get a conversation by ID
 pub async fn get_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Value>, (StatusCode, String)> {
-    match state.repo.get_conversation_by_id(id).await {
-        Ok(Some(conv)) => Ok(Json(json!(conv))),
-        Ok(None) => Err((StatusCode::NOT_FOUND, "Conversation not found".to_string())),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+) -> Result<Json<ConversationResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let conv = state.repo.find_by_id(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    match conv {
+        Some(c) => {
+            let message_count = state
+                .repo
+                .count_messages_in_conversation(id)
+                .await
+                .unwrap_or(0);
+            Ok(Json(ConversationResponse {
+                id: c.id,
+                label: c.label,
+                folder: c.folder,
+                status: c.status,
+                message_count: message_count.try_into().unwrap(),
+                created_at: c.created_at,
+            }))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Conversation not found".to_string(),
+                code: 404,
+            }),
+        )),
     }
 }
 
@@ -95,18 +176,66 @@ pub async fn get_conversation(
 pub async fn list_conversations(
     State(state): State<AppState>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<Value>, (StatusCode, String)> {
+    Query(filters): Query<FilterParams>,
+) -> Json<QueryResponse> {
+    let _ = (filters.pinned, filters.archived);
     let page = params.page.unwrap_or(1);
-    let page_size = params.page_size.unwrap_or(20);
+    let page_size = params.page_size.unwrap_or(50);
+    let offset = (page - 1) * page_size;
 
-    match state.repo.list_conversations(page, page_size).await {
-        Ok(conversations) => Ok(Json(json!({
-            "conversations": conversations,
-            "page": page,
-            "page_size": page_size
-        }))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    // Build filter criteria
+    let mut criteria = Vec::new();
+    if let Some(label) = &filters.label {
+        criteria.push(format!("label = '{}'", label));
     }
+    if let Some(folder) = &filters.folder {
+        criteria.push(format!("folder = '{}'", folder));
+    }
+    if let Some(pinned) = filters.pinned {
+        criteria.push(format!("pinned = {}", pinned));
+    }
+    if let Some(archived) = filters.archived {
+        criteria.push(format!("archived = {}", archived));
+    }
+    let filter_str = if criteria.is_empty() {
+        None
+    } else {
+        Some(criteria.join(" AND "))
+    };
+
+    // Use repository method with filters
+    let results = state
+        .repo
+        .find_with_filters(filter_str, page_size as usize, offset as u32)
+        .await
+        .unwrap_or_else(|_| (Vec::new(), 0));
+
+    let total = results.1;
+    let conversations: Vec<SearchResultDto> = results
+        .0
+        .into_iter()
+        .map(|c| SearchResultDto {
+            conversation_id: c.id,
+            message_id: Uuid::nil(),
+            score: 1.0,
+            content: c.label.clone(),
+            metadata: serde_json::json!({
+                "folder": c.folder,
+                "status": c.status,
+                "importance_score": c.importance_score,
+            }),
+            label: c.label,
+            folder: c.folder,
+            timestamp: c.updated_at,
+        })
+        .collect();
+
+    Json(QueryResponse {
+        results: conversations,
+        total: total.try_into().unwrap_or(u32::MAX),
+        page,
+        page_size,
+    })
 }
 
 /// Update conversation label
@@ -114,36 +243,97 @@ pub async fn update_conversation_label(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLabelRequest>,
-) -> Result<Json<Value>, (StatusCode, String)> {
-    match state
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    state
         .repo
-        .update_conversation_label(id, &req.label, &req.folder)
+        .update_label(id, &req.label, &req.folder)
         .await
-    {
-        Ok(_) => Ok(Json(json!({ "success": true }))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-    }
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: e.to_string(),
+                    code: 404,
+                }),
+            )
+        })?;
+
+    Ok(StatusCode::OK)
 }
 
 /// Delete a conversation
 pub async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Value>, (StatusCode, String)> {
-    match state.repo.delete_conversation(id).await {
-        Ok(_) => Ok(Json(json!({ "success": true }))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    // Check if conversation exists first
+    let exists = state.repo.find_by_id(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    if exists.is_none() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Conversation not found".to_string(),
+                code: 404,
+            }),
+        ));
     }
+
+    state.repo.delete(id).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    Ok(StatusCode::OK)
 }
 
 /// Count conversations
 pub async fn count_conversations(
     State(state): State<AppState>,
-) -> Result<Json<Value>, (StatusCode, String)> {
-    match state.repo.count_conversations().await {
-        Ok(count) => Ok(Json(json!({ "count": count }))),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    Query(params): Query<CountParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    let label_for_response = params.label.clone();
+    let folder_for_response = params.folder.clone();
+
+    let count = match (&params.label, &params.folder) {
+        (Some(label), None) => state.repo.count_by_label(label).await,
+        (None, Some(folder)) => state.repo.count_by_folder(folder).await,
+        (None, None) => state.repo.count_all().await,
+        (Some(_), Some(_)) => {
+            return Ok(Json(serde_json::json!({
+                "count": 0,
+                "error": "Cannot specify both label and folder"
+            })));
+        }
     }
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "count": count,
+        "label": label_for_response,
+        "folder": folder_for_response
+    })))
 }
 
 /// Semantic query endpoint (Module 5 integration)
@@ -156,29 +346,53 @@ pub async fn count_conversations(
     )
 )]
 pub async fn semantic_query(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
-) -> Json<Value> {
-    // TODO: In Module 5, integrate with Chroma
-    // For now, return mock results with correct schema
+) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
+    tracing::info!("Semantic query: {}", req.query);
 
-    let mock_results = vec![serde_json::json!({
-        "conversation_id": Uuid::new_v4(),
-        "message_id": Uuid::new_v4(),
-        "score": 0.85,
-        "content": "Mock result for: ".to_string() + &req.query,
-        "metadata": {
-            "label": "Project:AI-Memory",
-            "timestamp": "2025-12-11T21:00:00Z"
-        }
-    })];
+    let limit = req.limit.unwrap_or(10) as usize;
+    let offset = req.offset.unwrap_or(0);
 
-    Json(serde_json::json!({
-        "query": req.query,
-        "results": mock_results,
-        "total": 1,
-        "limit": req.limit,
-        "filters": req.filters
+    let page = if limit > 0 {
+        (offset as f64 / limit as f64).ceil() as u32
+    } else {
+        1
+    };
+
+    let results = state
+        .repo
+        .semantic_search(&req.query, limit, req.filters)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Semantic search failed: {}", e),
+                    code: 500,
+                }),
+            )
+        })?;
+
+    let api_results: Vec<SearchResultDto> = results
+        .iter()
+        .map(|r| SearchResultDto {
+            conversation_id: r.conversation_id,
+            message_id: r.message_id,
+            score: r.score,
+            content: r.content.clone(),
+            metadata: r.metadata.clone(),
+            label: r.label.clone(),
+            folder: r.folder.clone(),
+            timestamp: r.timestamp,
+        })
+        .collect();
+
+    Ok(Json(QueryResponse {
+        results: api_results,
+        total: results.len() as u32,
+        page,
+        page_size: limit as u32,
     }))
 }
 
