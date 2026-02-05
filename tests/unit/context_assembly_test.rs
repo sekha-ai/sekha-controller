@@ -8,7 +8,8 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_context_assembler_creation() {
     let mock_repo = Arc::new(MockConversationRepository::new());
-    let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(mock_repo);
+    let assembler =
+        sekha_controller::orchestrator::context_assembly::ContextAssembler::new(mock_repo);
     // Just verify construction succeeds
     assert!(true);
 }
@@ -17,27 +18,25 @@ async fn test_context_assembler_creation() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_semantic_search() {
     let mut mock_repo = MockConversationRepository::new();
-    
-    let results = vec![
-        SearchResult {
-            conversation_id: Uuid::new_v4(),
-            message_id: Uuid::new_v4(),
-            score: 0.95,
-            content: "Test message".to_string(),
-            label: "Work".to_string(),
-            folder: "/work".to_string(),
-            timestamp: chrono::Utc::now().naive_utc(),
-            metadata: serde_json::json!({}),
-        },
-    ];
-    
+
+    let results = vec![SearchResult {
+        conversation_id: Uuid::new_v4(),
+        message_id: Uuid::new_v4(),
+        score: 0.95,
+        content: "Test message".to_string(),
+        label: "Work".to_string(),
+        folder: "/work".to_string(),
+        timestamp: chrono::Utc::now().naive_utc(),
+        metadata: serde_json::json!({}),
+    }];
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Will panic at get_db() for pinned messages
     let _ = assembler.assemble("test query", vec![], 1000, vec![]).await;
 }
@@ -46,7 +45,7 @@ async fn test_assemble_with_semantic_search() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_preferred_labels() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let results = vec![
         SearchResult {
             conversation_id: Uuid::new_v4(),
@@ -69,23 +68,25 @@ async fn test_assemble_with_preferred_labels() {
             metadata: serde_json::json!({}),
         },
     ];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Will panic at get_db()
-    let _ = assembler.assemble("test", vec!["Important".to_string()], 1000, vec![]).await;
+    let _ = assembler
+        .assemble("test", vec!["Important".to_string()], 1000, vec![])
+        .await;
 }
 
 #[tokio::test]
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_excluded_folders() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let results = vec![
         SearchResult {
             conversation_id: Uuid::new_v4(),
@@ -108,23 +109,25 @@ async fn test_assemble_with_excluded_folders() {
             metadata: serde_json::json!({}),
         },
     ];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Test folder exclusion
-    let _ = assembler.assemble("test", vec![], 1000, vec!["/excluded".to_string()]).await;
+    let _ = assembler
+        .assemble("test", vec![], 1000, vec!["/excluded".to_string()])
+        .await;
 }
 
 #[tokio::test]
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_small_budget() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let results = vec![
         SearchResult {
             conversation_id: Uuid::new_v4(),
@@ -147,14 +150,14 @@ async fn test_assemble_with_small_budget() {
             metadata: serde_json::json!({}),
         },
     ];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Test budget constraint
     let _ = assembler.assemble("test", vec![], 500, vec![]).await;
 }
@@ -162,14 +165,14 @@ async fn test_assemble_with_small_budget() {
 #[tokio::test]
 async fn test_assemble_with_semantic_search_error() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(|_, _, _| Err(RepositoryError::NotFound("No results".to_string())));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     let result = assembler.assemble("test", vec![], 1000, vec![]).await;
     assert!(result.is_err());
 }
@@ -178,7 +181,7 @@ async fn test_assemble_with_semantic_search_error() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_large_budget() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let mut results = vec![];
     for i in 0..10 {
         results.push(SearchResult {
@@ -192,14 +195,14 @@ async fn test_assemble_with_large_budget() {
             metadata: serde_json::json!({}),
         });
     }
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Test with very large budget
     let _ = assembler.assemble("test", vec![], 50000, vec![]).await;
 }
@@ -208,7 +211,7 @@ async fn test_assemble_with_large_budget() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_multiple_labels() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let results = vec![
         SearchResult {
             conversation_id: Uuid::new_v4(),
@@ -231,16 +234,21 @@ async fn test_assemble_with_multiple_labels() {
             metadata: serde_json::json!({}),
         },
     ];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     let _ = assembler
-        .assemble("test", vec!["Label1".to_string(), "Label2".to_string()], 1000, vec![])
+        .assemble(
+            "test",
+            vec!["Label1".to_string(), "Label2".to_string()],
+            1000,
+            vec![],
+        )
         .await;
 }
 
@@ -248,7 +256,7 @@ async fn test_assemble_with_multiple_labels() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_old_messages() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let old_date = chrono::Utc::now().naive_utc() - chrono::Duration::days(30);
     let results = vec![SearchResult {
         conversation_id: Uuid::new_v4(),
@@ -260,14 +268,14 @@ async fn test_assemble_with_old_messages() {
         timestamp: old_date,
         metadata: serde_json::json!({}),
     }];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Test recency scoring with old messages
     let _ = assembler.assemble("test", vec![], 1000, vec![]).await;
 }
@@ -276,14 +284,14 @@ async fn test_assemble_with_old_messages() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_empty_results() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(|_, _, _| Ok(vec![]));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     // Test with no semantic search results
     let _ = assembler.assemble("test", vec![], 1000, vec![]).await;
 }
@@ -292,7 +300,7 @@ async fn test_assemble_with_empty_results() {
 #[should_panic(expected = "get_db()")]
 async fn test_assemble_with_metadata() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     let results = vec![SearchResult {
         conversation_id: Uuid::new_v4(),
         message_id: Uuid::new_v4(),
@@ -306,13 +314,13 @@ async fn test_assemble_with_metadata() {
             "extra": "data"
         }),
     }];
-    
+
     mock_repo
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(results.clone()));
-    
+
     let repo = Arc::new(mock_repo);
     let assembler = sekha_controller::orchestrator::context_assembly::ContextAssembler::new(repo);
-    
+
     let _ = assembler.assemble("test", vec![], 1000, vec![]).await;
 }

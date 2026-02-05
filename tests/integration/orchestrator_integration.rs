@@ -3,6 +3,7 @@
 //! These tests use an in-memory SQLite database to properly test
 //! the orchestrator components without panicking at DB access.
 
+use sea_orm::{ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait};
 use sekha_controller::{
     config::Config,
     models::internal::{Conversation, Message},
@@ -13,7 +14,6 @@ use sekha_controller::{
         repository::{ConversationRepository, SeaOrmConversationRepository},
     },
 };
-use sea_orm::{ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -78,7 +78,10 @@ async fn insert_test_conversation(
         updated_at: ActiveValue::Set(now),
     };
 
-    conversation.insert(db).await.expect("Failed to insert conversation");
+    conversation
+        .insert(db)
+        .await
+        .expect("Failed to insert conversation");
     id
 }
 
@@ -161,7 +164,10 @@ async fn test_pruning_suggestions_with_old_conversations() {
         updated_at: ActiveValue::Set(old_date),
     };
 
-    conversation.insert(&db).await.expect("Failed to insert old conversation");
+    conversation
+        .insert(&db)
+        .await
+        .expect("Failed to insert old conversation");
 
     let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
     let config = Config::default();
@@ -173,7 +179,10 @@ async fn test_pruning_suggestions_with_old_conversations() {
     assert!(result.is_ok());
 
     let suggestions = result.unwrap();
-    assert!(!suggestions.is_empty(), "Should suggest pruning old conversation");
+    assert!(
+        !suggestions.is_empty(),
+        "Should suggest pruning old conversation"
+    );
     assert_eq!(suggestions[0].conversation_id, conv_id);
 }
 
@@ -194,7 +203,9 @@ async fn test_label_suggestions_with_conversation() {
     // Create a label first
     let labels = vec!["Work".to_string(), "Project".to_string()];
     for label in &labels {
-        repo.create_label(label).await.expect("Failed to create label");
+        repo.create_label(label)
+            .await
+            .expect("Failed to create label");
     }
 
     // Suggest labels for conversation
@@ -278,7 +289,10 @@ async fn test_multiple_conversations_pruning() {
             created_at: ActiveValue::Set(old_date),
             updated_at: ActiveValue::Set(old_date),
         };
-        conversation.insert(&db).await.expect("Failed to insert conversation");
+        conversation
+            .insert(&db)
+            .await
+            .expect("Failed to insert conversation");
     }
 
     let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
@@ -291,7 +305,11 @@ async fn test_multiple_conversations_pruning() {
     assert!(result.is_ok());
 
     let suggestions = result.unwrap();
-    assert_eq!(suggestions.len(), 5, "Should suggest pruning all 5 old conversations");
+    assert_eq!(
+        suggestions.len(),
+        5,
+        "Should suggest pruning all 5 old conversations"
+    );
 }
 
 #[tokio::test]
@@ -312,7 +330,10 @@ async fn test_high_importance_not_pruned() {
         created_at: ActiveValue::Set(old_date),
         updated_at: ActiveValue::Set(old_date),
     };
-    conversation.insert(&db).await.expect("Failed to insert conversation");
+    conversation
+        .insert(&db)
+        .await
+        .expect("Failed to insert conversation");
 
     let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
     let config = Config::default();

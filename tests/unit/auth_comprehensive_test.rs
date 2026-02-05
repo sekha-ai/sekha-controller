@@ -23,7 +23,10 @@ fn create_test_state() -> AppState {
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let default_config = Config::default();
     let llm_client = Arc::new(LlmBridgeClient::new(&default_config).unwrap());
-    let orchestrator = Arc::new(MemoryOrchestrator::new(mock_repo.clone(), llm_client.clone()));
+    let orchestrator = Arc::new(MemoryOrchestrator::new(
+        mock_repo.clone(),
+        llm_client.clone(),
+    ));
 
     AppState {
         config,

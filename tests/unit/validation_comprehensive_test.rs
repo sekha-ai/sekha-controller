@@ -1,7 +1,4 @@
-use sekha_controller::{
-    models::internal::Message,
-    validation::*,
-};
+use sekha_controller::{models::internal::Message, validation::*};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -45,7 +42,7 @@ fn test_validate_no_images_no_metadata() {
 
 #[test]
 fn test_validate_no_images_empty_metadata() {
-    let messages = vec![create_message_with_metadata("user", "Hello", json!({}))]; 
+    let messages = vec![create_message_with_metadata("user", "Hello", json!({}))];
     assert!(validate_no_images(&messages).is_ok());
 }
 
@@ -101,14 +98,22 @@ fn test_validate_no_images_multiple_messages_one_with_images() {
 
 #[test]
 fn test_validate_no_images_non_object_metadata() {
-    let messages = vec![create_message_with_metadata("user", "Hello", json!("string_metadata"))];
+    let messages = vec![create_message_with_metadata(
+        "user",
+        "Hello",
+        json!("string_metadata"),
+    )];
     // Should pass - non-object metadata doesn't contain images
     assert!(validate_no_images(&messages).is_ok());
 }
 
 #[test]
 fn test_validate_no_images_array_metadata() {
-    let messages = vec![create_message_with_metadata("user", "Hello", json!([1, 2, 3]))];
+    let messages = vec![create_message_with_metadata(
+        "user",
+        "Hello",
+        json!([1, 2, 3]),
+    )];
     // Should pass - array metadata doesn't contain images
     assert!(validate_no_images(&messages).is_ok());
 }
@@ -130,7 +135,11 @@ fn test_strip_images_empty_messages() {
 
 #[test]
 fn test_strip_images_no_images_to_strip() {
-    let messages = vec![create_message_with_metadata("user", "Hello", json!({"key": "value"}))];
+    let messages = vec![create_message_with_metadata(
+        "user",
+        "Hello",
+        json!({"key": "value"}),
+    )];
     let stripped = strip_images(&messages);
     assert_eq!(stripped.len(), 1);
     assert_eq!(stripped[0].content, "Hello");
@@ -144,7 +153,7 @@ fn test_strip_images_removes_images_key() {
         json!({"images": ["img1", "img2"], "other": "keep"}),
     )];
     let stripped = strip_images(&messages);
-    
+
     assert_eq!(stripped.len(), 1);
     if let Some(ref metadata) = stripped[0].metadata {
         assert!(!metadata.as_object().unwrap().contains_key("images"));
@@ -162,7 +171,7 @@ fn test_strip_images_removes_image_urls_key() {
         json!({"image_urls": ["url1"], "data": "preserve"}),
     )];
     let stripped = strip_images(&messages);
-    
+
     if let Some(ref metadata) = stripped[0].metadata {
         assert!(!metadata.as_object().unwrap().contains_key("image_urls"));
         assert_eq!(metadata["data"], "preserve");
@@ -177,7 +186,7 @@ fn test_strip_images_removes_attachments_key() {
         json!({"attachments": [{"file": "test.png"}], "text": "keep"}),
     )];
     let stripped = strip_images(&messages);
-    
+
     if let Some(ref metadata) = stripped[0].metadata {
         assert!(!metadata.as_object().unwrap().contains_key("attachments"));
         assert_eq!(metadata["text"], "keep");
@@ -197,7 +206,7 @@ fn test_strip_images_removes_all_image_keys() {
         }),
     )];
     let stripped = strip_images(&messages);
-    
+
     if let Some(ref metadata) = stripped[0].metadata {
         let obj = metadata.as_object().unwrap();
         assert!(!obj.contains_key("images"));
@@ -215,7 +224,7 @@ fn test_strip_images_removes_content_type_image() {
         json!({"content_type": "image", "other": "data"}),
     )];
     let stripped = strip_images(&messages);
-    
+
     if let Some(ref metadata) = stripped[0].metadata {
         let obj = metadata.as_object().unwrap();
         assert!(!obj.contains_key("content_type"));
@@ -231,7 +240,7 @@ fn test_strip_images_keeps_content_type_non_image() {
         json!({"content_type": "text"}),
     )];
     let stripped = strip_images(&messages);
-    
+
     if let Some(ref metadata) = stripped[0].metadata {
         assert_eq!(metadata["content_type"], "text");
     }
@@ -245,7 +254,7 @@ fn test_strip_images_multiple_messages() {
         create_message_with_metadata("user", "Msg3", json!({"image_urls": ["url"]})),
     ];
     let stripped = strip_images(&messages);
-    
+
     assert_eq!(stripped.len(), 3);
     // First message should have images stripped
     if let Some(ref metadata) = stripped[0].metadata {
@@ -263,7 +272,11 @@ fn test_strip_images_multiple_messages() {
 
 #[test]
 fn test_strip_images_non_object_metadata() {
-    let messages = vec![create_message_with_metadata("user", "Hello", json!("string"))];
+    let messages = vec![create_message_with_metadata(
+        "user",
+        "Hello",
+        json!("string"),
+    )];
     let stripped = strip_images(&messages);
     assert_eq!(stripped.len(), 1);
     // Non-object metadata should remain unchanged
@@ -288,13 +301,10 @@ fn test_strip_images_mut_no_images() {
 
 #[test]
 fn test_strip_images_mut_has_images() {
-    let mut message = create_message_with_metadata(
-        "user",
-        "Hello",
-        json!({"images": ["img1"], "keep": "this"}),
-    );
+    let mut message =
+        create_message_with_metadata("user", "Hello", json!({"images": ["img1"], "keep": "this"}));
     let had_images = strip_images_mut(&mut message);
-    
+
     assert_eq!(had_images, true);
     if let Some(ref metadata) = message.metadata {
         assert!(!metadata.as_object().unwrap().contains_key("images"));
@@ -304,22 +314,15 @@ fn test_strip_images_mut_has_images() {
 
 #[test]
 fn test_strip_images_mut_has_image_urls() {
-    let mut message = create_message_with_metadata(
-        "user",
-        "Hello",
-        json!({"image_urls": ["url"]}),
-    );
+    let mut message = create_message_with_metadata("user", "Hello", json!({"image_urls": ["url"]}));
     let had_images = strip_images_mut(&mut message);
     assert_eq!(had_images, true);
 }
 
 #[test]
 fn test_strip_images_mut_has_attachments() {
-    let mut message = create_message_with_metadata(
-        "user",
-        "Hello",
-        json!({"attachments": ["file"]}),
-    );
+    let mut message =
+        create_message_with_metadata("user", "Hello", json!({"attachments": ["file"]}));
     let had_images = strip_images_mut(&mut message);
     assert_eq!(had_images, true);
 }

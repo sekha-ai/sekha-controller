@@ -212,7 +212,10 @@ fn test_config_default() {
     assert_eq!(config.config_version, Some("2.0".to_string()));
     assert_eq!(config.llm_providers.len(), 0);
     assert!(config.default_models.is_none());
-    assert_eq!(config.ollama_url, Some("http://localhost:11434".to_string()));
+    assert_eq!(
+        config.ollama_url,
+        Some("http://localhost:11434".to_string())
+    );
 }
 
 #[test]
@@ -393,7 +396,10 @@ fn test_config_validate_providers_duplicate_ids() {
 
     let result = config.validate_providers();
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Duplicate provider ID"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Duplicate provider ID"));
 }
 
 #[test]
@@ -645,7 +651,10 @@ fn test_reloadable_config_clone() {
     };
 
     let cloned = reloadable.clone();
-    assert_eq!(reloadable.summarization_enabled, cloned.summarization_enabled);
+    assert_eq!(
+        reloadable.summarization_enabled,
+        cloned.summarization_enabled
+    );
     assert_eq!(reloadable.pruning_enabled, cloned.pruning_enabled);
     assert_eq!(reloadable.log_level, cloned.log_level);
 }
