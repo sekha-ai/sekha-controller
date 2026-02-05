@@ -39,7 +39,6 @@ pub struct MessageDto {
     /// Content can be either a simple string or an array of content parts
     /// For text-only: content = "Hello"
     /// For vision: content = [{"type": "text", "text": "What's in this image?"}, {"type": "image_url", "image_url": {"url": "https://..."}}]
-    #[serde(untagged)]
     pub content: MessageContent,
 }
 
