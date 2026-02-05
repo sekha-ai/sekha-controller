@@ -8,6 +8,7 @@ pub mod models;
 pub mod orchestrator;
 pub mod services;
 pub mod storage;
+pub mod validation;
 
 // Re-export for convenience
 pub use services::embedding_service::EmbeddingService;
@@ -18,6 +19,9 @@ pub use llm::{BridgeClient, ChatMessage, ModelInfo, RoutingResponse};
 
 // MCP tool support
 pub use api::mcp::{create_mcp_router, McpToolResponse};
+
+// Validation exports
+pub use validation::{strip_images, validate_no_images, ValidationError};
 
 // Re-export main types for convenience - use routes (plural) as the main router
 pub use crate::api::dto::*;
