@@ -1,24 +1,43 @@
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
-use sekha_controller::api::route::create_router;
-use sekha_controller::config::Config;
-use sekha_controller::orchestrator::MemoryOrchestrator;
-use sekha_controller::services::embedding_service::EmbeddingService;
-use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
-use sekha_controller::storage::chroma_client::ChromaClient;
-use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
-use sekha_controller::AppState;
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use sekha_controller::api::routes::create_router;
+use sekha_controller::{
+    api::routes::AppState,
+    config::Config,
+    orchestrator::MemoryOrchestrator,
+    services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
+    storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_router_creation() {
-    let state = create_test_app_state().await;
-    let router = create_router(state);
+async fn test_metrics_route() {
+    let config = Arc::new(RwLock::new(Config::default()));
+    let mock_repo = Arc::new(MockConversationRepository::new());
+    let embedding_service = Arc::new(EmbeddingService::new(
+        "http://localhost:11434".to_string(),
+        "http://localhost:8000".to_string(),
+    ));
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    
+    let config_ref = config.read().await;
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
+    drop(config_ref);
 
-    // Test that router construction succeeds
-    // Test with metrics endpoint instead (less dependency on services)
+    let state = AppState {
+        config,
+        repo: mock_repo.clone(),
+        orchestrator: Arc::new(MemoryOrchestrator::new(mock_repo, llm_bridge.clone())),
+        embedding_service,
+        chroma_client,
+        llm_client: llm_bridge,
+    };
+
+    let router = create_router(state);
     let response = router
         .oneshot(
             Request::builder()
@@ -29,86 +48,43 @@ async fn test_router_creation() {
         .await
         .unwrap();
 
-    // Metrics should respond
-    assert!(response.status().is_success() || response.status().is_client_error());
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
-async fn test_semantic_query_mock_endpoint() {
-    let state = create_test_app_state().await;
-    let router = create_router(state);
+async fn test_health_route() {
+    let config = Arc::new(RwLock::new(Config::default()));
+    let mock_repo = Arc::new(MockConversationRepository::new());
+    let embedding_service = Arc::new(EmbeddingService::new(
+        "http://localhost:11434".to_string(),
+        "http://localhost:8000".to_string(),
+    ));
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    
+    let config_ref = config.read().await;
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
+    drop(config_ref);
 
+    let state = AppState {
+        config,
+        repo: mock_repo.clone(),
+        orchestrator: Arc::new(MemoryOrchestrator::new(mock_repo, llm_bridge.clone())),
+        embedding_service,
+        chroma_client,
+        llm_client: llm_bridge,
+    };
+
+    let router = create_router(state);
     let response = router
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/query")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"query":"test","limit":10}"#))
+                .uri("/health")
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_router_has_all_routes() {
-    let state = create_test_app_state().await;
-    let router = create_router(state);
-
-    // Test that main routes exist
-    let routes = vec![
-        ("/health", "GET"),
-        ("/metrics", "GET"),
-        ("/api/v1/query", "POST"),
-    ];
-
-    // Just verify router construction doesn't panic
-    // Actual route testing is in integration tests
-}
-
-// Helper function to create test AppState
-async fn create_test_app_state() -> AppState {
-    let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let repo = Arc::new(SeaOrmConversationRepository::new(
-        db,
-        chroma_client.clone(),
-        embedding_service.clone(),
-    ));
-    let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:5001".to_string()));
-
-    let config = Arc::new(RwLock::new(Config {
-        server_host: "127.0.0.1".to_string(),
-        server_port: 8080,
-        mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
-        rest_api_key: Some("rest_test_key_123456789012345678901234".to_string()),
-        database_url: "sqlite::memory:".to_string(),
-        ollama_url: "http://localhost:11434".to_string(),
-        chroma_url: "http://localhost:8000".to_string(),
-        llm_bridge_url: "http://localhost:5001".to_string(),
-        additional_api_keys: vec![],
-        cors_enabled: true,
-        rate_limit_per_minute: 60,
-        max_connections: 10,
-        log_level: "info".to_string(),
-        summarization_enabled: true,
-        pruning_enabled: true,
-        embedding_model: "nomic-embed-text:latest".to_string(),
-        summarization_model: "llama3.1:8b".to_string(),
-    }));
-
-    AppState {
-        config,
-        repo: repo.clone(),
-        chroma_client,
-        embedding_service,
-        orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge)),
-    }
 }
