@@ -14,9 +14,11 @@ mod memory_orchestrator_test;
 mod pruning_engine_test;
 mod summarizer_test;
 
-// Unit tests for API
+// Unit tests for API and Config - 100% coverage
 mod auth_test;
+mod auth_comprehensive_test;
 mod config_test;
+mod config_comprehensive_test;
 mod mcp_llm_tests;
 mod mcp_tests;
 mod rate_limiter_test;
