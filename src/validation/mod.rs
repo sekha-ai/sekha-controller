@@ -52,7 +52,7 @@ fn strip_image_metadata(metadata: &mut Value) {
         obj.remove("images");
         obj.remove("image_urls");
         obj.remove("attachments");
-        
+
         // Also remove data URIs from content if present
         if let Some(content_type) = obj.get("content_type") {
             if content_type.as_str() == Some("image") {
@@ -79,7 +79,10 @@ pub fn strip_images_mut(message: &mut Message) -> bool {
 
 /// Count how many messages have images stripped
 pub fn count_stripped_images(messages: &mut [Message]) -> usize {
-    messages.iter_mut().filter(|m| strip_images_mut(&mut **m)).count()
+    messages
+        .iter_mut()
+        .filter(|m| strip_images_mut(&mut **m))
+        .count()
 }
 
 /// Create a test message with no images
@@ -123,7 +126,7 @@ mod tests {
         }));
         let messages = vec![message];
         let stripped = strip_images(&messages);
-        
+
         assert_eq!(stripped.len(), 1);
         if let Some(ref metadata) = stripped[0].metadata {
             assert!(!has_image_metadata(metadata));
@@ -138,7 +141,7 @@ mod tests {
             create_test_message("assistant", "Hi"),
         ];
         messages[0].metadata = Some(json!({"images": ["data:image/png;base64,abc"]}));
-        
+
         let count = count_stripped_images(&mut messages);
         assert_eq!(count, 1);
         if let Some(ref metadata) = messages[0].metadata {
