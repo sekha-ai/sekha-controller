@@ -12,8 +12,10 @@ pub enum ValidationError {
 /// Validate that messages do not contain images
 pub fn validate_no_images(messages: &[Message]) -> Result<(), ValidationError> {
     for message in messages {
-        if has_image_metadata(&message.metadata) {
-            return Err(ValidationError::ImagesNotAllowed);
+        if let Some(ref metadata) = message.metadata {
+            if has_image_metadata(metadata) {
+                return Err(ValidationError::ImagesNotAllowed);
+            }
         }
     }
     Ok(())
@@ -36,7 +38,9 @@ pub fn strip_images(messages: &[Message]) -> Vec<Message> {
         .iter()
         .map(|m| {
             let mut new_message = m.clone();
-            strip_image_metadata(&mut new_message.metadata);
+            if let Some(ref mut metadata) = new_message.metadata {
+                strip_image_metadata(metadata);
+            }
             new_message
         })
         .collect()
@@ -48,7 +52,7 @@ fn strip_image_metadata(metadata: &mut Value) {
         obj.remove("images");
         obj.remove("image_urls");
         obj.remove("attachments");
-
+        
         // Also remove data URIs from content if present
         if let Some(content_type) = obj.get("content_type") {
             if content_type.as_str() == Some("image") {
@@ -60,16 +64,22 @@ fn strip_image_metadata(metadata: &mut Value) {
 
 /// Strip images from a single mutable message
 pub fn strip_images_mut(message: &mut Message) -> bool {
-    let had_images = has_image_metadata(&message.metadata);
-    if had_images {
-        strip_image_metadata(&mut message.metadata);
+    if let Some(ref metadata) = message.metadata {
+        let had_images = has_image_metadata(metadata);
+        if had_images {
+            if let Some(ref mut meta) = message.metadata {
+                strip_image_metadata(meta);
+            }
+        }
+        had_images
+    } else {
+        false
     }
-    had_images
 }
 
 /// Count how many messages have images stripped
 pub fn count_stripped_images(messages: &mut [Message]) -> usize {
-    messages.iter_mut().filter(|m| strip_images_mut(m)).count()
+    messages.iter_mut().filter(|m| strip_images_mut(*m)).count()
 }
 
 /// Create a test message with no images
@@ -79,8 +89,9 @@ pub fn create_test_message(role: &str, content: &str) -> Message {
         conversation_id: uuid::Uuid::new_v4(),
         role: role.to_string(),
         content: content.to_string(),
-        metadata: serde_json::json!({}),
+        metadata: Some(serde_json::json!({})),
         timestamp: chrono::Local::now().naive_local(),
+        embedding_id: None,
     }
 }
 
@@ -98,7 +109,7 @@ mod tests {
     #[test]
     fn test_validate_no_images_fail() {
         let mut message = create_test_message("user", "Hello");
-        message.metadata = json!({"images": ["data:image/png;base64,abc"]});
+        message.metadata = Some(json!({"images": ["data:image/png;base64,abc"]}));
         let messages = vec![message];
         assert!(validate_no_images(&messages).is_err());
     }
@@ -106,16 +117,18 @@ mod tests {
     #[test]
     fn test_strip_images() {
         let mut message = create_test_message("user", "Hello");
-        message.metadata = json!({
+        message.metadata = Some(json!({
             "images": ["data:image/png;base64,abc"],
             "other_field": "keep_this"
-        });
+        }));
         let messages = vec![message];
         let stripped = strip_images(&messages);
-
+        
         assert_eq!(stripped.len(), 1);
-        assert!(!has_image_metadata(&stripped[0].metadata));
-        assert_eq!(stripped[0].metadata["other_field"], "keep_this");
+        if let Some(ref metadata) = stripped[0].metadata {
+            assert!(!has_image_metadata(metadata));
+            assert_eq!(metadata["other_field"], "keep_this");
+        }
     }
 
     #[test]
@@ -124,10 +137,12 @@ mod tests {
             create_test_message("user", "Hello"),
             create_test_message("assistant", "Hi"),
         ];
-        messages[0].metadata = json!({"images": ["data:image/png;base64,abc"]});
-
+        messages[0].metadata = Some(json!({"images": ["data:image/png;base64,abc"]}));
+        
         let count = count_stripped_images(&mut messages);
         assert_eq!(count, 1);
-        assert!(!has_image_metadata(&messages[0].metadata));
+        if let Some(ref metadata) = messages[0].metadata {
+            assert!(!has_image_metadata(metadata));
+        }
     }
 }

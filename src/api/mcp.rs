@@ -2,10 +2,8 @@ use crate::api::routes::AppState;
 use crate::config::Config;
 use axum::routing::post;
 use axum::{
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
+    extract::State,
+    http::StatusCode,
 };
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -13,7 +11,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{api::dto::*, auth::McpAuth, models::internal::Conversation};
+use crate::{
+    api::dto::*, auth::McpAuth,
+};
 
 #[cfg(test)]
 mod tests {
@@ -476,7 +476,7 @@ pub struct MemoryGetContextArgs {
 pub async fn memory_get_context(
     _auth: McpAuth,
     State(state): State<AppState>,
-    Json(args): Json(MemoryGetContextArgs),
+    Json<MemoryGetContextArgs>(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
         .repo
