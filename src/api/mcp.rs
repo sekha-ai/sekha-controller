@@ -1,19 +1,14 @@
 use crate::api::routes::AppState;
 use crate::config::Config;
 use axum::routing::post;
-use axum::{
-    extract::State,
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{
-    api::dto::*, auth::McpAuth,
-};
+use crate::{api::dto::*, auth::McpAuth};
 
 #[cfg(test)]
 mod tests {
