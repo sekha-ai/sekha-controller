@@ -416,12 +416,10 @@ pub async fn memory_prune(
 
     // Create LLM bridge client from full Config in state
     let config_guard = state.config.read().await;
-    let llm_bridge = Arc::new(
-        LlmBridgeClient::new(&*config_guard).map_err(|e| {
-            tracing::error!("Failed to create LlmBridgeClient: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?,
-    );
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_guard).map_err(|e| {
+        tracing::error!("Failed to create LlmBridgeClient: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?);
 
     // Create pruning engine
     let pruning_engine = PruningEngine::new(state.repo.clone(), llm_bridge);
