@@ -1,7 +1,6 @@
 use sekha_controller::{
     api::routes::AppState,
     config::Config,
-    orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
 };
@@ -27,29 +26,14 @@ pub fn create_test_conversation(label: &str, folder: &str) -> Value {
 
 #[allow(dead_code)]
 pub async fn create_test_services() -> AppState {
-    let config = Arc::new(RwLock::new(Config {
-        ollama_url: Some("http://localhost:11434".to_string()),
-        chroma_url: "http://localhost:8000".to_string(),
-        database_url: "postgresql://user:pass@localhost/db".to_string(),
-        log_level: "info".to_string(),
-        server_host: "0.0.0.0".to_string(),
-        server_port: 3000,
-        embedding_model: Some("nomic-embed-text:latest".to_string()),
-        summarization_model: Some("llama3.1:8b".to_string()),
-        mcp_api_key: "test_key".to_string(),
-        config_version: "v2".to_string(),
-        default_models: Config::default().default_models,
-        llm_providers: Config::default().llm_providers,
-        llm_bridge_url: "http://localhost:8080".to_string(),
-    }));
-
+    let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
     let embedding_service = Arc::new(EmbeddingService::new(
         "http://localhost:11434".to_string(),
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
+    
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
@@ -58,8 +42,7 @@ pub async fn create_test_services() -> AppState {
     AppState {
         config,
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
-            repo,
-            llm_bridge.clone(),
+            repo, llm_bridge.clone(),
         )),
         repo: mock_repo,
         embedding_service,
@@ -70,30 +53,6 @@ pub async fn create_test_services() -> AppState {
 
 #[allow(dead_code)]
 pub async fn create_test_state_with_data() -> (AppState, Vec<Uuid>) {
-    let config = Arc::new(RwLock::new(Config::default()));
-    let mock_repo = Arc::new(MockConversationRepository::new());
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let repo = mock_repo.clone();
-    let state = AppState {
-        config,
-        orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
-            repo,
-            llm_bridge.clone(),
-        )),
-        repo: mock_repo,
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_services().await;
     (state, vec![])
 }

@@ -5,7 +5,7 @@ use sekha_controller::{
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
-        chroma_client::ChromaClient, db::get_connection, repository::PostgresConversationRepository,
+        chroma_client::ChromaClient, db::get_connection, repository::SeaOrmConversationRepository,
     },
 };
 use std::sync::Arc;
@@ -35,14 +35,10 @@ async fn main() -> Result<()> {
     tracing::info!("✅ Database connected");
 
     // Get Ollama URL from config
-    let ollama_url = config
-        .ollama_url
-        .clone()
-        .unwrap_or_else(|| "http://localhost:11434".to_string());
+    let ollama_url = config.ollama_url.clone().unwrap_or_else(|| "http://localhost:11434".to_string());
 
     // Initialize Chroma client
-    let chroma_url =
-        std::env::var("CHROMA_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+    let chroma_url = std::env::var("CHROMA_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
     let chroma_client = Arc::new(ChromaClient::new(chroma_url.clone()));
     tracing::info!("✅ Chroma client initialized: {}", chroma_url);
 
@@ -60,24 +56,19 @@ async fn main() -> Result<()> {
         Err(e) => {
             tracing::warn!("⚠️ LLM Bridge health check failed: {}", e);
             if let Ok(models) = llm_bridge.list_models().await {
-                tracing::info!("📊 LLM Bridge models: {:?}", models);
+                tracing::info!("📊 LLM Bridge models available: {}", models.len());
             }
         }
     }
 
     // Create repository
     let repository = Arc::new(
-        PostgresConversationRepository::new(db.clone())
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create repository: {}", e))?,
+        SeaOrmConversationRepository::new(db.clone(), chroma_client.clone(), embedding_service.clone()),
     );
     tracing::info!("✅ Repository initialized");
 
     // Create orchestrator
-    let orchestrator = Arc::new(MemoryOrchestrator::new(
-        repository.clone(),
-        llm_bridge.clone(),
-    ));
+    let orchestrator = Arc::new(MemoryOrchestrator::new(repository.clone(), llm_bridge.clone()));
     tracing::info!("✅ Orchestrator initialized");
 
     // Wrap config in Arc<RwLock>
@@ -94,12 +85,13 @@ async fn main() -> Result<()> {
     };
 
     // Create router
-    let app = create_router(state).layer(
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(Any)
-            .allow_headers(Any),
-    );
+    let app = create_router(state)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        );
 
     // Start server
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
