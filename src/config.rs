@@ -222,6 +222,35 @@ impl Default for CircuitBreakerConfig {
     }
 }
 
+/// Default implementation for Config (mainly for testing)
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server_host: "0.0.0.0".to_string(),
+            server_port: 8080,
+            mcp_api_key: "test_key_12345678901234567890123456789012".to_string(),
+            database_url: "sqlite://sekha.db".to_string(),
+            chroma_url: "http://localhost:8000".to_string(),
+            llm_bridge_url: "http://localhost:5001".to_string(),
+            max_connections: 10,
+            log_level: "info".to_string(),
+            summarization_enabled: true,
+            pruning_enabled: true,
+            rest_api_key: None,
+            additional_api_keys: vec![],
+            rate_limit_per_minute: 1000,
+            cors_enabled: true,
+            config_version: Some("2.0".to_string()),
+            llm_providers: vec![],
+            default_models: None,
+            routing: RoutingConfig::default(),
+            ollama_url: Some("http://localhost:11434".to_string()),
+            embedding_model: Some("nomic-embed-text".to_string()),
+            summarization_model: Some("llama3.1:8b".to_string()),
+        }
+    }
+}
+
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
         let mut settings = config::Config::builder()
@@ -464,5 +493,13 @@ mod tests {
         assert_eq!(routing.auto_fallback, true);
         assert_eq!(routing.require_vision_for_images, true);
         assert!(routing.max_cost_per_request.is_none());
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.server_port, 8080);
+        assert!(config.mcp_api_key.len() >= 32);
+        assert_eq!(config.llm_bridge_url, "http://localhost:5001");
     }
 }
