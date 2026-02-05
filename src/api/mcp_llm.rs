@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error};
 
-use crate::api::routes::AppState;
 use crate::api::mcp::McpToolResponse;
+use crate::api::routes::AppState;
 
 /// Request for LLM provider status
 #[derive(Debug, Deserialize)]
@@ -77,8 +77,8 @@ pub async fn mcp_llm_status(
             Json(McpToolResponse {
                 content: vec![serde_json::json!({
                     "type": "text",
-                    "text": format!("LLM Providers: {} total, {} healthy", 
-                        response.total_providers, 
+                    "text": format!("LLM Providers: {} total, {} healthy",
+                        response.total_providers,
                         response.healthy_providers
                     )
                 })],
@@ -150,10 +150,10 @@ async fn get_provider_status(
 ) -> anyhow::Result<LlmStatusResponse> {
     // For now, return basic status
     // In a full implementation, this would call bridge /api/v1/health/providers
-    
+
     // Check if bridge is healthy
     let is_healthy = bridge_client.health_check().await.unwrap_or(false);
-    
+
     // Return basic status
     Ok(LlmStatusResponse {
         providers: vec![ProviderStatus {

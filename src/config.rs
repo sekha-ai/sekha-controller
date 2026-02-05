@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use validator::Validate;
 use std::collections::HashMap;
+use validator::Validate;
 
 /// Provider types supported by Sekha
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -31,13 +31,13 @@ pub struct ModelCapability {
     pub model_id: String,
     pub task: ModelTask,
     pub context_window: usize,
-    
+
     #[serde(default)]
     pub supports_vision: bool,
-    
+
     #[serde(default)]
     pub supports_audio: bool,
-    
+
     /// Embedding dimension (for embedding models only)
     pub dimension: Option<usize>,
 }
@@ -47,24 +47,24 @@ pub struct ModelCapability {
 pub struct LlmProviderConfig {
     /// Unique identifier (e.g., "ollama_local", "openai_cloud")
     pub id: String,
-    
+
     /// Provider type
     #[serde(rename = "type")]
     pub provider_type: ProviderType,
-    
+
     /// Base URL for provider API
     pub base_url: String,
-    
+
     /// Optional API key
     pub api_key: Option<String>,
-    
+
     /// Request timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_secs: u32,
-    
+
     /// Provider priority (1 = highest, try first)
     pub priority: u8,
-    
+
     /// Models available from this provider
     #[serde(default)]
     pub models: Vec<ModelCapability>,
@@ -84,12 +84,12 @@ pub struct DefaultModels {
 pub struct RoutingConfig {
     #[serde(default = "default_auto_fallback")]
     pub auto_fallback: bool,
-    
+
     #[serde(default = "default_require_vision")]
     pub require_vision_for_images: bool,
-    
+
     pub max_cost_per_request: Option<f64>,
-    
+
     #[serde(default)]
     pub circuit_breaker: CircuitBreakerConfig,
 }
@@ -99,10 +99,10 @@ pub struct RoutingConfig {
 pub struct CircuitBreakerConfig {
     #[serde(default = "default_failure_threshold")]
     pub failure_threshold: u32,
-    
+
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u32,
-    
+
     #[serde(default = "default_success_threshold")]
     pub success_threshold: u32,
 }
@@ -145,14 +145,14 @@ pub struct Config {
     /// Configuration version ("2.0")
     #[serde(default)]
     pub config_version: Option<String>,
-    
+
     /// Provider registry (v2.0)
     #[serde(default)]
     pub llm_providers: Vec<LlmProviderConfig>,
-    
+
     /// Default model selections (v2.0)
     pub default_models: Option<DefaultModels>,
-    
+
     /// Routing configuration (v2.0)
     #[serde(default)]
     pub routing: RoutingConfig,
@@ -160,10 +160,10 @@ pub struct Config {
     // ==== DEPRECATED (v1.x) - Keep for backward compatibility ====
     /// @deprecated Use llm_providers instead
     pub ollama_url: Option<String>,
-    
+
     /// @deprecated Use default_models.embedding instead
     pub embedding_model: Option<String>,
-    
+
     /// @deprecated Use default_models.chat_fast instead
     pub summarization_model: Option<String>,
 }
@@ -254,7 +254,7 @@ impl Config {
             .add_source(
                 config::Environment::with_prefix("SEKHA")
                     .separator("__")
-                    .try_parsing(true)
+                    .try_parsing(true),
             )
             .build()?;
 
@@ -264,14 +264,14 @@ impl Config {
         // If no v2.0 providers configured but v1.x config exists, auto-migrate
         if config.llm_providers.is_empty() {
             if let Some(ollama_url) = &config.ollama_url {
-                tracing::warn!(
-                    "⚠️  Detected v1.x configuration. Auto-migrating to v2.0 format..."
-                );
-                
-                let embedding_model = config.embedding_model
+                tracing::warn!("⚠️  Detected v1.x configuration. Auto-migrating to v2.0 format...");
+
+                let embedding_model = config
+                    .embedding_model
                     .clone()
                     .unwrap_or_else(|| "nomic-embed-text".to_string());
-                let summarization_model = config.summarization_model
+                let summarization_model = config
+                    .summarization_model
                     .clone()
                     .unwrap_or_else(|| "llama3.1:8b".to_string());
 
@@ -339,12 +339,13 @@ impl Config {
             // Ensure default models are specified
             if self.default_models.is_none() {
                 return Err(config::ConfigError::Message(
-                    "default_models must be specified when using llm_providers".to_string()
+                    "default_models must be specified when using llm_providers".to_string(),
                 ));
             }
 
             // Collect all model IDs from all providers
-            let available_models: Vec<String> = self.llm_providers
+            let available_models: Vec<String> = self
+                .llm_providers
                 .iter()
                 .flat_map(|p| p.models.iter().map(|m| m.model_id.clone()))
                 .collect();
@@ -352,28 +353,22 @@ impl Config {
             // Validate that default models exist in some provider
             if let Some(defaults) = &self.default_models {
                 if !available_models.contains(&defaults.embedding) {
-                    return Err(config::ConfigError::Message(
-                        format!(
-                            "Default embedding model '{}' not found in any provider",
-                            defaults.embedding
-                        )
-                    ));
+                    return Err(config::ConfigError::Message(format!(
+                        "Default embedding model '{}' not found in any provider",
+                        defaults.embedding
+                    )));
                 }
                 if !available_models.contains(&defaults.chat_fast) {
-                    return Err(config::ConfigError::Message(
-                        format!(
-                            "Default chat_fast model '{}' not found in any provider",
-                            defaults.chat_fast
-                        )
-                    ));
+                    return Err(config::ConfigError::Message(format!(
+                        "Default chat_fast model '{}' not found in any provider",
+                        defaults.chat_fast
+                    )));
                 }
                 if !available_models.contains(&defaults.chat_smart) {
-                    return Err(config::ConfigError::Message(
-                        format!(
-                            "Default chat_smart model '{}' not found in any provider",
-                            defaults.chat_smart
-                        )
-                    ));
+                    return Err(config::ConfigError::Message(format!(
+                        "Default chat_smart model '{}' not found in any provider",
+                        defaults.chat_smart
+                    )));
                 }
             }
 
@@ -381,9 +376,10 @@ impl Config {
             let mut seen_ids = std::collections::HashSet::new();
             for provider in &self.llm_providers {
                 if !seen_ids.insert(&provider.id) {
-                    return Err(config::ConfigError::Message(
-                        format!("Duplicate provider ID: {}", provider.id)
-                    ));
+                    return Err(config::ConfigError::Message(format!(
+                        "Duplicate provider ID: {}",
+                        provider.id
+                    )));
                 }
             }
         }
@@ -394,7 +390,8 @@ impl Config {
     /// Get provider for a specific task (helper for orchestrator)
     pub fn get_provider_for_task(&self, task: &ModelTask) -> Option<&LlmProviderConfig> {
         // Find providers that have models for this task, sorted by priority
-        let mut candidates: Vec<&LlmProviderConfig> = self.llm_providers
+        let mut candidates: Vec<&LlmProviderConfig> = self
+            .llm_providers
             .iter()
             .filter(|p| p.models.iter().any(|m| &m.task == task))
             .collect();

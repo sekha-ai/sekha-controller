@@ -157,7 +157,10 @@ impl BridgeClient {
             max_cost,
         };
 
-        debug!("Routing request: task={}, preferred_model={:?}", task, request.preferred_model);
+        debug!(
+            "Routing request: task={}, preferred_model={:?}",
+            task, request.preferred_model
+        );
 
         let response = self
             .client
@@ -181,12 +184,7 @@ impl BridgeClient {
     pub async fn list_models(&self) -> anyhow::Result<Vec<ModelInfo>> {
         let url = format!("{}/api/v1/models", self.base_url);
 
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .error_for_status()?;
+        let response = self.client.get(&url).send().await?.error_for_status()?;
 
         let models: Vec<ModelInfo> = response.json().await?;
 
@@ -242,12 +240,15 @@ impl BridgeClient {
     ) -> anyhow::Result<(ChatCompletionResponse, RoutingResponse)> {
         // Route the request if v2 is available
         let routing = if self.use_v2_routing {
-            self.route_request(task, preferred_model.clone(), max_cost).await?
+            self.route_request(task, preferred_model.clone(), max_cost)
+                .await?
         } else {
             // Fallback: create a fake routing response for legacy mode
             RoutingResponse {
                 provider_id: "legacy".to_string(),
-                model_id: preferred_model.clone().unwrap_or_else(|| "default".to_string()),
+                model_id: preferred_model
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string()),
                 estimated_cost: 0.0,
                 reason: "Legacy mode".to_string(),
                 provider_type: "ollama".to_string(),
@@ -301,11 +302,14 @@ impl BridgeClient {
     ) -> anyhow::Result<(EmbedResponse, RoutingResponse)> {
         // Route the request if v2 is available
         let routing = if self.use_v2_routing {
-            self.route_request("embedding", preferred_model.clone(), max_cost).await?
+            self.route_request("embedding", preferred_model.clone(), max_cost)
+                .await?
         } else {
             RoutingResponse {
                 provider_id: "legacy".to_string(),
-                model_id: preferred_model.clone().unwrap_or_else(|| "default".to_string()),
+                model_id: preferred_model
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string()),
                 estimated_cost: 0.0,
                 reason: "Legacy mode".to_string(),
                 provider_type: "ollama".to_string(),

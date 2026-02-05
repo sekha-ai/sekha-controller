@@ -5,13 +5,6 @@
 pub mod bridge_client;
 
 pub use bridge_client::{
-    BridgeClient,
-    ChatMessage,
-    ChatCompletionRequest,
-    ChatCompletionResponse,
-    EmbedRequest,
-    EmbedResponse,
-    RoutingRequest,
-    RoutingResponse,
-    ModelInfo,
+    BridgeClient, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, EmbedRequest,
+    EmbedResponse, ModelInfo, RoutingRequest, RoutingResponse,
 };
