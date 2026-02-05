@@ -23,7 +23,7 @@ pub struct RoutingRequest {
 }
 
 /// Bridge routing response
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RoutingResponse {
     pub provider_id: String,
     pub model_id: String,
@@ -112,6 +112,7 @@ pub struct EmbedResponse {
 }
 
 /// Bridge client for LLM operations
+#[derive(Clone)]
 pub struct BridgeClient {
     client: Client,
     base_url: String,
@@ -136,7 +137,7 @@ impl BridgeClient {
 
         Ok(Self {
             client,
-            base_url: config.bridge_url.clone(),
+            base_url: config.llm_bridge_url.clone(),
             use_v2_routing,
         })
     }
