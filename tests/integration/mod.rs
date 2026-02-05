@@ -2,7 +2,11 @@ use sekha_controller::{
     api::routes::AppState,
     config::Config,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
-    storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
+    storage::{
+        chroma_client::ChromaClient, 
+        repository::SeaOrmConversationRepository,
+        init_db,
+    },
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -27,25 +31,36 @@ pub fn create_test_conversation(label: &str, folder: &str) -> Value {
 #[allow(dead_code)]
 pub async fn create_test_services() -> AppState {
     let config = Arc::new(RwLock::new(Config::default()));
-    let mock_repo = Arc::new(MockConversationRepository::new());
+    
+    // Use in-memory SQLite for integration tests
+    let db = init_db("sqlite::memory:")
+        .await
+        .expect("Failed to initialize test database");
+    
     let embedding_service = Arc::new(EmbeddingService::new(
         "http://localhost:11434".to_string(),
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
 
+    // Create real repository with test database
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client.clone(),
+        embedding_service.clone(),
+    ));
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
 
-    let repo = mock_repo.clone();
     AppState {
         config,
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
-            repo,
+            repo.clone(),
             llm_bridge.clone(),
         )),
-        repo: mock_repo,
+        repo,
         embedding_service,
         chroma_client,
         llm_client: llm_bridge,
