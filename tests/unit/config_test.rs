@@ -307,18 +307,22 @@ fn test_is_valid_api_key() {
 }
 
 #[test]
-fn test_config_port_validation() {
+fn test_config_port_validation_low() {
     let mut config = Config::default();
     config.server_port = 80; // Below 1024
 
     // Should fail validation
     assert!(config.validate().is_err());
+}
 
+#[test]
+fn test_config_port_validation_valid() {
+    let mut config = Config::default();
     config.server_port = 8080; // Valid
     assert!(config.validate().is_ok());
-
-    config.server_port = 70000; // Above 65535
-    assert!(config.validate().is_err());
+    
+    config.server_port = 65535; // Max valid u16
+    assert!(config.validate().is_ok());
 }
 
 #[test]
