@@ -49,7 +49,7 @@ pub async fn create_test_services() -> AppState {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
@@ -58,7 +58,8 @@ pub async fn create_test_services() -> AppState {
     AppState {
         config,
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
-            repo, llm_bridge.clone(),
+            repo,
+            llm_bridge.clone(),
         )),
         repo: mock_repo,
         embedding_service,
@@ -76,7 +77,7 @@ pub async fn create_test_state_with_data() -> (AppState, Vec<Uuid>) {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
@@ -85,7 +86,8 @@ pub async fn create_test_state_with_data() -> (AppState, Vec<Uuid>) {
     let state = AppState {
         config,
         orchestrator: Arc::new(sekha_controller::orchestrator::MemoryOrchestrator::new(
-            repo, llm_bridge.clone(),
+            repo,
+            llm_bridge.clone(),
         )),
         repo: mock_repo,
         embedding_service,
