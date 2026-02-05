@@ -1,7 +1,4 @@
-use sekha_controller::{
-    config::Config,
-    services::llm_bridge_client::LlmBridgeClient,
-};
+use sekha_controller::{config::Config, services::llm_bridge_client::LlmBridgeClient};
 
 #[test]
 fn test_llm_bridge_client_creation() {

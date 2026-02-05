@@ -23,7 +23,7 @@ async fn test_metrics_route() {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
@@ -60,7 +60,7 @@ async fn test_health_route() {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);

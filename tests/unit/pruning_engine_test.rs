@@ -1,9 +1,6 @@
 use sekha_controller::{
-    config::Config,
-    models::internal::Conversation,
-    orchestrator::pruning_engine::PruningEngine,
-    services::llm_bridge_client::LlmBridgeClient,
-    storage::repository::MockConversationRepository,
+    config::Config, models::internal::Conversation, orchestrator::pruning_engine::PruningEngine,
+    services::llm_bridge_client::LlmBridgeClient, storage::repository::MockConversationRepository,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -15,7 +12,7 @@ use wiremock::{
 #[tokio::test]
 async fn test_pruning_engine_initialization() {
     let mock_server = MockServer::start().await;
-    
+
     Mock::given(method("GET"))
         .and(path("/health"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"status": "ok"})))
@@ -37,7 +34,7 @@ async fn test_pruning_engine_initialization() {
 #[tokio::test]
 async fn test_pruning_candidates() {
     let mock_server = MockServer::start().await;
-    
+
     Mock::given(method("GET"))
         .and(path("/health"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"status": "ok"})))

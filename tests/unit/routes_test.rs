@@ -17,7 +17,7 @@ async fn test_router_creation() {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);

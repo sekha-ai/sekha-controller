@@ -1,10 +1,8 @@
 use mockall::predicate::*;
 use sekha_controller::{
-    config::Config,
-    models::internal::Conversation,
+    config::Config, models::internal::Conversation,
     orchestrator::importance_engine::ImportanceEngine,
-    services::llm_bridge_client::LlmBridgeClient,
-    storage::repository::MockConversationRepository,
+    services::llm_bridge_client::LlmBridgeClient, storage::repository::MockConversationRepository,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -16,7 +14,7 @@ use wiremock::{
 #[tokio::test]
 async fn test_importance_engine_initialization() {
     let mock_server = MockServer::start().await;
-    
+
     Mock::given(method("GET"))
         .and(path("/health"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"status": "ok"})))
@@ -27,9 +25,7 @@ async fn test_importance_engine_initialization() {
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
     let mut mock_repo = MockConversationRepository::new();
 
-    mock_repo
-        .expect_find_by_id()
-        .returning(|_| Ok(None));
+    mock_repo.expect_find_by_id().returning(|_| Ok(None));
 
     let _engine = ImportanceEngine::new(Arc::new(mock_repo), llm_bridge);
     assert!(true);
@@ -38,7 +34,7 @@ async fn test_importance_engine_initialization() {
 #[tokio::test]
 async fn test_importance_scoring() {
     let mock_server = MockServer::start().await;
-    
+
     Mock::given(method("POST"))
         .and(path("/score"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"score": 8.5})))
