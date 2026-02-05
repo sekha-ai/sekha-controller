@@ -17,11 +17,11 @@ async fn create_llm_test_state() -> AppState {
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
-    
+
     AppState {
         config,
         repo: mock_repo.clone(),
@@ -36,11 +36,11 @@ async fn create_llm_test_state() -> AppState {
 async fn test_llm_status_request_serialization() {
     use sekha_controller::api::mcp_llm::LlmStatusRequest;
     use serde_json::json;
-    
+
     let json = json!({
         "provider_id": "ollama"
     });
-    
+
     let request: LlmStatusRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.provider_id, Some("ollama".to_string()));
 }
@@ -49,9 +49,9 @@ async fn test_llm_status_request_serialization() {
 async fn test_llm_status_request_without_provider() {
     use sekha_controller::api::mcp_llm::LlmStatusRequest;
     use serde_json::json;
-    
+
     let json = json!({});
-    
+
     let request: LlmStatusRequest = serde_json::from_value(json).unwrap();
     assert!(request.provider_id.is_none());
 }
@@ -60,16 +60,19 @@ async fn test_llm_status_request_without_provider() {
 async fn test_routing_info_request_serialization() {
     use sekha_controller::api::mcp_llm::RoutingInfoRequest;
     use serde_json::json;
-    
+
     let json = json!({
         "task": "embedding",
         "preferred_model": "nomic-embed-text",
         "max_cost": 0.01
     });
-    
+
     let request: RoutingInfoRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.task, "embedding");
-    assert_eq!(request.preferred_model, Some("nomic-embed-text".to_string()));
+    assert_eq!(
+        request.preferred_model,
+        Some("nomic-embed-text".to_string())
+    );
     assert_eq!(request.max_cost, Some(0.01));
 }
 
@@ -77,11 +80,11 @@ async fn test_routing_info_request_serialization() {
 async fn test_routing_info_request_minimal() {
     use sekha_controller::api::mcp_llm::RoutingInfoRequest;
     use serde_json::json;
-    
+
     let json = json!({
         "task": "chat"
     });
-    
+
     let request: RoutingInfoRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.task, "chat");
     assert!(request.preferred_model.is_none());
@@ -91,7 +94,7 @@ async fn test_routing_info_request_minimal() {
 #[tokio::test]
 async fn test_provider_status_serialization() {
     use sekha_controller::api::mcp_llm::ProviderStatus;
-    
+
     let status = ProviderStatus {
         provider_id: "ollama".to_string(),
         provider_type: "ollama".to_string(),
@@ -99,7 +102,7 @@ async fn test_provider_status_serialization() {
         models_count: 5,
         circuit_breaker_state: "closed".to_string(),
     };
-    
+
     let json = serde_json::to_value(&status).unwrap();
     assert_eq!(json["provider_id"], "ollama");
     assert_eq!(json["models_count"], 5);
@@ -109,7 +112,7 @@ async fn test_provider_status_serialization() {
 #[tokio::test]
 async fn test_llm_status_response_structure() {
     use sekha_controller::api::mcp_llm::{LlmStatusResponse, ProviderStatus};
-    
+
     let response = LlmStatusResponse {
         providers: vec![
             ProviderStatus {
@@ -131,7 +134,7 @@ async fn test_llm_status_response_structure() {
         healthy_providers: 1,
         total_models: 5,
     };
-    
+
     assert_eq!(response.total_providers, 2);
     assert_eq!(response.healthy_providers, 1);
     assert_eq!(response.total_models, 5);
@@ -141,7 +144,7 @@ async fn test_llm_status_response_structure() {
 #[tokio::test]
 async fn test_routing_info_response_structure() {
     use sekha_controller::api::mcp_llm::RoutingInfoResponse;
-    
+
     let response = RoutingInfoResponse {
         provider_id: "ollama_main".to_string(),
         model_id: "llama3.1:8b".to_string(),
@@ -149,7 +152,7 @@ async fn test_routing_info_response_structure() {
         reason: "Best cost-performance ratio".to_string(),
         provider_type: "ollama".to_string(),
     };
-    
+
     let json = serde_json::to_value(&response).unwrap();
     assert_eq!(json["provider_id"], "ollama_main");
     assert_eq!(json["model_id"], "llama3.1:8b");
@@ -160,7 +163,7 @@ async fn test_routing_info_response_structure() {
 async fn test_mcp_llm_status_data_structures() {
     // Test all enum values for provider status
     let statuses = vec!["healthy", "unhealthy", "degraded"];
-    
+
     for status_str in statuses {
         let status = sekha_controller::api::mcp_llm::ProviderStatus {
             provider_id: "test".to_string(),
@@ -169,7 +172,7 @@ async fn test_mcp_llm_status_data_structures() {
             models_count: 1,
             circuit_breaker_state: "closed".to_string(),
         };
-        
+
         assert_eq!(status.status, status_str);
     }
 }
@@ -178,7 +181,7 @@ async fn test_mcp_llm_status_data_structures() {
 async fn test_circuit_breaker_states() {
     // Test all circuit breaker states
     let states = vec!["closed", "open", "half_open"];
-    
+
     for state_str in states {
         let status = sekha_controller::api::mcp_llm::ProviderStatus {
             provider_id: "test".to_string(),
@@ -187,7 +190,7 @@ async fn test_circuit_breaker_states() {
             models_count: 1,
             circuit_breaker_state: state_str.to_string(),
         };
-        
+
         assert_eq!(status.circuit_breaker_state, state_str);
     }
 }
@@ -196,16 +199,16 @@ async fn test_circuit_breaker_states() {
 async fn test_routing_with_cost_constraint() {
     use sekha_controller::api::mcp_llm::RoutingInfoRequest;
     use serde_json::json;
-    
+
     let request = RoutingInfoRequest {
         task: "chat".to_string(),
         preferred_model: None,
         max_cost: Some(0.001),
     };
-    
+
     // Verify cost constraint is preserved
     assert_eq!(request.max_cost, Some(0.001));
-    
+
     // Serialize and deserialize
     let json = serde_json::to_value(&request).unwrap();
     let deserialized: RoutingInfoRequest = serde_json::from_value(json).unwrap();
@@ -215,27 +218,30 @@ async fn test_routing_with_cost_constraint() {
 #[tokio::test]
 async fn test_routing_with_preferred_model() {
     use sekha_controller::api::mcp_llm::RoutingInfoRequest;
-    
+
     let request = RoutingInfoRequest {
         task: "embedding".to_string(),
         preferred_model: Some("nomic-embed-text".to_string()),
         max_cost: None,
     };
-    
-    assert_eq!(request.preferred_model, Some("nomic-embed-text".to_string()));
+
+    assert_eq!(
+        request.preferred_model,
+        Some("nomic-embed-text".to_string())
+    );
 }
 
 #[tokio::test]
 async fn test_llm_status_response_with_no_providers() {
     use sekha_controller::api::mcp_llm::LlmStatusResponse;
-    
+
     let response = LlmStatusResponse {
         providers: vec![],
         total_providers: 0,
         healthy_providers: 0,
         total_models: 0,
     };
-    
+
     assert_eq!(response.providers.len(), 0);
     assert_eq!(response.total_providers, 0);
     assert_eq!(response.healthy_providers, 0);
@@ -244,7 +250,7 @@ async fn test_llm_status_response_with_no_providers() {
 #[tokio::test]
 async fn test_provider_status_json_format() {
     use sekha_controller::api::mcp_llm::ProviderStatus;
-    
+
     let status = ProviderStatus {
         provider_id: "openai".to_string(),
         provider_type: "openai".to_string(),
@@ -252,7 +258,7 @@ async fn test_provider_status_json_format() {
         models_count: 10,
         circuit_breaker_state: "closed".to_string(),
     };
-    
+
     let json_str = serde_json::to_string(&status).unwrap();
     assert!(json_str.contains("openai"));
     assert!(json_str.contains("healthy"));
@@ -262,7 +268,7 @@ async fn test_provider_status_json_format() {
 #[tokio::test]
 async fn test_routing_response_cost_estimation() {
     use sekha_controller::api::mcp_llm::RoutingInfoResponse;
-    
+
     let response = RoutingInfoResponse {
         provider_id: "anthropic".to_string(),
         model_id: "claude-3-haiku".to_string(),
@@ -270,7 +276,7 @@ async fn test_routing_response_cost_estimation() {
         reason: "Lowest cost for task".to_string(),
         provider_type: "anthropic".to_string(),
     };
-    
+
     // Verify cost is reasonable
     assert!(response.estimated_cost > 0.0);
     assert!(response.estimated_cost < 1.0);
@@ -279,9 +285,9 @@ async fn test_routing_response_cost_estimation() {
 #[tokio::test]
 async fn test_provider_types_coverage() {
     use sekha_controller::api::mcp_llm::ProviderStatus;
-    
+
     let provider_types = vec!["ollama", "openai", "anthropic", "litellm", "openrouter"];
-    
+
     for ptype in provider_types {
         let status = ProviderStatus {
             provider_id: format!("{}_test", ptype),
@@ -290,7 +296,7 @@ async fn test_provider_types_coverage() {
             models_count: 5,
             circuit_breaker_state: "closed".to_string(),
         };
-        
+
         assert_eq!(status.provider_type, ptype);
     }
 }
