@@ -78,7 +78,7 @@ async fn test_health_route() {
     let response = router
         .oneshot(
             Request::builder()
-                .method("POST")
+                .method("GET")
                 .uri("/health")
                 .body(Body::empty())
                 .unwrap(),
