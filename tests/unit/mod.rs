@@ -13,6 +13,7 @@ mod pruning_engine_test;
 // Unit tests for API
 mod auth_test;
 mod config_test;
+mod mcp_tests;
 mod rate_limiter_test;
 mod route_test;
 mod routes_test;
