@@ -15,7 +15,6 @@ use uuid::Uuid;
 
 use crate::{
     api::dto::*, auth::McpAuth, models::internal::Conversation,
-    storage::repository::ConversationRepository,
 };
 
 #[cfg(test)]
@@ -67,7 +66,7 @@ mod tests {
             "http://localhost:1".to_string(),
         ));
 
-        // Create LlmBridgeClient for Orchestrator
+        // Create LlmBridgeClient for Orchestrator and AppState
         let llm_bridge = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
 
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
@@ -79,6 +78,7 @@ mod tests {
             orchestrator,
             embedding_service,
             chroma_client,
+            llm_client: llm_bridge,
         };
 
         // Call memory_search (this executes the formatting code)
@@ -197,13 +197,13 @@ pub async fn memory_store(
     let importance = args.importance_score.unwrap_or(5);
     let word_count: i32 = args.messages.iter().map(|m| m.content.len() as i32).sum();
 
-    // ✅ Convert MessageDto to NewMessage
+    // ✅ Convert MessageDto to NewMessage - use as_string() to convert MessageContent
     let new_messages: Vec<crate::models::internal::NewMessage> = args
         .messages
         .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
-            content: m.content,
+            content: m.content.as_string(),
             timestamp: now,
             metadata: serde_json::json!({}),
         })
@@ -478,7 +478,7 @@ pub struct MemoryGetContextArgs {
 pub async fn memory_get_context(
     _auth: McpAuth,
     State(state): State<AppState>,
-    Json(args): Json<MemoryGetContextArgs>,
+    Json(args): Json(MemoryGetContextArgs),
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
         .repo
