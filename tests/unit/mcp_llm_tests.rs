@@ -79,7 +79,10 @@ async fn test_routing_info_request_serialization() {
 
     let request: RoutingInfoRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.task, "embedding");
-    assert_eq!(request.preferred_model, Some("nomic-embed-text".to_string()));
+    assert_eq!(
+        request.preferred_model,
+        Some("nomic-embed-text".to_string())
+    );
     assert_eq!(request.max_cost, Some(0.01));
 }
 
