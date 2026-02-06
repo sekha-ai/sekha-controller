@@ -343,6 +343,7 @@ impl BridgeClient {
 mod tests {
     use super::*;
     use crate::config::{LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
+    use httptest::{matchers::*, responders::*, Expectation, Server};
 
     #[test]
     fn test_routing_request_serialization() {
@@ -359,34 +360,89 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_route_request_execution() {
+    async fn test_route_request_success() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "provider_id": "test-provider",
+                    "model_id": "gpt-4",
+                    "estimated_cost": 0.05,
+                    "reason": "Best quality",
+                    "provider_type": "openai"
+                }))),
+        );
+
         let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
+        config.llm_bridge_url = server.url_str("");
         let client = BridgeClient::new(&config).unwrap();
 
-        // This will fail without bridge but executes lines 174-194
-        let result = client
-            .route_request("embedding", Some("test-model".to_string()), Some(0.01))
-            .await;
-        // Expected to fail - that's ok, we're testing code execution
-        assert!(result.is_err() || result.is_ok());
+        // This covers lines 185-191: response parsing, info! log, Ok(routing)
+        let result = client.route_request("chat", Some("gpt-4".to_string()), Some(0.1)).await;
+        assert!(result.is_ok());
+        let routing = result.unwrap();
+        assert_eq!(routing.provider_id, "test-provider");
+        assert_eq!(routing.model_id, "gpt-4");
     }
 
     #[tokio::test]
-    async fn test_list_models_execution() {
+    async fn test_list_models_success() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models"))
+                .respond_with(json_encoded(serde_json::json!([
+                    {
+                        "model_id": "gpt-4",
+                        "provider_id": "openai",
+                        "task": "chat_large",
+                        "context_window": 8192,
+                        "dimension": null,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ]))),
+        );
+
         let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
+        config.llm_bridge_url = server.url_str("");
         let client = BridgeClient::new(&config).unwrap();
 
-        // Executes lines 185-194
+        // This covers lines 199-205: response parsing, debug! log, Ok(models)
         let result = client.list_models().await;
-        assert!(result.is_err() || result.is_ok());
+        assert!(result.is_ok());
+        let models = result.unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].model_id, "gpt-4");
     }
 
     #[tokio::test]
-    async fn test_chat_completion_execution() {
+    async fn test_chat_completion_success() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/v1/chat/completions"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "id": "chatcmpl-123",
+                    "object": "chat.completion",
+                    "created": 1234567890,
+                    "model": "gpt-4",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "Hello!"
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15
+                    }
+                }))),
+        );
+
         let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
+        config.llm_bridge_url = server.url_str("");
         let client = BridgeClient::new(&config).unwrap();
 
         let messages = vec![ChatMessage {
@@ -394,18 +450,44 @@ mod tests {
             content: "Hello".to_string(),
         }];
 
-        // Executes lines 223-245
-        let result = client
-            .chat_completion(messages, Some("gpt-4".to_string()), Some(0.7))
-            .await;
-        assert!(result.is_err() || result.is_ok());
+        // This covers lines 239-245: response parsing, debug! log, Ok(completion)
+        let result = client.chat_completion(messages, Some("gpt-4".to_string()), Some(0.7)).await;
+        assert!(result.is_ok());
+        let completion = result.unwrap();
+        assert_eq!(completion.model, "gpt-4");
+        assert_eq!(completion.usage.total_tokens, 15);
+    }
+
+    #[tokio::test]
+    async fn test_generate_embedding_success() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "embedding": [0.1, 0.2, 0.3],
+                    "model": "text-embedding-3-large",
+                    "dimension": 3,
+                    "tokens_used": 5
+                }))),
+        );
+
+        let mut config = Config::default();
+        config.llm_bridge_url = server.url_str("");
+        let client = BridgeClient::new(&config).unwrap();
+
+        // This covers lines 299-305: response parsing, debug! log, Ok(embed)
+        let result = client.generate_embedding("test".to_string(), Some("text-embedding-3".to_string())).await;
+        assert!(result.is_ok());
+        let embed = result.unwrap();
+        assert_eq!(embed.dimension, 3);
+        assert_eq!(embed.tokens_used, 5);
+        assert_eq!(embed.embedding.len(), 3);
     }
 
     #[tokio::test]
     async fn test_chat_completion_routed_v2_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        // Add provider to enable v2 routing
         config.llm_providers.push(LlmProviderConfig {
             id: "test-provider".to_string(),
             provider_type: ProviderType::OpenAi,
@@ -429,7 +511,6 @@ mod tests {
             content: "Test".to_string(),
         }];
 
-        // Executes v2 routing path (lines 234-245)
         let result = client
             .chat_completion_routed(
                 messages,
@@ -446,7 +527,6 @@ mod tests {
     async fn test_chat_completion_routed_legacy_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        // No providers = legacy mode
         let client = BridgeClient::new(&config).unwrap();
 
         let messages = vec![ChatMessage {
@@ -454,68 +534,8 @@ mod tests {
             content: "Test".to_string(),
         }];
 
-        // Executes legacy routing path (lines 246-260)
         let result = client
             .chat_completion_routed(messages, "chat", Some("default".to_string()), None, None)
-            .await;
-        assert!(result.is_err() || result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_generate_embedding_execution() {
-        let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
-        let client = BridgeClient::new(&config).unwrap();
-
-        // Executes lines 287-295
-        let result = client
-            .generate_embedding("test text".to_string(), Some("nomic-embed".to_string()))
-            .await;
-        assert!(result.is_err() || result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_generate_embedding_routed_v2_path() {
-        let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
-        config.llm_providers.push(LlmProviderConfig {
-            id: "test-embedding".to_string(),
-            provider_type: ProviderType::OpenAi,
-            base_url: "http://test.com".to_string(),
-            api_key: Some("test".to_string()),
-            timeout_secs: 120,
-            priority: 1,
-            models: vec![ModelCapability {
-                model_id: "text-embedding-3-large".to_string(),
-                task: ModelTask::Embedding,
-                context_window: 512,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: Some(3072),
-            }],
-        });
-        let client = BridgeClient::new(&config).unwrap();
-
-        // Executes v2 routing path for embeddings (lines 301-310)
-        let result = client
-            .generate_embedding_routed(
-                "test".to_string(),
-                Some("text-embedding-3".to_string()),
-                Some(0.001),
-            )
-            .await;
-        assert!(result.is_err() || result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_generate_embedding_routed_legacy_path() {
-        let mut config = Config::default();
-        config.llm_bridge_url = "http://localhost:8080".to_string();
-        let client = BridgeClient::new(&config).unwrap();
-
-        // Executes legacy routing path for embeddings (lines 311-324)
-        let result = client
-            .generate_embedding_routed("test".to_string(), None, None)
             .await;
         assert!(result.is_err() || result.is_ok());
     }
@@ -526,9 +546,7 @@ mod tests {
         config.llm_bridge_url = "http://localhost:8080".to_string();
         let client = BridgeClient::new(&config).unwrap();
 
-        // Executes lines 336-344 (both Ok and Err paths)
         let result = client.health_check().await;
-        // Should return Ok(bool) regardless of bridge availability
         assert!(result.is_ok());
     }
 
