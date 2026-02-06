@@ -19,7 +19,7 @@ pub struct LlmStatusRequest {
 }
 
 /// Response with LLM provider status
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct LlmStatusResponse {
     pub providers: Vec<ProviderStatus>,
     pub total_providers: usize,
@@ -27,7 +27,7 @@ pub struct LlmStatusResponse {
     pub total_models: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ProviderStatus {
     pub provider_id: String,
     pub provider_type: String,
@@ -45,7 +45,7 @@ pub struct RoutingInfoRequest {
 }
 
 /// Response with routing recommendation
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct RoutingInfoResponse {
     pub provider_id: String,
     pub model_id: String,
