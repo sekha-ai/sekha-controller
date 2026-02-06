@@ -342,6 +342,7 @@ impl BridgeClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
 
     #[test]
     fn test_routing_request_serialization() {
@@ -404,13 +405,22 @@ mod tests {
     async fn test_chat_completion_routed_v2_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        // Add provider to enable v2 routing
-        config.llm_providers.push(crate::config::LlmProviderConfig {
-            provider_id: "test".to_string(),
-            provider_type: "openai".to_string(),
+        // Add provider to enable v2 routing - FIXED: use correct struct fields
+        config.llm_providers.push(LlmProviderConfig {
+            id: "test-provider".to_string(),  // FIXED: was provider_id
+            provider_type: ProviderType::OpenAi,  // FIXED: was String
+            base_url: "http://test.com".to_string(),  // FIXED: was Option
             api_key: Some("test".to_string()),
-            base_url: None,
-            models: vec![],
+            timeout_secs: 120,
+            priority: 1,
+            models: vec![ModelCapability {
+                model_id: "gpt-4".to_string(),
+                task: ModelTask::ChatLarge,
+                context_window: 8192,
+                supports_vision: false,
+                supports_audio: false,
+                dimension: None,
+            }],
         });
         let client = BridgeClient::new(&config).unwrap();
 
@@ -468,12 +478,22 @@ mod tests {
     async fn test_generate_embedding_routed_v2_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        config.llm_providers.push(crate::config::LlmProviderConfig {
-            provider_id: "test".to_string(),
-            provider_type: "openai".to_string(),
+        // FIXED: use correct struct fields
+        config.llm_providers.push(LlmProviderConfig {
+            id: "test-embedding".to_string(),  // FIXED: was provider_id
+            provider_type: ProviderType::OpenAi,  // FIXED: was String
+            base_url: "http://test.com".to_string(),  // FIXED: was Option
             api_key: Some("test".to_string()),
-            base_url: None,
-            models: vec![],
+            timeout_secs: 120,
+            priority: 1,
+            models: vec![ModelCapability {
+                model_id: "text-embedding-3-large".to_string(),
+                task: ModelTask::Embedding,
+                context_window: 512,
+                supports_vision: false,
+                supports_audio: false,
+                dimension: Some(3072),
+            }],
         });
         let client = BridgeClient::new(&config).unwrap();
 
