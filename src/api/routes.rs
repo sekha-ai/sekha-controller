@@ -495,7 +495,8 @@ mod tests {
             folder: "new_folder".to_string(),
         };
 
-        let result = update_conversation_label(State(state), Path(non_existent_id), Json(req)).await;
+        let result =
+            update_conversation_label(State(state), Path(non_existent_id), Json(req)).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
