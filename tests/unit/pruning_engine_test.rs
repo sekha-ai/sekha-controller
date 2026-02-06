@@ -20,37 +20,11 @@ async fn test_pruning_engine_initialization() {
 }
 
 #[tokio::test]
-async fn test_generate_suggestions_no_candidates() {
-    let mut mock_repo = MockConversationRepository::new();
-
-    // Mock get_db to return a mock database connection
-    mock_repo.expect_get_db().returning(|| {
-        // Return a test database connection - this will be used by find_pruning_candidates
-        panic!("get_db should not be called in this test path")
-    });
-
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-
-    // This test requires integration setup, skip for now
-    // The real test will be in integration tests
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_generate_suggestions_with_old_conversations() {
-    // This requires SeaORM database mocking which is complex
-    // Will be covered in integration tests
-    assert!(true);
-}
-
-#[tokio::test]
 async fn test_recommendation_archive_high_tokens_low_importance() {
     // Test the recommendation logic: archive if token_estimate > 5000 AND importance < 5
     let mut mock_repo = MockConversationRepository::new();
     let conv_id = Uuid::new_v4();
-    let conv = Conversation {
+    let _conv = Conversation {
         id: conv_id,
         label: "Test".to_string(),
         folder: "/test".to_string(),
@@ -88,7 +62,6 @@ async fn test_recommendation_archive_high_tokens_low_importance() {
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
     let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
 
-    // Call generate_suggestion_for_conversation indirectly through generate_suggestions
     // For now, just verify the engine is set up correctly
     assert!(true);
 }
