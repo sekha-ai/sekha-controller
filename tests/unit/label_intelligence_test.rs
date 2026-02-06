@@ -165,7 +165,7 @@ async fn test_suggest_labels_llm_unavailable_with_existing_labels() {
 
     // LLM is offline by default in tests, should use graceful degradation
     let result = label_intel.suggest_labels(conv_id).await.unwrap();
-    
+
     // Should return suggestions based on first existing label
     assert!(result.len() > 0);
     assert_eq!(result[0].label, "work");
@@ -207,9 +207,7 @@ async fn test_suggest_labels_llm_unavailable_no_existing_labels() {
             }])
         });
 
-    mock_repo
-        .expect_get_all_labels()
-        .returning(|| Ok(vec![]));
+    mock_repo.expect_get_all_labels().returning(|| Ok(vec![]));
 
     let repo = Arc::new(mock_repo);
     let config = Config::default();
@@ -218,13 +216,15 @@ async fn test_suggest_labels_llm_unavailable_no_existing_labels() {
 
     // LLM is offline by default in tests, should use graceful degradation
     let result = label_intel.suggest_labels(conv_id).await.unwrap();
-    
+
     // Should return generic suggestions when no existing labels
     assert!(result.len() > 0);
     let labels: Vec<String> = result.iter().map(|s| s.label.clone()).collect();
-    assert!(labels.contains(&"general".to_string()) || 
-            labels.contains(&"conversation".to_string()) || 
-            labels.contains(&"note".to_string()));
+    assert!(
+        labels.contains(&"general".to_string())
+            || labels.contains(&"conversation".to_string())
+            || labels.contains(&"note".to_string())
+    );
 }
 
 #[tokio::test]
@@ -271,7 +271,7 @@ async fn test_suggest_labels_response_parsing_multiple_labels() {
     let label_intel = LabelIntelligence::new(repo, llm_bridge);
 
     let result = label_intel.suggest_labels(conv_id).await.unwrap();
-    
+
     // Verify suggestions structure
     assert!(result.len() > 0);
     for suggestion in &result {
@@ -379,7 +379,7 @@ async fn test_auto_label_above_threshold() {
 
     // Threshold of 0.8, should match confidence of 0.9 for existing label
     let result = label_intel.auto_label(conv_id, 0.8).await.unwrap();
-    
+
     assert!(result.is_some());
     assert_eq!(result.unwrap(), "work");
 }
@@ -431,7 +431,7 @@ async fn test_auto_label_below_threshold() {
 
     // Threshold of 0.95 (above the 0.9 confidence for existing labels)
     let result = label_intel.auto_label(conv_id, 0.95).await.unwrap();
-    
+
     assert!(result.is_none());
 }
 
@@ -598,7 +598,7 @@ async fn test_suggest_labels_existing_vs_new_confidence() {
     let label_intel = LabelIntelligence::new(repo, llm_bridge);
 
     let result = label_intel.suggest_labels(conv_id).await.unwrap();
-    
+
     // Verify existing labels have higher confidence (0.9) vs new labels (0.6)
     for suggestion in &result {
         if suggestion.is_existing {
