@@ -11,7 +11,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 async fn setup() -> (
-    Arc<SeaOrmConversationRepository>,
+    Arc<dyn ConversationRepository + Send + Sync>,
     sea_orm::DatabaseConnection,
 ) {
     use sekha_controller::services::embedding_service::EmbeddingService;
@@ -30,7 +30,7 @@ async fn setup() -> (
         "http://localhost:1".to_string(),
     ));
 
-    let repo = Arc::new(SeaOrmConversationRepository::new(
+    let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(SeaOrmConversationRepository::new(
         db.clone(),
         chroma_client,
         embedding_service,
