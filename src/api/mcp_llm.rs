@@ -240,7 +240,7 @@ mod tests {
     async fn test_mcp_llm_status_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-        
+
         // Don't mount any mock - this causes connection errors
         // Then drop the server to ensure connection refused
         drop(mock_server);
@@ -302,7 +302,7 @@ mod tests {
     async fn test_mcp_llm_routing_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-        
+
         // Drop server to cause connection failure
         drop(mock_server);
 
