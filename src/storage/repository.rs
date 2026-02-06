@@ -520,7 +520,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
         let models = messages::Entity::find()
-            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(messages::Column::ConversationId.eq(conversation_id))
             .order_by_desc(messages::Column::Timestamp)
             .limit(limit as u64)
             .all(&self.db)
@@ -590,7 +590,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         conversation_id: Uuid,
     ) -> Result<u64, RepositoryError> {
         let count = messages::Entity::find()
-            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(messages::Column::ConversationId.eq(conversation_id))
             .count(&self.db)
             .await?;
         Ok(count)
