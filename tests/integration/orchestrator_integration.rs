@@ -30,11 +30,9 @@ async fn setup() -> (
         "http://localhost:1".to_string(),
     ));
 
-    let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(SeaOrmConversationRepository::new(
-        db.clone(),
-        chroma_client,
-        embedding_service,
-    ));
+    let repo: Arc<dyn ConversationRepository + Send + Sync> = Arc::new(
+        SeaOrmConversationRepository::new(db.clone(), chroma_client, embedding_service),
+    );
     (repo, db)
 }
 
