@@ -253,10 +253,7 @@ async fn test_get_recent_labeled_messages_empty_labels() {
     let assembler = ContextAssembler::new(repo.clone());
 
     // Test with empty labels array
-    let recent_msgs = assembler
-        .get_recent_labeled_messages(&[], 7)
-        .await
-        .unwrap();
+    let recent_msgs = assembler.get_recent_labeled_messages(&[], 7).await.unwrap();
 
     assert_eq!(recent_msgs.len(), 0);
 }
@@ -401,28 +398,31 @@ async fn test_assemble_context_with_token_budget() {
     let assembler = ContextAssembler::new(repo.clone());
 
     let conv_id = create_test_conversation_in_db(&db, "Test", "/test", 5).await;
-    
+
     // Create messages with known sizes
     let msg1_id = create_test_message_in_db(
         &db,
         conv_id,
         "x".repeat(100).as_str(), // ~25 tokens
         Utc::now().naive_utc(),
-    ).await;
-    
+    )
+    .await;
+
     let msg2_id = create_test_message_in_db(
         &db,
         conv_id,
         "y".repeat(100).as_str(), // ~25 tokens
         Utc::now().naive_utc(),
-    ).await;
+    )
+    .await;
 
     let msg3_id = create_test_message_in_db(
         &db,
         conv_id,
         "z".repeat(100).as_str(), // ~25 tokens
         Utc::now().naive_utc(),
-    ).await;
+    )
+    .await;
 
     // Create candidates
     let mut candidates = vec![
