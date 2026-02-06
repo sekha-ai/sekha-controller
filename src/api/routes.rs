@@ -1,5 +1,4 @@
 use crate::api::dto::*;
-use crate::models::internal::Message;
 use crate::services::embedding_service::EmbeddingService;
 use crate::services::llm_bridge_client::LlmBridgeClient;
 use crate::storage::chroma_client::ChromaClient;
