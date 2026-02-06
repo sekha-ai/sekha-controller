@@ -36,9 +36,9 @@ async fn test_hierarchical_summarizer_creation() {
     let mut mock_repo = MockConversationRepository::new();
     mock_repo.expect_clone().return_once(|| {
         let mut cloned = MockConversationRepository::new();
-        cloned.expect_clone().returning(|| {
-            MockConversationRepository::new()
-        });
+        cloned
+            .expect_clone()
+            .returning(|| MockConversationRepository::new());
         cloned
     });
 
@@ -55,7 +55,7 @@ async fn test_hierarchical_summarizer_creation() {
 async fn test_generate_daily_summary_empty_messages() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     // Mock find_by_id to return conversation
     let test_conv = create_test_conversation(conv_id);
     mock_repo
@@ -72,7 +72,7 @@ async fn test_generate_daily_summary_empty_messages() {
     let repo = Arc::new(mock_repo);
 
     let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
-    
+
     // This will error because we can't mock get_db properly
     // In integration tests with real DB, this would work
     let result = summarizer.generate_daily_summary(conv_id).await;
@@ -84,7 +84,7 @@ async fn test_generate_daily_summary_empty_messages() {
 async fn test_generate_daily_summary_conversation_not_found() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_find_by_id()
         .with(eq(conv_id))
@@ -96,7 +96,7 @@ async fn test_generate_daily_summary_conversation_not_found() {
 
     let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
     let result = summarizer.generate_daily_summary(conv_id).await;
-    
+
     assert!(result.is_err());
     if let Err(e) = result {
         assert!(matches!(e, RepositoryError::NotFound(_)));
@@ -107,7 +107,7 @@ async fn test_generate_daily_summary_conversation_not_found() {
 async fn test_generate_weekly_summary_conversation_not_found() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_find_by_id()
         .with(eq(conv_id))
@@ -119,7 +119,7 @@ async fn test_generate_weekly_summary_conversation_not_found() {
 
     let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
     let result = summarizer.generate_weekly_summary(conv_id).await;
-    
+
     assert!(result.is_err());
 }
 
@@ -127,7 +127,7 @@ async fn test_generate_weekly_summary_conversation_not_found() {
 async fn test_generate_monthly_summary_conversation_not_found() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_find_by_id()
         .with(eq(conv_id))
@@ -139,7 +139,7 @@ async fn test_generate_monthly_summary_conversation_not_found() {
 
     let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
     let result = summarizer.generate_monthly_summary(conv_id).await;
-    
+
     assert!(result.is_err());
 }
 
@@ -147,7 +147,7 @@ async fn test_generate_monthly_summary_conversation_not_found() {
 async fn test_generate_daily_summary_with_db_error() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     use sea_orm::DbErr;
     mock_repo
         .expect_find_by_id()
@@ -171,7 +171,7 @@ async fn test_generate_daily_summary_with_db_error() {
 async fn test_generate_weekly_summary_with_db_error() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_find_by_id()
         .with(eq(conv_id))
@@ -194,7 +194,7 @@ async fn test_generate_weekly_summary_with_db_error() {
 async fn test_generate_monthly_summary_with_db_error() {
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     mock_repo
         .expect_find_by_id()
         .with(eq(conv_id))
@@ -218,7 +218,7 @@ async fn test_summarizer_hierarchy_levels() {
     // Test that we have all three levels: daily, weekly, monthly
     let conv_id = Uuid::new_v4();
     let mut mock_repo = MockConversationRepository::new();
-    
+
     // Set up mock to return None (conversation not found) for all levels
     mock_repo
         .expect_find_by_id()
@@ -230,12 +230,12 @@ async fn test_summarizer_hierarchy_levels() {
     let repo = Arc::new(mock_repo);
 
     let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
-    
+
     // All should fail with NotFound
     let daily = summarizer.generate_daily_summary(conv_id).await;
     let weekly = summarizer.generate_weekly_summary(conv_id).await;
     let monthly = summarizer.generate_monthly_summary(conv_id).await;
-    
+
     assert!(daily.is_err());
     assert!(weekly.is_err());
     assert!(monthly.is_err());

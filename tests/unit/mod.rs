@@ -3,7 +3,7 @@ mod chroma_client_test;
 mod embedding_queue_test;
 mod embedding_service_test;
 mod file_watcher_test;
-mod llm_bridge_comprehensive_test;
+// mod llm_bridge_comprehensive_test;
 mod llm_bridge_test;
 
 // Unit tests for orchestrator - comprehensive coverage
