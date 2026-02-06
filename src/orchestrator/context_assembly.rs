@@ -179,7 +179,7 @@ impl ContextAssembler {
     }
 
     /// Helper: Get pinned messages (always included)
-    async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
+    pub async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
         use crate::storage::entities::{conversations, messages};
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
@@ -218,7 +218,7 @@ impl ContextAssembler {
     }
 
     /// Helper: Get recent messages from preferred labels
-    async fn get_recent_labeled_messages(
+    pub async fn get_recent_labeled_messages(
         &self,
         labels: &[String],
         days: i64,
@@ -267,7 +267,7 @@ impl ContextAssembler {
         Ok(candidates)
     }
 
-    async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
+    pub async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
 
         let model = message_entity::Entity::find_by_id(id) // CHANGED: Remove .to_string()
@@ -289,16 +289,14 @@ impl ContextAssembler {
 
 /// Internal candidate message with scoring metadata
 #[derive(Debug, Clone)]
-struct CandidateMessage {
-    message_id: Uuid,
-    #[allow(dead_code)] // Used in Phase 3
-    conversation_id: Uuid,
-    score: f32,
-    timestamp: chrono::NaiveDateTime,
-    label: String,
-    #[allow(dead_code)] // Will be used when pinned messages implemented
-    is_pinned: bool,
-    importance: f32,
+pub struct CandidateMessage {
+    pub message_id: Uuid,
+    pub conversation_id: Uuid,
+    pub score: f32,
+    pub timestamp: chrono::NaiveDateTime,
+    pub label: String,
+    pub is_pinned: bool,
+    pub importance: f32,
 }
 
 #[cfg(test)]
