@@ -248,6 +248,20 @@ async fn test_get_recent_labeled_messages_empty_results() {
 }
 
 #[tokio::test]
+async fn test_get_recent_labeled_messages_empty_labels() {
+    let (repo, db) = setup_test_db().await;
+    let assembler = ContextAssembler::new(repo.clone());
+
+    // Test with empty labels array
+    let recent_msgs = assembler
+        .get_recent_labeled_messages(&[], 7)
+        .await
+        .unwrap();
+
+    assert_eq!(recent_msgs.len(), 0);
+}
+
+#[tokio::test]
 async fn test_fetch_message_integration() {
     let (repo, db) = setup_test_db().await;
     let assembler = ContextAssembler::new(repo.clone());
@@ -379,4 +393,89 @@ async fn test_get_recent_labeled_messages_importance_preserved() {
 
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].importance, 8.0);
+}
+
+#[tokio::test]
+async fn test_assemble_context_with_token_budget() {
+    let (repo, db) = setup_test_db().await;
+    let assembler = ContextAssembler::new(repo.clone());
+
+    let conv_id = create_test_conversation_in_db(&db, "Test", "/test", 5).await;
+    
+    // Create messages with known sizes
+    let msg1_id = create_test_message_in_db(
+        &db,
+        conv_id,
+        "x".repeat(100).as_str(), // ~25 tokens
+        Utc::now().naive_utc(),
+    ).await;
+    
+    let msg2_id = create_test_message_in_db(
+        &db,
+        conv_id,
+        "y".repeat(100).as_str(), // ~25 tokens
+        Utc::now().naive_utc(),
+    ).await;
+
+    let msg3_id = create_test_message_in_db(
+        &db,
+        conv_id,
+        "z".repeat(100).as_str(), // ~25 tokens
+        Utc::now().naive_utc(),
+    ).await;
+
+    // Create candidates
+    let mut candidates = vec![
+        sekha_controller::orchestrator::context_assembly::CandidateMessage {
+            message_id: msg1_id,
+            conversation_id: conv_id,
+            score: 10.0,
+            timestamp: Utc::now().naive_utc(),
+            label: "test".to_string(),
+            is_pinned: false,
+            importance: 5.0,
+        },
+        sekha_controller::orchestrator::context_assembly::CandidateMessage {
+            message_id: msg2_id,
+            conversation_id: conv_id,
+            score: 8.0,
+            timestamp: Utc::now().naive_utc(),
+            label: "test".to_string(),
+            is_pinned: false,
+            importance: 5.0,
+        },
+        sekha_controller::orchestrator::context_assembly::CandidateMessage {
+            message_id: msg3_id,
+            conversation_id: conv_id,
+            score: 6.0,
+            timestamp: Utc::now().naive_utc(),
+            label: "test".to_string(),
+            is_pinned: false,
+            importance: 5.0,
+        },
+    ];
+
+    // Test with small budget (should only fit 1-2 messages)
+    let context = assembler
+        .assemble_context(&mut candidates, 50)
+        .await
+        .unwrap();
+
+    // Should fit at least 1 message within budget
+    assert!(context.len() > 0);
+    assert!(context.len() <= 2); // Budget should limit to 1-2 messages
+}
+
+#[tokio::test]
+async fn test_assemble_context_empty_candidates() {
+    let (repo, _db) = setup_test_db().await;
+    let assembler = ContextAssembler::new(repo.clone());
+
+    let mut candidates = vec![];
+    let context = assembler
+        .assemble_context(&mut candidates, 4000)
+        .await
+        .unwrap();
+
+    assert_eq!(context.len(), 0);
 }

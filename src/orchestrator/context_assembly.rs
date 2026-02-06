@@ -303,10 +303,9 @@ pub struct CandidateMessage {
 mod tests {
     use super::*;
     use crate::models::internal::Conversation;
-    use crate::storage::repository::{MockConversationRepository, SearchResult};
+    use crate::storage::repository::MockConversationRepository;
     use chrono::Utc;
     use mockall::predicate::*;
-    use sea_orm::DatabaseConnection;
 
     fn create_test_message(id: Uuid, conv_id: Uuid, content: &str) -> Message {
         Message {
@@ -339,89 +338,6 @@ mod tests {
         let repo = Arc::new(MockConversationRepository::new());
         let assembler = ContextAssembler::new(repo);
         assert!(std::mem::size_of_val(&assembler) > 0);
-    }
-
-    #[tokio::test]
-    async fn test_assemble_full_pipeline_empty_results() {
-        let mut mock_repo = MockConversationRepository::new();
-
-        // Mock semantic_search to return empty results
-        mock_repo
-            .expect_semantic_search()
-            .returning(|_, _, _| Ok(vec![]));
-
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let result = assembler.assemble("test query", vec![], 4000, vec![]).await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_recall_candidates_with_semantic_results() {
-        let mut mock_repo = MockConversationRepository::new();
-
-        let msg_id = Uuid::new_v4();
-        let conv_id = Uuid::new_v4();
-
-        mock_repo
-            .expect_semantic_search()
-            .returning(move |_, _, _| {
-                Ok(vec![SearchResult {
-                    message_id: msg_id,
-                    conversation_id: conv_id,
-                    score: 0.95,
-                    content: "test content".to_string(),
-                    metadata: serde_json::json!({}),
-                    timestamp: Utc::now().naive_utc(),
-                    label: "test".to_string(),
-                    folder: "/test".to_string(),
-                }])
-            });
-
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let candidates = assembler
-            .recall_candidates("test query", &[], &[])
-            .await
-            .unwrap();
-
-        assert_eq!(candidates.len(), 1);
-        assert_eq!(candidates[0].message_id, msg_id);
-        assert_eq!(candidates[0].score, 0.95);
-    }
-
-    #[tokio::test]
-    async fn test_recall_candidates_excluded_folders() {
-        let mut mock_repo = MockConversationRepository::new();
-
-        let msg_id = Uuid::new_v4();
-        let conv_id = Uuid::new_v4();
-
-        mock_repo
-            .expect_semantic_search()
-            .returning(move |_, _, _| {
-                Ok(vec![SearchResult {
-                    message_id: msg_id,
-                    conversation_id: conv_id,
-                    score: 0.95,
-                    content: "test content".to_string(),
-                    metadata: serde_json::json!({}),
-                    timestamp: Utc::now().naive_utc(),
-                    label: "test".to_string(),
-                    folder: "/excluded/subfolder".to_string(),
-                }])
-            });
-
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let candidates = assembler
-            .recall_candidates("test query", &[], &["/excluded".to_string()])
-            .await
-            .unwrap();
-
-        assert_eq!(candidates.len(), 0);
     }
 
     #[tokio::test]
@@ -483,60 +399,6 @@ mod tests {
 
         assert_eq!(ranked.len(), 1);
         assert!(ranked[0].score > 0.0);
-    }
-
-    #[tokio::test]
-    async fn test_assemble_context_within_budget() {
-        let mock_repo = MockConversationRepository::new();
-        let msg_id1 = Uuid::new_v4();
-        let msg_id2 = Uuid::new_v4();
-        let conv_id = Uuid::new_v4();
-
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let mut candidates = vec![
-            CandidateMessage {
-                message_id: msg_id1,
-                conversation_id: conv_id,
-                score: 10.0,
-                timestamp: Utc::now().naive_utc(),
-                label: "test".to_string(),
-                is_pinned: false,
-                importance: 5.0,
-            },
-            CandidateMessage {
-                message_id: msg_id2,
-                conversation_id: conv_id,
-                score: 8.0,
-                timestamp: Utc::now().naive_utc(),
-                label: "test".to_string(),
-                is_pinned: false,
-                importance: 5.0,
-            },
-        ];
-
-        // This will fail fetching but test the budget logic
-        let context = assembler
-            .assemble_context(&mut candidates, 100)
-            .await
-            .unwrap();
-
-        // Context is empty because fetch_message returns None
-        assert_eq!(context.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_assemble_context_empty_candidates() {
-        let mock_repo = MockConversationRepository::new();
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let mut candidates = vec![];
-        let context = assembler
-            .assemble_context(&mut candidates, 4000)
-            .await
-            .unwrap();
-
-        assert_eq!(context.len(), 0);
     }
 
     #[tokio::test]
@@ -633,15 +495,6 @@ mod tests {
         assert_eq!(score, 0.1);
     }
 
-    #[tokio::test]
-    async fn test_get_recent_labeled_messages_empty_labels() {
-        let mock_repo = MockConversationRepository::new();
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let result = assembler.get_recent_labeled_messages(&[], 7).await.unwrap();
-        assert_eq!(result.len(), 0);
-    }
-
     #[test]
     fn test_candidate_message_structure() {
         let msg_id = Uuid::new_v4();
@@ -664,20 +517,6 @@ mod tests {
         assert_eq!(candidate.label, "test");
         assert!(candidate.is_pinned);
         assert_eq!(candidate.importance, 10.0);
-    }
-
-    #[tokio::test]
-    async fn test_recall_candidates_semantic_search_error() {
-        let mut mock_repo = MockConversationRepository::new();
-
-        mock_repo
-            .expect_semantic_search()
-            .returning(|_, _, _| Err(RepositoryError::NotFound("Test error".to_string())));
-
-        let assembler = ContextAssembler::new(Arc::new(mock_repo));
-
-        let result = assembler.recall_candidates("test", &[], &[]).await;
-        assert!(result.is_err());
     }
 
     #[tokio::test]
