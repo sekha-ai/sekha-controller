@@ -79,10 +79,7 @@ async fn test_routing_info_request_serialization() {
 
     let request: RoutingInfoRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.task, "embedding");
-    assert_eq!(
-        request.preferred_model,
-        Some("nomic-embed-text".to_string())
-    );
+    assert_eq!(request.preferred_model, Some("nomic-embed-text".to_string()));
     assert_eq!(request.max_cost, Some(0.01));
 }
 
@@ -273,11 +270,8 @@ async fn test_mcp_llm_status_endpoint_basic() {
     let state = Arc::new(create_llm_test_state().await);
     let request = LlmStatusRequest { provider_id: None };
 
-    let response = mcp_llm_status(State(state), Json(request)).await;
-
-    // Should return a response structure
-    // LLM bridge may be offline, so both success and error are acceptable
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_status(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -289,8 +283,8 @@ async fn test_mcp_llm_status_with_provider_id() {
         provider_id: Some("ollama".to_string()),
     };
 
-    let response = mcp_llm_status(State(state), Json(request)).await;
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_status(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -313,7 +307,7 @@ async fn test_mcp_llm_status_success_response_structure() {
 
         // Should have basic bridge status
         assert_eq!(status.total_providers, 1);
-        assert!(status.healthy_providers == 0 || status.healthy_providers == 1);
+        assert!(status.healthy_providers <= 1);
     }
 }
 
@@ -346,8 +340,8 @@ async fn test_mcp_llm_routing_endpoint_basic() {
         max_cost: None,
     };
 
-    let response = mcp_llm_routing(State(state), Json(request)).await;
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_routing(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -361,8 +355,8 @@ async fn test_mcp_llm_routing_with_preferred_model() {
         max_cost: None,
     };
 
-    let response = mcp_llm_routing(State(state), Json(request)).await;
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_routing(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -376,8 +370,8 @@ async fn test_mcp_llm_routing_with_max_cost() {
         max_cost: Some(0.01),
     };
 
-    let response = mcp_llm_routing(State(state), Json(request)).await;
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_routing(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -391,8 +385,8 @@ async fn test_mcp_llm_routing_with_all_options() {
         max_cost: Some(0.001),
     };
 
-    let response = mcp_llm_routing(State(state), Json(request)).await;
-    assert!(response.0.success || !response.0.success);
+    // Test endpoint executes without panicking
+    let _response = mcp_llm_routing(State(state), Json(request)).await;
 }
 
 #[tokio::test]
@@ -471,7 +465,7 @@ async fn test_get_provider_status_healthy_path() {
         assert!(provider.status == "healthy" || provider.status == "unhealthy");
 
         // healthy_providers should be 0 or 1 (line 143)
-        assert!(status.healthy_providers == 0 || status.healthy_providers == 1);
+        assert!(status.healthy_providers <= 1);
 
         // Verify consistency
         if provider.status == "healthy" {
