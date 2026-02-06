@@ -200,7 +200,7 @@ async fn test_fetch_messages_from_last_n_days() {
 
     // Add old message (5 days ago) and recent message (today)
     use sekha_controller::storage::entities::messages;
-    
+
     // Old message
     let old_msg = messages::ActiveModel {
         id: sea_orm::ActiveValue::Set(Uuid::new_v4()),
