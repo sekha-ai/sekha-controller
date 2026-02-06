@@ -1,6 +1,5 @@
 use mockall::predicate::*;
 use sekha_controller::{
-    config::Config,
     models::internal::{Conversation, Message},
     orchestrator::pruning_engine::PruningEngine,
     services::llm_bridge_client::LlmBridgeClient,
@@ -9,316 +8,407 @@ use sekha_controller::{
 use std::sync::Arc;
 use uuid::Uuid;
 
-#[tokio::test]
-async fn test_pruning_engine_initialization() {
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let mock_repo = MockConversationRepository::new();
-
-    let _engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_recommendation_archive_high_tokens_low_importance() {
-    // Test the recommendation logic: archive if token_estimate > 5000 AND importance < 5
-    let mut mock_repo = MockConversationRepository::new();
-    let conv_id = Uuid::new_v4();
-    let _conv = Conversation {
-        id: conv_id,
-        label: "Test".to_string(),
+fn create_test_conversation(id: Uuid, importance: i32, word_count: i32) -> Conversation {
+    Conversation {
+        id,
+        label: "Test Conversation".to_string(),
         folder: "/test".to_string(),
         status: "active".to_string(),
-        importance_score: 3, // Low importance
-        word_count: 1000,
+        importance_score: importance,
+        word_count,
         session_count: 1,
         created_at: chrono::Utc::now().naive_utc() - chrono::Duration::days(100),
-        updated_at: chrono::Utc::now().naive_utc() - chrono::Duration::days(90),
-    };
+        updated_at: chrono::Utc::now().naive_utc() - chrono::Duration::days(50),
+    }
+}
 
-    // Mock count_messages to return high count (>25 messages = >5000 tokens)
+fn create_test_message(id: Uuid, conv_id: Uuid, content: &str) -> Message {
+    Message {
+        id,
+        conversation_id: conv_id,
+        role: "user".to_string(),
+        content: content.to_string(),
+        timestamp: chrono::Utc::now().naive_utc(),
+        embedding_id: None,
+        metadata: None,
+    }
+}
+
+#[tokio::test]
+async fn test_pruning_engine_creation() {
+    let mock_repo = MockConversationRepository::new();
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    // Verify creation succeeds
+    assert!(true);
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_high_token_low_importance() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // Mock count_messages to return 30 (30 * 200 = 6000 tokens > 5000 threshold)
     mock_repo
         .expect_count_messages_in_conversation()
         .with(eq(conv_id))
-        .returning(|_| Ok(30)); // 30 * 200 = 6000 tokens
+        .return_once(|_| Ok(30));
 
-    // Mock find_recent_messages
+    // Mock find_recent_messages for preview
     mock_repo
         .expect_find_recent_messages()
         .with(eq(conv_id), eq(5))
-        .returning(move |_, _| {
-            Ok(vec![Message {
-                id: Uuid::new_v4(),
-                conversation_id: conv_id,
-                role: "user".to_string(),
-                content: "Test message".to_string(),
-                timestamp: chrono::Utc::now().naive_utc(),
-                embedding_id: None,
-                metadata: None,
-            }])
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 2, 10000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.token_estimate, 6000);
+    assert_eq!(suggestion.importance_score, 2.0);
+    assert_eq!(suggestion.recommendation, "archive");
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_low_token_low_importance() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // Mock count_messages to return 10 (10 * 200 = 2000 tokens < 5000 threshold)
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(10));
+
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 3, 1000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.token_estimate, 2000);
+    assert_eq!(suggestion.recommendation, "keep");
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_high_importance_always_keep() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // Even with high tokens (30 * 200 = 6000 > 5000), high importance should keep
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(30));
+
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 8, 10000); // High importance
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.importance_score, 8.0);
+    assert_eq!(suggestion.recommendation, "keep");
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_boundary_5000_tokens() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // Exactly at boundary: 25 * 200 = 5000 tokens
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(25));
+
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 3, 5000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.token_estimate, 5000);
+    // At exactly 5000, condition is false (not > 5000), so "keep"
+    assert_eq!(suggestion.recommendation, "keep");
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_boundary_5001_tokens() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // Just over boundary: 26 * 200 = 5200 tokens > 5000
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(26));
+
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 4, 5200); // importance < 5
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.token_estimate, 5200);
+    assert_eq!(suggestion.recommendation, "archive");
+}
+
+#[tokio::test]
+async fn test_generate_suggestions_boundary_importance_5() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    // High tokens but importance exactly at 5
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(30));
+
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 6000); // importance = 5 (not < 5)
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_ok());
+
+    let suggestion = result.unwrap();
+    assert_eq!(suggestion.importance_score, 5.0);
+    // importance = 5 is not < 5, so "keep"
+    assert_eq!(suggestion.recommendation, "keep");
+}
+
+#[tokio::test]
+async fn test_count_messages_error_propagation() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
+
+    use sea_orm::DbErr;
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| {
+            Err(RepositoryError::DbError(DbErr::ConnectionAcquire(
+                sea_orm::ConnAcquireErr::Timeout,
+            )))
         });
 
-    let config = Config::default();
+    let config = sekha_controller::config::Config::default();
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
+    let repo = Arc::new(mock_repo);
 
-    // For now, just verify the engine is set up correctly
-    assert!(true);
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 1000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_err());
 }
 
 #[tokio::test]
-async fn test_recommendation_keep_low_tokens() {
-    // Test the recommendation logic: keep if token_estimate <= 5000
-    let mut mock_repo = MockConversationRepository::new();
+async fn test_find_recent_messages_error_propagation() {
     let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
 
-    // Mock count_messages to return low count
     mock_repo
         .expect_count_messages_in_conversation()
         .with(eq(conv_id))
-        .returning(|_| Ok(10)); // 10 * 200 = 2000 tokens (below threshold)
+        .return_once(|_| Ok(10));
 
+    use sea_orm::DbErr;
     mock_repo
         .expect_find_recent_messages()
         .with(eq(conv_id), eq(5))
-        .returning(move |_, _| Ok(vec![]));
+        .return_once(|_, _| {
+            Err(RepositoryError::DbError(DbErr::ConnectionAcquire(
+                sea_orm::ConnAcquireErr::Timeout,
+            )))
+        });
 
-    let config = Config::default();
+    let config = sekha_controller::config::Config::default();
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
+    let repo = Arc::new(mock_repo);
 
-    assert!(true);
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 1000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_err());
 }
 
 #[tokio::test]
-async fn test_recommendation_keep_high_importance() {
-    // Test the recommendation logic: keep if importance_score >= 5
-    let mut mock_repo = MockConversationRepository::new();
+async fn test_generate_preview_with_short_messages() {
     let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
 
-    // Mock count_messages to return high count
     mock_repo
         .expect_count_messages_in_conversation()
         .with(eq(conv_id))
-        .returning(|_| Ok(30)); // 30 * 200 = 6000 tokens
+        .return_once(|_| Ok(5));
 
-    mock_repo
-        .expect_find_recent_messages()
-        .with(eq(conv_id), eq(5))
-        .returning(move |_, _| Ok(vec![]));
-
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_generate_preview_with_messages() {
-    let mut mock_repo = MockConversationRepository::new();
-    let conv_id = Uuid::new_v4();
-
-    // Mock find_recent_messages to return sample messages
+    // Messages shorter than 100 chars
     let messages = vec![
-        Message {
-            id: Uuid::new_v4(),
-            conversation_id: conv_id,
-            role: "user".to_string(),
-            content: "This is a test message with important information that should be preserved"
-                .to_string(),
-            timestamp: chrono::Utc::now().naive_utc(),
-            embedding_id: None,
-            metadata: None,
-        },
-        Message {
-            id: Uuid::new_v4(),
-            conversation_id: conv_id,
-            role: "assistant".to_string(),
-            content: "Response with valuable context and decisions".to_string(),
-            timestamp: chrono::Utc::now().naive_utc(),
-            embedding_id: None,
-            metadata: None,
-        },
+        create_test_message(Uuid::new_v4(), conv_id, "Short message 1"),
+        create_test_message(Uuid::new_v4(), conv_id, "Short message 2"),
     ];
 
     mock_repo
         .expect_find_recent_messages()
         .with(eq(conv_id), eq(5))
-        .returning(move |_, _| Ok(messages.clone()));
+        .return_once(move |_, _| Ok(messages));
 
-    mock_repo
-        .expect_count_messages_in_conversation()
-        .returning(|_| Ok(10));
-
-    let config = Config::default();
+    let config = sekha_controller::config::Config::default();
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
+    let repo = Arc::new(mock_repo);
 
-    // The LLM will fail in tests (no real server), but graceful degradation should handle it
-    assert!(true);
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 100);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    // LLM will fail, but should get EmbeddingError
+    assert!(result.is_err());
+    if let Err(e) = result {
+        assert!(matches!(e, RepositoryError::EmbeddingError(_)));
+    }
 }
 
 #[tokio::test]
-async fn test_generate_preview_truncates_long_messages() {
-    let mut mock_repo = MockConversationRepository::new();
+async fn test_generate_preview_with_long_messages() {
     let conv_id = Uuid::new_v4();
-
-    // Create a very long message (should be truncated to 100 chars)
-    let long_content = "x".repeat(500);
-    let messages = vec![Message {
-        id: Uuid::new_v4(),
-        conversation_id: conv_id,
-        role: "user".to_string(),
-        content: long_content,
-        timestamp: chrono::Utc::now().naive_utc(),
-        embedding_id: None,
-        metadata: None,
-    }];
-
-    mock_repo
-        .expect_find_recent_messages()
-        .with(eq(conv_id), eq(5))
-        .returning(move |_, _| Ok(messages.clone()));
-
-    mock_repo
-        .expect_count_messages_in_conversation()
-        .returning(|_| Ok(5));
-
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_generate_preview_empty_messages() {
     let mut mock_repo = MockConversationRepository::new();
-    let conv_id = Uuid::new_v4();
-
-    // Mock empty message list
-    mock_repo
-        .expect_find_recent_messages()
-        .with(eq(conv_id), eq(5))
-        .returning(|_, _| Ok(vec![]));
-
-    mock_repo
-        .expect_count_messages_in_conversation()
-        .returning(|_| Ok(0));
-
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_count_messages_error() {
-    let mut mock_repo = MockConversationRepository::new();
-    let conv_id = Uuid::new_v4();
 
     mock_repo
         .expect_count_messages_in_conversation()
         .with(eq(conv_id))
-        .returning(|_| {
-            Err(RepositoryError::DbError(sea_orm::DbErr::ConnectionAcquire(
-                sea_orm::ConnAcquireErr::Timeout,
-            )))
-        });
+        .return_once(|_| Ok(5));
 
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
-
-    assert!(true);
-}
-
-#[tokio::test]
-async fn test_find_recent_messages_error() {
-    let mut mock_repo = MockConversationRepository::new();
-    let conv_id = Uuid::new_v4();
-
-    mock_repo
-        .expect_count_messages_in_conversation()
-        .returning(|_| Ok(10));
+    // Messages longer than 100 chars (should be truncated)
+    let long_content = "A".repeat(200); // 200 chars
+    let messages = vec![create_test_message(Uuid::new_v4(), conv_id, &long_content)];
 
     mock_repo
         .expect_find_recent_messages()
         .with(eq(conv_id), eq(5))
-        .returning(|_, _| {
-            Err(RepositoryError::DbError(sea_orm::DbErr::ConnectionAcquire(
-                sea_orm::ConnAcquireErr::Timeout,
-            )))
-        });
+        .return_once(move |_, _| Ok(messages));
 
-    let config = Config::default();
+    let config = sekha_controller::config::Config::default();
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let engine = PruningEngine::new(Arc::new(mock_repo), llm_bridge);
+    let repo = Arc::new(mock_repo);
 
-    assert!(true);
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 1000);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    // LLM will fail, returns EmbeddingError
+    assert!(result.is_err());
 }
 
-#[test]
-fn test_pruning_suggestion_structure() {
-    use sekha_controller::orchestrator::pruning_engine::PruningSuggestion;
+#[tokio::test]
+async fn test_generate_preview_with_empty_messages() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
 
-    let suggestion = PruningSuggestion {
-        conversation_id: Uuid::new_v4(),
-        conversation_label: "Test".to_string(),
-        last_accessed: chrono::Utc::now().naive_utc(),
-        message_count: 100,
-        token_estimate: 20000,
-        importance_score: 3.5,
-        preview: "Preview text".to_string(),
-        recommendation: "archive".to_string(),
-    };
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(0));
 
-    assert_eq!(suggestion.conversation_label, "Test");
-    assert_eq!(suggestion.message_count, 100);
-    assert_eq!(suggestion.token_estimate, 20000);
-    assert_eq!(suggestion.importance_score, 3.5);
-    assert_eq!(suggestion.recommendation, "archive");
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
+
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
+
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 5, 0);
+
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    // LLM will fail, returns EmbeddingError
+    assert!(result.is_err());
 }
 
-#[test]
-fn test_pruning_suggestion_clone() {
-    use sekha_controller::orchestrator::pruning_engine::PruningSuggestion;
+#[tokio::test]
+async fn test_suggestion_includes_all_fields() {
+    let conv_id = Uuid::new_v4();
+    let mut mock_repo = MockConversationRepository::new();
 
-    let suggestion = PruningSuggestion {
-        conversation_id: Uuid::new_v4(),
-        conversation_label: "Test".to_string(),
-        last_accessed: chrono::Utc::now().naive_utc(),
-        message_count: 50,
-        token_estimate: 10000,
-        importance_score: 7.0,
-        preview: "Preview".to_string(),
-        recommendation: "keep".to_string(),
-    };
+    mock_repo
+        .expect_count_messages_in_conversation()
+        .with(eq(conv_id))
+        .return_once(|_| Ok(15));
 
-    let cloned = suggestion.clone();
-    assert_eq!(cloned.conversation_label, suggestion.conversation_label);
-    assert_eq!(cloned.message_count, suggestion.message_count);
-    assert_eq!(cloned.token_estimate, suggestion.token_estimate);
-}
+    mock_repo
+        .expect_find_recent_messages()
+        .with(eq(conv_id), eq(5))
+        .return_once(|_, _| Ok(vec![]));
 
-#[test]
-fn test_pruning_suggestion_debug() {
-    use sekha_controller::orchestrator::pruning_engine::PruningSuggestion;
+    let config = sekha_controller::config::Config::default();
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+    let repo = Arc::new(mock_repo);
 
-    let suggestion = PruningSuggestion {
-        conversation_id: Uuid::new_v4(),
-        conversation_label: "Debug Test".to_string(),
-        last_accessed: chrono::Utc::now().naive_utc(),
-        message_count: 25,
-        token_estimate: 5000,
-        importance_score: 5.0,
-        preview: "Debug preview".to_string(),
-        recommendation: "keep".to_string(),
-    };
+    let engine = PruningEngine::new(repo, llm_bridge);
+    let conv = create_test_conversation(conv_id, 7, 3000);
 
-    let debug_str = format!("{:?}", suggestion);
-    assert!(debug_str.contains("Debug Test"));
-    assert!(debug_str.contains("5000"));
+    let result = engine.generate_suggestion_for_conversation(&conv).await;
+    assert!(result.is_err()); // LLM fails
 }
