@@ -343,7 +343,7 @@ impl BridgeClient {
 mod tests {
     use super::*;
     use crate::config::{LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
-    use httptest::{matchers::*, responders::*, Expectation, Server};
+    use httptest::{matchers::request, responders::json_encoded, Expectation, Server};
 
     #[test]
     fn test_routing_request_serialization() {
