@@ -364,7 +364,9 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // This will fail without bridge but executes lines 174-194
-        let result = client.route_request("embedding", Some("test-model".to_string()), Some(0.01)).await;
+        let result = client
+            .route_request("embedding", Some("test-model".to_string()), Some(0.01))
+            .await;
         // Expected to fail - that's ok, we're testing code execution
         assert!(result.is_err() || result.is_ok());
     }
@@ -392,7 +394,9 @@ mod tests {
         }];
 
         // Executes lines 223-245
-        let result = client.chat_completion(messages, Some("gpt-4".to_string()), Some(0.7)).await;
+        let result = client
+            .chat_completion(messages, Some("gpt-4".to_string()), Some(0.7))
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
@@ -416,7 +420,15 @@ mod tests {
         }];
 
         // Executes v2 routing path (lines 234-245)
-        let result = client.chat_completion_routed(messages, "chat", Some("gpt-4".to_string()), Some(0.7), Some(0.01)).await;
+        let result = client
+            .chat_completion_routed(
+                messages,
+                "chat",
+                Some("gpt-4".to_string()),
+                Some(0.7),
+                Some(0.01),
+            )
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
@@ -433,7 +445,9 @@ mod tests {
         }];
 
         // Executes legacy routing path (lines 246-260)
-        let result = client.chat_completion_routed(messages, "chat", Some("default".to_string()), None, None).await;
+        let result = client
+            .chat_completion_routed(messages, "chat", Some("default".to_string()), None, None)
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
@@ -444,7 +458,9 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // Executes lines 287-295
-        let result = client.generate_embedding("test text".to_string(), Some("nomic-embed".to_string())).await;
+        let result = client
+            .generate_embedding("test text".to_string(), Some("nomic-embed".to_string()))
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
@@ -462,7 +478,13 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // Executes v2 routing path for embeddings (lines 301-310)
-        let result = client.generate_embedding_routed("test".to_string(), Some("text-embedding-3".to_string()), Some(0.001)).await;
+        let result = client
+            .generate_embedding_routed(
+                "test".to_string(),
+                Some("text-embedding-3".to_string()),
+                Some(0.001),
+            )
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
@@ -473,7 +495,9 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // Executes legacy routing path for embeddings (lines 311-324)
-        let result = client.generate_embedding_routed("test".to_string(), None, None).await;
+        let result = client
+            .generate_embedding_routed("test".to_string(), None, None)
+            .await;
         assert!(result.is_err() || result.is_ok());
     }
 
