@@ -192,7 +192,7 @@ async fn test_count_operations() {
 #[tokio::test]
 async fn test_label_intelligence_creation() {
     use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
-    
+
     let config = Config::default();
     let (repo, _db) = setup().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
