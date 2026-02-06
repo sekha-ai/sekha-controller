@@ -217,7 +217,7 @@ mod tests {
     async fn test_mcp_llm_status_success() {
         let mock_server = MockServer::start().await;
 
-        // Mock health check to return success
+        // Mock health check - correct endpoint is /health (not /api/v1/health)
         Mock::given(method("GET"))
             .and(path("/health"))
             .respond_with(ResponseTemplate::new(200))
@@ -263,13 +263,15 @@ mod tests {
     async fn test_mcp_llm_routing_success() {
         let mock_server = MockServer::start().await;
 
-        // Mock routing endpoint to return success
+        // Mock routing endpoint - correct path is /api/v1/route (not /routing)
         Mock::given(method("POST"))
-            .and(path("/routing"))
+            .and(path("/api/v1/route"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "provider_id": "test_provider",
                 "model_id": "test_model",
-                "estimated_cost": 0.001
+                "estimated_cost": 0.001,
+                "reason": "test",
+                "provider_type": "test"
             })))
             .mount(&mock_server)
             .await;
@@ -304,7 +306,7 @@ mod tests {
 
         // Mock routing endpoint to return error
         Mock::given(method("POST"))
-            .and(path("/routing"))
+            .and(path("/api/v1/route"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&mock_server)
             .await;
