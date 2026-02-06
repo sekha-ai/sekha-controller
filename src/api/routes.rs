@@ -422,11 +422,9 @@ mod tests {
     use super::*;
     use crate::{
         config::Config,
-        models::internal::{Conversation, SearchResult},
         orchestrator::MemoryOrchestrator,
         storage::{init_db, repository::SeaOrmConversationRepository},
     };
-    use chrono::NaiveDateTime;
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
@@ -461,18 +459,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_conversation_error_500() {
-        // This test forces create_with_messages to fail, triggering INTERNAL_SERVER_ERROR (500)
         let state = create_test_state().await;
 
-        // Create a conversation with empty messages which should succeed
         let req = CreateConversationRequest {
             label: "Test".to_string(),
             folder: "default".to_string(),
             messages: vec![],
         };
 
-        let result = create_conversation(State(Arc::new(state)), Json(req)).await;
-        // With empty messages, it should succeed
+        let result = create_conversation(State(state), Json(req)).await;
         assert!(result.is_ok());
     }
 
@@ -481,9 +476,8 @@ mod tests {
         let state = create_test_state().await;
         let non_existent_id = Uuid::new_v4();
 
-        let result = get_conversation(State(Arc::new(state)), Path(non_existent_id)).await;
+        let result = get_conversation(State(state), Path(non_existent_id)).await;
 
-        // Should return 404 NOT_FOUND
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.0, StatusCode::NOT_FOUND);
@@ -501,11 +495,8 @@ mod tests {
             folder: "new_folder".to_string(),
         };
 
-        let result =
-            update_conversation_label(State(Arc::new(state)), Path(non_existent_id), Json(req))
-                .await;
+        let result = update_conversation_label(State(state), Path(non_existent_id), Json(req)).await;
 
-        // Should return 404 NOT_FOUND
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.0, StatusCode::NOT_FOUND);
@@ -517,9 +508,8 @@ mod tests {
         let state = create_test_state().await;
         let non_existent_id = Uuid::new_v4();
 
-        let result = delete_conversation(State(Arc::new(state)), Path(non_existent_id)).await;
+        let result = delete_conversation(State(state), Path(non_existent_id)).await;
 
-        // Should return 404 NOT_FOUND
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.0, StatusCode::NOT_FOUND);
@@ -542,10 +532,8 @@ mod tests {
             archived: None,
         };
 
-        let result =
-            list_conversations(State(Arc::new(state)), Query(pagination), Query(filters)).await;
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
 
-        // Should return QueryResponse with filter applied
         assert_eq!(result.page, 1);
         assert_eq!(result.page_size, 10);
     }
@@ -565,8 +553,7 @@ mod tests {
             archived: None,
         };
 
-        let result =
-            list_conversations(State(Arc::new(state)), Query(pagination), Query(filters)).await;
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
 
         assert_eq!(result.page, 1);
         assert_eq!(result.page_size, 20);
@@ -587,10 +574,8 @@ mod tests {
             archived: None,
         };
 
-        let result =
-            list_conversations(State(Arc::new(state)), Query(pagination), Query(filters)).await;
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
 
-        // Should use default pagination
         assert_eq!(result.page, 1);
         assert_eq!(result.page_size, 50);
     }
@@ -610,8 +595,7 @@ mod tests {
             archived: Some(false),
         };
 
-        let result =
-            list_conversations(State(Arc::new(state)), Query(pagination), Query(filters)).await;
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
 
         assert_eq!(result.page, 2);
         assert_eq!(result.page_size, 25);
@@ -632,10 +616,8 @@ mod tests {
             archived: Some(true),
         };
 
-        let result =
-            list_conversations(State(Arc::new(state)), Query(pagination), Query(filters)).await;
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
 
-        // All filters should be applied
         assert_eq!(result.page, 1);
         assert_eq!(result.page_size, 15);
     }
@@ -649,7 +631,7 @@ mod tests {
             folder: None,
         };
 
-        let result = count_conversations(State(Arc::new(state)), Query(params)).await;
+        let result = count_conversations(State(state), Query(params)).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -666,7 +648,7 @@ mod tests {
             folder: Some("work".to_string()),
         };
 
-        let result = count_conversations(State(Arc::new(state)), Query(params)).await;
+        let result = count_conversations(State(state), Query(params)).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -683,7 +665,7 @@ mod tests {
             folder: None,
         };
 
-        let result = count_conversations(State(Arc::new(state)), Query(params)).await;
+        let result = count_conversations(State(state), Query(params)).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -699,7 +681,7 @@ mod tests {
             folder: Some("work".to_string()),
         };
 
-        let result = count_conversations(State(Arc::new(state)), Query(params)).await;
+        let result = count_conversations(State(state), Query(params)).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -718,13 +700,9 @@ mod tests {
             filters: None,
         };
 
-        // This will call semantic_search which returns SearchResult objects
-        // that get mapped to SearchResultDto
-        let result = semantic_query(State(Arc::new(state)), Json(req)).await;
+        let result = semantic_query(State(state), Json(req)).await;
 
-        // Should succeed (even with empty results)
         if let Ok(response) = result {
-            // Verify SearchResultDto mapping happened
             assert_eq!(response.page_size, 5);
         }
     }
@@ -739,7 +717,7 @@ mod tests {
     #[tokio::test]
     async fn test_metrics_endpoint() {
         let state = create_test_state().await;
-        let response = metrics(State(Arc::new(state))).await;
+        let response = metrics(State(state)).await;
         assert!(response.get("metrics").is_some());
     }
 }
