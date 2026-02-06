@@ -346,7 +346,7 @@ pub async fn count_conversations(
 )]
 pub async fn semantic_query(
     State(state): State<AppState>,
-    Json(req): Json(QueryRequest>,
+    Json(req): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, (StatusCode, Json<ErrorResponse>)> {
     tracing::info!("Semantic query: {}", req.query);
 
