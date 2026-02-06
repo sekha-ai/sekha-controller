@@ -1,4 +1,5 @@
 use chrono::Local;
+use sea_orm::ConnectionTrait;
 use sekha_controller::{
     config::Config,
     init_db,
@@ -7,13 +8,15 @@ use sekha_controller::{
     storage::repository::SeaOrmConversationRepository,
 };
 use std::sync::Arc;
-use uuid::Uuid;
-use sea_orm::ConnectionTrait; // Import for execute_unprepared
+use uuid::Uuid; // Import for execute_unprepared
 
-async fn setup() -> (Arc<SeaOrmConversationRepository>, sea_orm::DatabaseConnection) {
-    use sekha_controller::storage::chroma_client::ChromaClient;
+async fn setup() -> (
+    Arc<SeaOrmConversationRepository>,
+    sea_orm::DatabaseConnection,
+) {
     use sekha_controller::services::embedding_service::EmbeddingService;
-    
+    use sekha_controller::storage::chroma_client::ChromaClient;
+
     let temp_dir = tempfile::TempDir::new().unwrap();
     let db_path = temp_dir.path().join("test.db");
     let db = init_db(&format!("sqlite://{}", db_path.display()))
@@ -35,7 +38,10 @@ async fn setup() -> (Arc<SeaOrmConversationRepository>, sea_orm::DatabaseConnect
     (repo, db)
 }
 
-async fn execute_schema(db: &sea_orm::DatabaseConnection, schema: &str) -> Result<(), sea_orm::DbErr> {
+async fn execute_schema(
+    db: &sea_orm::DatabaseConnection,
+    schema: &str,
+) -> Result<(), sea_orm::DbErr> {
     // Split on semicolons and execute each statement
     for statement in schema.split(';') {
         let stmt = statement.trim();
@@ -131,7 +137,9 @@ async fn test_update_label() {
     };
 
     repo.create_with_messages(conv).await.unwrap();
-    repo.update_label(conv_id, "New Label", "/new").await.unwrap();
+    repo.update_label(conv_id, "New Label", "/new")
+        .await
+        .unwrap();
 
     let found = repo.find_by_id(conv_id).await.unwrap().unwrap();
     assert_eq!(found.label, "New Label");
