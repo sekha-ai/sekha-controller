@@ -178,8 +178,12 @@ mod tests {
     };
     use std::sync::Arc;
     use tokio::sync::RwLock;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
 
-    async fn create_test_state_with_bad_bridge() -> Arc<AppState> {
+    async fn create_test_state_with_mock_bridge(bridge_url: String) -> Arc<AppState> {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
@@ -194,10 +198,9 @@ mod tests {
             embedding_service.clone(),
         ));
 
-        // Create bridge client pointing to invalid URL to force errors
-        let mut bad_config = Config::default();
-        bad_config.llm_bridge_url = "http://localhost:1".to_string(); // Invalid port
-        let llm_bridge = Arc::new(LlmBridgeClient::new(&bad_config).unwrap());
+        let mut test_config = Config::default();
+        test_config.llm_bridge_url = bridge_url;
+        let llm_bridge = Arc::new(LlmBridgeClient::new(&test_config).unwrap());
 
         Arc::new(AppState {
             config,
@@ -209,37 +212,115 @@ mod tests {
         })
     }
 
-    /// FORCES lines 83-88 (error path in mcp_llm_status)
+    /// FORCES lines 76-81 (success path in mcp_llm_status)
     #[tokio::test]
-    async fn test_mcp_llm_status_error_path_forced() {
-        let state = create_test_state_with_bad_bridge().await;
+    async fn test_mcp_llm_status_success() {
+        let mock_server = MockServer::start().await;
+
+        // Mock health check to return success
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
         let request = LlmStatusRequest { provider_id: None };
 
-        // Bridge is unreachable, so get_provider_status will return Err
-        // This FORCES execution through lines 83-88
         let response = mcp_llm_status(State(state), Json(request)).await;
 
-        // Lines 83-88 executed
+        // Lines 76-81 EXECUTED
+        assert!(response.0.success);
+        assert!(response.0.data.is_some());
+        assert!(response.0.error.is_none());
+    }
+
+    /// FORCES lines 83-88 (error path in mcp_llm_status)
+    #[tokio::test]
+    async fn test_mcp_llm_status_error() {
+        let mock_server = MockServer::start().await;
+
+        // Mock health check to return error
+        Mock::given(method("GET"))
+            .and(path("/health"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
+        let request = LlmStatusRequest { provider_id: None };
+
+        let response = mcp_llm_status(State(state), Json(request)).await;
+
+        // Lines 83-88 EXECUTED
         assert!(!response.0.success);
         assert!(response.0.data.is_none());
         assert!(response.0.error.is_some());
     }
 
-    /// FORCES lines 113-119 (error path in mcp_llm_routing)
+    /// FORCES lines 106-111 AND 161-166 (success paths)
     #[tokio::test]
-    async fn test_mcp_llm_routing_error_path_forced() {
-        let state = create_test_state_with_bad_bridge().await;
+    async fn test_mcp_llm_routing_success() {
+        let mock_server = MockServer::start().await;
+
+        // Mock routing endpoint to return success
+        Mock::given(method("POST"))
+            .and(path("/routing"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "provider_id": "test_provider",
+                    "model_id": "test_model",
+                    "estimated_cost": 0.001
+                })),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
         let request = RoutingInfoRequest {
             task: "chat".to_string(),
             preferred_model: None,
             max_cost: None,
         };
 
-        // Bridge is unreachable, so get_routing_info will return Err
-        // This FORCES execution through lines 113-119
         let response = mcp_llm_routing(State(state), Json(request)).await;
 
-        // Lines 113-119 executed
+        // Lines 106-111 EXECUTED
+        assert!(response.0.success);
+        assert!(response.0.data.is_some());
+        assert!(response.0.error.is_none());
+
+        // Verify lines 161-166 (RoutingInfoResponse construction)
+        let routing: RoutingInfoResponse =
+            serde_json::from_value(response.0.data.unwrap()).unwrap();
+        assert_eq!(routing.provider_id, "test_provider");
+        assert_eq!(routing.model_id, "test_model");
+        assert_eq!(routing.reason, "Routed by bridge"); // Line 164
+        assert_eq!(routing.provider_type, "unknown"); // Line 165
+    }
+
+    /// FORCES lines 113-119 (error path in mcp_llm_routing)
+    #[tokio::test]
+    async fn test_mcp_llm_routing_error() {
+        let mock_server = MockServer::start().await;
+
+        // Mock routing endpoint to return error
+        Mock::given(method("POST"))
+            .and(path("/routing"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
+        let request = RoutingInfoRequest {
+            task: "chat".to_string(),
+            preferred_model: None,
+            max_cost: None,
+        };
+
+        let response = mcp_llm_routing(State(state), Json(request)).await;
+
+        // Lines 113-119 EXECUTED
         assert!(!response.0.success);
         assert!(response.0.data.is_none());
         assert!(response.0.error.is_some());
