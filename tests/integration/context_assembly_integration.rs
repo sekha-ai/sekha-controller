@@ -1,3 +1,5 @@
+use chrono::Utc;
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use sekha_controller::{
     config::Config,
     models::internal::{Conversation, Message},
@@ -8,13 +10,14 @@ use sekha_controller::{
         repository::SeaOrmConversationRepository,
     },
 };
-use chrono::Utc;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-async fn setup_test_db() -> (Arc<SeaOrmConversationRepository>, sea_orm::DatabaseConnection) {
+async fn setup_test_db() -> (
+    Arc<SeaOrmConversationRepository>,
+    sea_orm::DatabaseConnection,
+) {
     let db = init_db("sqlite::memory:")
         .await
         .expect("Failed to initialize test database");
@@ -250,13 +253,9 @@ async fn test_fetch_message_integration() {
     let assembler = ContextAssembler::new(repo.clone());
 
     let conv_id = create_test_conversation_in_db(&db, "Test", "/test", 5).await;
-    let msg_id = create_test_message_in_db(
-        &db,
-        conv_id,
-        "Test message content",
-        Utc::now().naive_utc(),
-    )
-    .await;
+    let msg_id =
+        create_test_message_in_db(&db, conv_id, "Test message content", Utc::now().naive_utc())
+            .await;
 
     // Fetch the message
     let message = assembler.fetch_message(msg_id).await.unwrap();
