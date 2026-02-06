@@ -122,7 +122,9 @@ impl PruningEngine {
                     "Conversation '{}' with {} recent messages. Preview: {}",
                     conv.label,
                     recent_messages.len(),
-                    messages_text.first().unwrap_or(&"(no messages)".to_string())
+                    messages_text
+                        .first()
+                        .unwrap_or(&"(no messages)".to_string())
                 )
             }
         };

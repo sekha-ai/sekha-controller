@@ -79,7 +79,10 @@ async fn test_routing_info_request_serialization() {
 
     let request: RoutingInfoRequest = serde_json::from_value(json).unwrap();
     assert_eq!(request.task, "embedding");
-    assert_eq!(request.preferred_model, Some("nomic-embed-text".to_string()));
+    assert_eq!(
+        request.preferred_model,
+        Some("nomic-embed-text".to_string())
+    );
     assert_eq!(request.max_cost, Some(0.01));
 }
 
@@ -306,8 +309,7 @@ async fn test_mcp_llm_status_success_response_structure() {
         assert!(response.0.error.is_none());
 
         // Deserialize and verify LlmStatusResponse
-        let status: LlmStatusResponse =
-            serde_json::from_value(response.0.data.unwrap()).unwrap();
+        let status: LlmStatusResponse = serde_json::from_value(response.0.data.unwrap()).unwrap();
 
         // Should have basic bridge status
         assert_eq!(status.total_providers, 1);
@@ -457,8 +459,7 @@ async fn test_get_provider_status_healthy_path() {
     let response = mcp_llm_status(State(state), Json(request)).await;
 
     if response.0.success {
-        let status: LlmStatusResponse =
-            serde_json::from_value(response.0.data.unwrap()).unwrap();
+        let status: LlmStatusResponse = serde_json::from_value(response.0.data.unwrap()).unwrap();
 
         // Verify provider status structure (lines 139-145)
         assert_eq!(status.providers.len(), 1);
