@@ -5,7 +5,7 @@ use sekha_controller::{
     init_db,
     models::internal::{Conversation, NewConversation, NewMessage},
     orchestrator::label_intelligence::LabelIntelligence,
-    storage::repository::SeaOrmConversationRepository,
+    storage::repository::{ConversationRepository, SeaOrmConversationRepository},
 };
 use std::sync::Arc;
 use uuid::Uuid;
