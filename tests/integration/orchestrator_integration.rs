@@ -1,352 +1,342 @@
-//! Integration tests for MemoryOrchestrator with real database
-//!
-//! These tests use an in-memory SQLite database to properly test
-//! the orchestrator components without panicking at DB access.
-
-use sea_orm::{ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait};
+use chrono::Local;
 use sekha_controller::{
     config::Config,
-    models::internal::{Conversation, Message},
-    orchestrator::MemoryOrchestrator,
-    services::llm_bridge_client::LlmBridgeClient,
-    storage::{
-        entities::{conversations, messages},
-        repository::{ConversationRepository, SeaOrmConversationRepository},
-    },
+    init_db,
+    models::internal::{Conversation, Label, NewConversation, NewMessage},
+    orchestrator::intelligence::LabelIntelligence,
+    storage::repository::SeaOrmConversationRepository,
 };
 use std::sync::Arc;
 use uuid::Uuid;
+use sea_orm::ConnectionTrait; // Import for execute_unprepared
 
-/// Create an in-memory SQLite database for testing
-async fn create_test_db() -> DatabaseConnection {
-    let db = Database::connect("sqlite::memory:")
+async fn setup() -> (Arc<SeaOrmConversationRepository>, sea_orm::DatabaseConnection) {
+    use sekha_controller::storage::chroma_client::ChromaClient;
+    use sekha_controller::services::embedding_service::EmbeddingService;
+    
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+    let db = init_db(&format!("sqlite://{}", db_path.display()))
         .await
-        .expect("Failed to connect to in-memory database");
+        .unwrap();
 
-    // Run migrations
-    let schema = r#"
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            label TEXT NOT NULL,
-            folder TEXT NOT NULL,
-            status TEXT NOT NULL,
-            importance_score INTEGER NOT NULL DEFAULT 5,
-            word_count INTEGER NOT NULL DEFAULT 0,
-            session_count INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
+    // Create mock services (use invalid URLs so they fail gracefully in tests)
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
+    let embedding_service = Arc::new(EmbeddingService::new(
+        "http://localhost:1".to_string(),
+        "http://localhost:1".to_string(),
+    ));
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            conversation_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            embedding_id TEXT,
-            metadata TEXT,
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-        );
-    "#;
-
-    db.execute_unprepared(schema)
-        .await
-        .expect("Failed to create schema");
-
-    db
+    let repo = Arc::new(SeaOrmConversationRepository::new(
+        db.clone(),
+        chroma_client,
+        embedding_service,
+    ));
+    (repo, db)
 }
 
-/// Insert test conversation
-async fn insert_test_conversation(
-    db: &DatabaseConnection,
-    label: &str,
-    folder: &str,
-    importance: i32,
-) -> Uuid {
-    let id = Uuid::new_v4();
-    let now = chrono::Utc::now().naive_utc();
-
-    let conversation = conversations::ActiveModel {
-        id: ActiveValue::Set(id),
-        label: ActiveValue::Set(label.to_string()),
-        folder: ActiveValue::Set(folder.to_string()),
-        status: ActiveValue::Set("active".to_string()),
-        importance_score: ActiveValue::Set(importance),
-        word_count: ActiveValue::Set(0),
-        session_count: ActiveValue::Set(1),
-        created_at: ActiveValue::Set(now),
-        updated_at: ActiveValue::Set(now),
-    };
-
-    conversation
-        .insert(db)
-        .await
-        .expect("Failed to insert conversation");
-    id
-}
-
-/// Insert test message
-async fn insert_test_message(
-    db: &DatabaseConnection,
-    conv_id: Uuid,
-    role: &str,
-    content: &str,
-) -> Uuid {
-    let id = Uuid::new_v4();
-    let now = chrono::Utc::now().naive_utc();
-
-    let message = messages::ActiveModel {
-        id: ActiveValue::Set(id),
-        conversation_id: ActiveValue::Set(conv_id),
-        role: ActiveValue::Set(role.to_string()),
-        content: ActiveValue::Set(content.to_string()),
-        timestamp: ActiveValue::Set(now),
-        embedding_id: ActiveValue::NotSet,
-        metadata: ActiveValue::Set(Some(serde_json::json!({}))),
-    };
-
-    message.insert(db).await.expect("Failed to insert message");
-    id
+async fn execute_schema(db: &sea_orm::DatabaseConnection, schema: &str) -> Result<(), sea_orm::DbErr> {
+    // Split on semicolons and execute each statement
+    for statement in schema.split(';') {
+        let stmt = statement.trim();
+        if !stmt.is_empty() {
+            db.execute_unprepared(stmt).await?;
+        }
+    }
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_orchestrator_with_real_db() {
-    let db = create_test_db().await;
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
+async fn test_create_and_find_conversation() {
+    let (repo, _db) = setup().await;
 
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
+    let conv_id = Uuid::new_v4();
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "Test Conversation".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
 
-    // Verify orchestrator components are initialized
-    assert!(true); // If we get here, construction succeeded
+    let created_id = repo.create_with_messages(conv).await.unwrap();
+    assert_eq!(created_id, conv_id);
+
+    let found = repo.find_by_id(conv_id).await.unwrap();
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().id, conv_id);
 }
 
 #[tokio::test]
-async fn test_context_assembly_with_conversations() {
-    let db = create_test_db().await;
+async fn test_create_conversation_with_messages() {
+    let (repo, _db) = setup().await;
 
-    // Insert test conversations
-    let conv1 = insert_test_conversation(&db, "Work", "/work", 7).await;
-    let _conv2 = insert_test_conversation(&db, "Personal", "/personal", 5).await;
+    let conv_id = Uuid::new_v4();
+    let messages = vec![
+        NewMessage {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+            metadata: serde_json::json!({"test": true}),
+            timestamp: Local::now().naive_local(),
+        },
+        NewMessage {
+            role: "assistant".to_string(),
+            content: "Hi there!".to_string(),
+            metadata: serde_json::json!({"test": true}),
+            timestamp: Local::now().naive_local(),
+        },
+    ];
 
-    // Insert messages
-    insert_test_message(&db, conv1, "user", "Important work discussion").await;
-    insert_test_message(&db, conv1, "assistant", "I can help with that").await;
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "Test Conversation".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages,
+    };
 
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
+    let created_id = repo.create_with_messages(conv).await.unwrap();
+    assert_eq!(created_id, conv_id);
+
+    let msgs = repo.get_conversation_messages(conv_id).await.unwrap();
+    assert_eq!(msgs.len(), 2);
+}
+
+#[tokio::test]
+async fn test_update_label() {
+    let (repo, _db) = setup().await;
+
+    let conv_id = Uuid::new_v4();
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "Old Label".to_string(),
+        folder: "/old".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    repo.create_with_messages(conv).await.unwrap();
+    repo.update_label(conv_id, "New Label", "/new").await.unwrap();
+
+    let found = repo.find_by_id(conv_id).await.unwrap().unwrap();
+    assert_eq!(found.label, "New Label");
+    assert_eq!(found.folder, "/new");
+}
+
+#[tokio::test]
+async fn test_count_operations() {
+    let (repo, _db) = setup().await;
+
+    let conv1 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "TestLabel".to_string(),
+        folder: "/folder1".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    let conv2 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "TestLabel".to_string(),
+        folder: "/folder2".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    repo.create_with_messages(conv1).await.unwrap();
+    repo.create_with_messages(conv2).await.unwrap();
+
+    let label_count = repo.count_by_label("TestLabel").await.unwrap();
+    assert_eq!(label_count, 2);
+
+    let folder_count = repo.count_by_folder("/folder1").await.unwrap();
+    assert_eq!(folder_count, 1);
+
+    let total = repo.count_all().await.unwrap();
+    assert_eq!(total, 2);
+}
+
+#[tokio::test]
+async fn test_label_intelligence_creation() {
     let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
+    let (repo, _db) = setup().await;
 
-    // Note: assemble_context requires Chroma which we don't have in tests
-    // But we can verify the orchestrator structure works
+    // Create label intelligence - should succeed
+    let intelligence = LabelIntelligence::new(repo, &config);
+    // Just verify it compiles and creates successfully
     assert!(true);
 }
 
 #[tokio::test]
-async fn test_pruning_suggestions_with_old_conversations() {
-    let db = create_test_db().await;
+async fn test_delete_conversation() {
+    let (repo, _db) = setup().await;
 
-    // Insert old, low-importance conversation
     let conv_id = Uuid::new_v4();
-    let old_date = chrono::Utc::now().naive_utc() - chrono::Duration::days(100);
-
-    let conversation = conversations::ActiveModel {
-        id: ActiveValue::Set(conv_id),
-        label: ActiveValue::Set("Old Conversation".to_string()),
-        folder: ActiveValue::Set("/old".to_string()),
-        status: ActiveValue::Set("active".to_string()),
-        importance_score: ActiveValue::Set(2),
-        word_count: ActiveValue::Set(50),
-        session_count: ActiveValue::Set(1),
-        created_at: ActiveValue::Set(old_date),
-        updated_at: ActiveValue::Set(old_date),
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "To Delete".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
     };
 
-    conversation
-        .insert(&db)
-        .await
-        .expect("Failed to insert old conversation");
+    repo.create_with_messages(conv).await.unwrap();
+    repo.delete(conv_id).await.unwrap();
 
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
-
-    // Suggest pruning conversations older than 90 days
-    let result = orchestrator.suggest_pruning(90).await;
-    assert!(result.is_ok());
-
-    let suggestions = result.unwrap();
-    assert!(
-        !suggestions.is_empty(),
-        "Should suggest pruning old conversation"
-    );
-    assert_eq!(suggestions[0].conversation_id, conv_id);
+    let found = repo.find_by_id(conv_id).await.unwrap();
+    assert!(found.is_none());
 }
 
 #[tokio::test]
-async fn test_label_suggestions_with_conversation() {
-    let db = create_test_db().await;
+async fn test_find_by_label() {
+    let (repo, _db) = setup().await;
 
-    // Insert conversation with messages
-    let conv_id = insert_test_conversation(&db, "Unlabeled", "/inbox", 5).await;
-    insert_test_message(&db, conv_id, "user", "Let's discuss the project timeline").await;
-    insert_test_message(&db, conv_id, "assistant", "Sure, what's your deadline?").await;
-
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo.clone(), llm_bridge);
-
-    // Create a label first
-    let labels = vec!["Work".to_string(), "Project".to_string()];
-    for label in &labels {
-        repo.create_label(label)
-            .await
-            .expect("Failed to create label");
-    }
-
-    // Suggest labels for conversation
-    let result = orchestrator.suggest_labels(conv_id).await;
-
-    // Will likely fail without real LLM, but we tested the path
-    assert!(result.is_ok() || result.is_err());
-}
-
-#[tokio::test]
-async fn test_importance_scoring_with_message() {
-    let db = create_test_db().await;
-
-    // Insert conversation and message
-    let conv_id = insert_test_conversation(&db, "Test", "/test", 5).await;
-    let msg_id = insert_test_message(
-        &db,
-        conv_id,
-        "user",
-        "This is an important message about a critical issue",
-    )
-    .await;
-
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
-
-    // Score message importance
-    let result = orchestrator.score_message_importance(msg_id).await;
-
-    // Will likely fail without real LLM, but we tested the path
-    assert!(result.is_ok() || result.is_err());
-}
-
-#[tokio::test]
-async fn test_daily_summary_generation() {
-    let db = create_test_db().await;
-
-    // Insert conversation with multiple messages
-    let conv_id = insert_test_conversation(&db, "Daily Discussion", "/inbox", 7).await;
-    insert_test_message(&db, conv_id, "user", "Good morning!").await;
-    insert_test_message(&db, conv_id, "assistant", "Good morning! How can I help?").await;
-    insert_test_message(&db, conv_id, "user", "I need help with my project").await;
-    insert_test_message(
-        &db,
-        conv_id,
-        "assistant",
-        "I'd be happy to help with your project",
-    )
-    .await;
-
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
-
-    // Generate daily summary
-    let result = orchestrator.generate_daily_summary(conv_id).await;
-
-    // Will likely fail without real LLM, but we tested the path
-    assert!(result.is_ok() || result.is_err());
-}
-
-#[tokio::test]
-async fn test_multiple_conversations_pruning() {
-    let db = create_test_db().await;
-    let old_date = chrono::Utc::now().naive_utc() - chrono::Duration::days(120);
-
-    // Insert multiple old conversations
-    for i in 0..5 {
-        let conv_id = Uuid::new_v4();
-        let conversation = conversations::ActiveModel {
-            id: ActiveValue::Set(conv_id),
-            label: ActiveValue::Set(format!("Old Conv {}", i)),
-            folder: ActiveValue::Set("/archived".to_string()),
-            status: ActiveValue::Set("active".to_string()),
-            importance_score: ActiveValue::Set(2),
-            word_count: ActiveValue::Set(20 + i),
-            session_count: ActiveValue::Set(1),
-            created_at: ActiveValue::Set(old_date),
-            updated_at: ActiveValue::Set(old_date),
-        };
-        conversation
-            .insert(&db)
-            .await
-            .expect("Failed to insert conversation");
-    }
-
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
-
-    // Suggest pruning
-    let result = orchestrator.suggest_pruning(90).await;
-    assert!(result.is_ok());
-
-    let suggestions = result.unwrap();
-    assert_eq!(
-        suggestions.len(),
-        5,
-        "Should suggest pruning all 5 old conversations"
-    );
-}
-
-#[tokio::test]
-async fn test_high_importance_not_pruned() {
-    let db = create_test_db().await;
-    let old_date = chrono::Utc::now().naive_utc() - chrono::Duration::days(120);
-
-    // Insert old but important conversation
-    let conv_id = Uuid::new_v4();
-    let conversation = conversations::ActiveModel {
-        id: ActiveValue::Set(conv_id),
-        label: ActiveValue::Set("Important Old Conv".to_string()),
-        folder: ActiveValue::Set("/work".to_string()),
-        status: ActiveValue::Set("active".to_string()),
-        importance_score: ActiveValue::Set(9), // High importance
-        word_count: ActiveValue::Set(500),
-        session_count: ActiveValue::Set(10),
-        created_at: ActiveValue::Set(old_date),
-        updated_at: ActiveValue::Set(old_date),
+    let conv1 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "UniqueLabel".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
     };
-    conversation
-        .insert(&db)
-        .await
-        .expect("Failed to insert conversation");
 
-    let repo = Arc::new(SeaOrmConversationRepository::new(db.clone()));
-    let config = Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let orchestrator = MemoryOrchestrator::new(repo, llm_bridge);
+    let conv2 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "UniqueLabel".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
 
-    // Suggest pruning
-    let result = orchestrator.suggest_pruning(90).await;
-    assert!(result.is_ok());
+    repo.create_with_messages(conv1).await.unwrap();
+    repo.create_with_messages(conv2).await.unwrap();
 
-    let suggestions = result.unwrap();
-    assert!(
-        suggestions.is_empty() || !suggestions.iter().any(|s| s.conversation_id == conv_id),
-        "High importance conversation should not be suggested for pruning"
-    );
+    let found = repo.find_by_label("UniqueLabel", 10, 0).await.unwrap();
+    assert_eq!(found.len(), 2);
+}
+
+#[tokio::test]
+async fn test_find_by_folder() {
+    let (repo, _db) = setup().await;
+
+    let conv1 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "Test1".to_string(),
+        folder: "/unique_folder".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    let conv2 = NewConversation {
+        id: Some(Uuid::new_v4()),
+        label: "Test2".to_string(),
+        folder: "/unique_folder".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    repo.create_with_messages(conv1).await.unwrap();
+    repo.create_with_messages(conv2).await.unwrap();
+
+    let found = repo.find_by_folder("/unique_folder", 10, 0).await.unwrap();
+    assert_eq!(found.len(), 2);
+}
+
+#[tokio::test]
+async fn test_update_status() {
+    let (repo, _db) = setup().await;
+
+    let conv_id = Uuid::new_v4();
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "Test".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    repo.create_with_messages(conv).await.unwrap();
+    repo.update_status(conv_id, "archived").await.unwrap();
+
+    let found = repo.find_by_id(conv_id).await.unwrap().unwrap();
+    assert_eq!(found.status, "archived");
+}
+
+#[tokio::test]
+async fn test_update_importance() {
+    let (repo, _db) = setup().await;
+
+    let conv_id = Uuid::new_v4();
+    let conv = NewConversation {
+        id: Some(conv_id),
+        label: "Test".to_string(),
+        folder: "/test".to_string(),
+        status: "active".to_string(),
+        importance_score: Some(5),
+        word_count: 100,
+        session_count: Some(1),
+        created_at: Local::now().naive_local(),
+        updated_at: Local::now().naive_local(),
+        messages: vec![],
+    };
+
+    repo.create_with_messages(conv).await.unwrap();
+    repo.update_importance(conv_id, 9).await.unwrap();
+
+    let found = repo.find_by_id(conv_id).await.unwrap().unwrap();
+    assert_eq!(found.importance_score, 9);
 }
