@@ -293,13 +293,19 @@ mod tests {
         }
 
         let conn_before = get_connection().await;
-        assert!(conn_before.is_none(), "Connection should be None before init");
+        assert!(
+            conn_before.is_none(),
+            "Connection should be None before init"
+        );
 
         // Use in-memory DB to avoid interference from other tests
         init_db("sqlite::memory:").await.unwrap();
-        
+
         let conn_after = get_connection().await;
-        assert!(conn_after.is_some(), "Connection should exist after init_db");
+        assert!(
+            conn_after.is_some(),
+            "Connection should exist after init_db"
+        );
     }
 
     #[tokio::test]
