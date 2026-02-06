@@ -292,7 +292,7 @@ async fn test_get_provider_status_consistency() {
         let status: LlmStatusResponse = serde_json::from_value(response.0.data.unwrap()).unwrap();
 
         // Total models should equal sum of individual provider model counts
-        let total_from_providers: u32 = status.providers.iter().map(|p| p.models_count).sum();
+        let total_from_providers: usize = status.providers.iter().map(|p| p.models_count as usize).sum();
         assert_eq!(status.total_models, total_from_providers);
 
         // Healthy providers count should match status == "healthy"
