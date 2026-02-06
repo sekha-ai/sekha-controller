@@ -407,9 +407,9 @@ mod tests {
         config.llm_bridge_url = "http://localhost:8080".to_string();
         // Add provider to enable v2 routing - FIXED: use correct struct fields
         config.llm_providers.push(LlmProviderConfig {
-            id: "test-provider".to_string(),  // FIXED: was provider_id
-            provider_type: ProviderType::OpenAi,  // FIXED: was String
-            base_url: "http://test.com".to_string(),  // FIXED: was Option
+            id: "test-provider".to_string(),         // FIXED: was provider_id
+            provider_type: ProviderType::OpenAi,     // FIXED: was String
+            base_url: "http://test.com".to_string(), // FIXED: was Option
             api_key: Some("test".to_string()),
             timeout_secs: 120,
             priority: 1,
@@ -480,9 +480,9 @@ mod tests {
         config.llm_bridge_url = "http://localhost:8080".to_string();
         // FIXED: use correct struct fields
         config.llm_providers.push(LlmProviderConfig {
-            id: "test-embedding".to_string(),  // FIXED: was provider_id
-            provider_type: ProviderType::OpenAi,  // FIXED: was String
-            base_url: "http://test.com".to_string(),  // FIXED: was Option
+            id: "test-embedding".to_string(),        // FIXED: was provider_id
+            provider_type: ProviderType::OpenAi,     // FIXED: was String
+            base_url: "http://test.com".to_string(), // FIXED: was Option
             api_key: Some("test".to_string()),
             timeout_secs: 120,
             priority: 1,
