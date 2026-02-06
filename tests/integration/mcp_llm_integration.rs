@@ -124,7 +124,7 @@ async fn test_mcp_llm_status_provider_details() {
             assert!(!provider.provider_type.is_empty());
             assert!(!provider.status.is_empty());
             assert!(!provider.circuit_breaker_state.is_empty());
-            assert!(provider.models_count >= 0);
+            // models_count is u32, so >= 0 is always true (removed absurd comparison)
         }
     }
 }
@@ -292,11 +292,7 @@ async fn test_get_provider_status_consistency() {
         let status: LlmStatusResponse = serde_json::from_value(response.0.data.unwrap()).unwrap();
 
         // Total models should equal sum of individual provider model counts
-        let total_from_providers: usize = status
-            .providers
-            .iter()
-            .map(|p| p.models_count as usize)
-            .sum();
+        let total_from_providers: usize = status.providers.iter().map(|p| p.models_count as usize).sum();
         assert_eq!(status.total_models, total_from_providers);
 
         // Healthy providers count should match status == "healthy"
