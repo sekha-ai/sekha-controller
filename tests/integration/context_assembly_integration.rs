@@ -296,7 +296,7 @@ async fn test_fetch_message_with_metadata() {
         content: Set("Content with metadata".to_string()),
         timestamp: Set(Utc::now().naive_utc()),
         embedding_id: Set(None),
-        metadata: Set(Some(serde_json::json!({"key": "value"})));
+        metadata: Set(Some(serde_json::json!({"key": "value"}))),
     };
 
     message.insert(&db).await.unwrap();
