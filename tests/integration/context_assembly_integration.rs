@@ -53,8 +53,8 @@ async fn create_test_conversation_in_db(
         importance_score: Set(importance),
         created_at: Set(Utc::now().naive_utc()),
         updated_at: Set(Utc::now().naive_utc()),
-        summary: Set(None),
-        has_images: Set(false),
+        word_count: Set(0),
+        session_count: Set(1),
     };
 
     conversation.insert(db).await.unwrap();
@@ -322,8 +322,8 @@ async fn test_pinned_messages_inactive_conversations_excluded() {
         importance_score: Set(10),
         created_at: Set(Utc::now().naive_utc()),
         updated_at: Set(Utc::now().naive_utc()),
-        summary: Set(None),
-        has_images: Set(false),
+        word_count: Set(0),
+        session_count: Set(1),
     };
     conversation.insert(&db).await.unwrap();
 
@@ -349,8 +349,8 @@ async fn test_recent_labeled_messages_inactive_excluded() {
         importance_score: Set(5),
         created_at: Set(Utc::now().naive_utc()),
         updated_at: Set(Utc::now().naive_utc()),
-        summary: Set(None),
-        has_images: Set(false),
+        word_count: Set(0),
+        session_count: Set(1),
     };
     conversation.insert(&db).await.unwrap();
 

@@ -329,8 +329,8 @@ mod tests {
             importance_score: 5,
             created_at: Utc::now().naive_utc(),
             updated_at: Utc::now().naive_utc(),
-            summary: None,
-            has_images: false,
+            word_count: 0,
+            session_count: 1,
         }
     }
 
@@ -350,14 +350,11 @@ mod tests {
             .expect_semantic_search()
             .returning(|_, _, _| Ok(vec![]));
 
-        // Mock get_db to return a valid connection (needed for pinned/recent)
-        mock_repo
-            .expect_get_db()
-            .returning(|| panic!("get_db should not be called in this test"));
-
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
-        let result = assembler.assemble("test query", vec![], 4000, vec![]).await;
+        let result = assembler
+            .assemble("test query", vec![], 4000, vec![])
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -370,22 +367,16 @@ mod tests {
         let msg_id = Uuid::new_v4();
         let conv_id = Uuid::new_v4();
 
-        mock_repo
-            .expect_semantic_search()
-            .returning(move |_, _, _| {
-                Ok(vec![SemanticSearchResult {
-                    message_id: msg_id,
-                    conversation_id: conv_id,
-                    score: 0.95,
-                    timestamp: Utc::now().naive_utc(),
-                    label: "test".to_string(),
-                    folder: "/test".to_string(),
-                }])
-            });
-
-        mock_repo
-            .expect_get_db()
-            .returning(|| panic!("get_db should not be called"));
+        mock_repo.expect_semantic_search().returning(move |_, _, _| {
+            Ok(vec![SemanticSearchResult {
+                message_id: msg_id,
+                conversation_id: conv_id,
+                score: 0.95,
+                timestamp: Utc::now().naive_utc(),
+                label: "test".to_string(),
+                folder: "/test".to_string(),
+            }])
+        });
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
@@ -406,22 +397,16 @@ mod tests {
         let msg_id = Uuid::new_v4();
         let conv_id = Uuid::new_v4();
 
-        mock_repo
-            .expect_semantic_search()
-            .returning(move |_, _, _| {
-                Ok(vec![SemanticSearchResult {
-                    message_id: msg_id,
-                    conversation_id: conv_id,
-                    score: 0.95,
-                    timestamp: Utc::now().naive_utc(),
-                    label: "test".to_string(),
-                    folder: "/excluded/subfolder".to_string(),
-                }])
-            });
-
-        mock_repo
-            .expect_get_db()
-            .returning(|| panic!("get_db should not be called"));
+        mock_repo.expect_semantic_search().returning(move |_, _, _| {
+            Ok(vec![SemanticSearchResult {
+                message_id: msg_id,
+                conversation_id: conv_id,
+                score: 0.95,
+                timestamp: Utc::now().naive_utc(),
+                label: "test".to_string(),
+                folder: "/excluded/subfolder".to_string(),
+            }])
+        });
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
@@ -496,14 +481,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_assemble_context_within_budget() {
-        let mut mock_repo = MockConversationRepository::new();
+        let mock_repo = MockConversationRepository::new();
         let msg_id1 = Uuid::new_v4();
         let msg_id2 = Uuid::new_v4();
         let conv_id = Uuid::new_v4();
-
-        mock_repo
-            .expect_get_db()
-            .returning(|| panic!("Should use fetch_message mock instead"));
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
@@ -685,7 +666,7 @@ mod tests {
 
         mock_repo
             .expect_semantic_search()
-            .returning(|_, _, _| Err(RepositoryError::ConnectionError));
+            .returning(|_, _, _| Err(RepositoryError::NotFound("Test error".to_string())));
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
