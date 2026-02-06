@@ -3,12 +3,12 @@ use sea_orm::ConnectionTrait;
 use sekha_controller::{
     config::Config,
     init_db,
-    models::internal::{Conversation, Label, NewConversation, NewMessage},
-    orchestrator::intelligence::LabelIntelligence,
+    models::internal::{Conversation, NewConversation, NewMessage},
+    orchestrator::label_intelligence::LabelIntelligence,
     storage::repository::SeaOrmConversationRepository,
 };
 use std::sync::Arc;
-use uuid::Uuid; // Import for execute_unprepared
+use uuid::Uuid;
 
 async fn setup() -> (
     Arc<SeaOrmConversationRepository>,
@@ -191,11 +191,14 @@ async fn test_count_operations() {
 
 #[tokio::test]
 async fn test_label_intelligence_creation() {
+    use sekha_controller::services::llm_bridge_client::LlmBridgeClient;
+    
     let config = Config::default();
     let (repo, _db) = setup().await;
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
 
-    // Create label intelligence - should succeed
-    let intelligence = LabelIntelligence::new(repo, &config);
+    // Create label intelligence with correct Arc<LlmBridgeClient>
+    let intelligence = LabelIntelligence::new(repo, llm_bridge);
     // Just verify it compiles and creates successfully
     assert!(true);
 }
