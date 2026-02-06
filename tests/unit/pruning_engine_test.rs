@@ -11,8 +11,7 @@
 // These unit tests focus on the public API surface.
 
 use sekha_controller::{
-    orchestrator::pruning_engine::PruningEngine,
-    services::llm_bridge_client::LlmBridgeClient,
+    orchestrator::pruning_engine::PruningEngine, services::llm_bridge_client::LlmBridgeClient,
     storage::repository::MockConversationRepository,
 };
 use std::sync::Arc;
