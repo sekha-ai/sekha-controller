@@ -109,11 +109,23 @@ impl PruningEngine {
             messages_text.join("\n")
         );
 
-        let preview = self
+        // Try LLM summarization, but fall back gracefully if unavailable
+        let preview = match self
             .llm_bridge
             .summarize(vec![prompt], "daily", None, Some(50))
             .await
-            .map_err(|e| RepositoryError::EmbeddingError(format!("LLM Bridge error: {}", e)))?;
+        {
+            Ok(summary) => summary,
+            Err(_) => {
+                // Graceful fallback: generate preview from message count and snippets
+                format!(
+                    "Conversation '{}' with {} recent messages. Preview: {}",
+                    conv.label,
+                    recent_messages.len(),
+                    messages_text.first().unwrap_or(&"(no messages)".to_string())
+                )
+            }
+        };
 
         Ok(preview)
     }
