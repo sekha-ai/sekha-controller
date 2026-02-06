@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 mod api;
+mod context_assembly_integration;
 mod orchestrator_edge_cases;
 mod orchestrator_integration;
 
