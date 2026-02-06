@@ -196,7 +196,7 @@ async fn test_label_intelligence_creation() {
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
 
     // Create label intelligence with correct Arc<LlmBridgeClient>
-    let intelligence = LabelIntelligence::new(repo, llm_bridge);
+    let _intelligence = LabelIntelligence::new(repo, llm_bridge);
     // Just verify it compiles and creates successfully
     assert!(true);
 }
