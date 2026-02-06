@@ -47,34 +47,8 @@ async fn test_hierarchical_summarizer_creation() {
     assert!(true);
 }
 
-#[tokio::test]
-async fn test_generate_daily_summary_empty_messages() {
-    let conv_id = Uuid::new_v4();
-    let mut mock_repo = MockConversationRepository::new();
-
-    // Mock find_by_id to return conversation
-    let test_conv = create_test_conversation(conv_id);
-    mock_repo
-        .expect_find_by_id()
-        .with(eq(conv_id))
-        .return_once(move |_| Ok(Some(test_conv)));
-
-    // Mock get_db to return a mock database connection
-    // Note: This will fail at the query stage, which is expected
-    // In real tests, we'd use a test database
-
-    let config = sekha_controller::config::Config::default();
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&config).unwrap());
-    let repo = Arc::new(mock_repo);
-
-    let summarizer = HierarchicalSummarizer::new(repo, llm_bridge);
-
-    // This will error because we can't mock get_db properly
-    // In integration tests with real DB, this would work
-    let result = summarizer.generate_daily_summary(conv_id).await;
-    // Accept either error or success (depends on DB availability)
-    assert!(result.is_ok() || result.is_err());
-}
+// NOTE: test_generate_daily_summary_empty_messages removed because it requires
+// repo.get_db() which cannot be properly mocked. Integration tests cover this.
 
 #[tokio::test]
 async fn test_generate_daily_summary_conversation_not_found() {
