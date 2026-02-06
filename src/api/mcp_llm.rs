@@ -176,7 +176,7 @@ async fn get_routing_info(
 mod tests {
     use super::*;
     use crate::{
-        config::Config,
+        config::{Config, LlmProviderConfig, ModelCapability, ModelTask, ProviderType},
         orchestrator::MemoryOrchestrator,
         services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
         storage::{chroma_client::ChromaClient, init_db, repository::SeaOrmConversationRepository},
@@ -217,6 +217,53 @@ mod tests {
         })
     }
 
+    async fn create_test_state_with_v2_routing(bridge_url: String) -> Arc<AppState> {
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let config = Arc::new(RwLock::new(Config::default()));
+        let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let embedding_service = Arc::new(EmbeddingService::new(
+            "http://localhost:11434".to_string(),
+            "http://localhost:8000".to_string(),
+        ));
+
+        let repo = Arc::new(SeaOrmConversationRepository::new(
+            db,
+            chroma_client.clone(),
+            embedding_service.clone(),
+        ));
+
+        // Create config with v2 providers to enable routing
+        let mut test_config = Config::default();
+        test_config.llm_bridge_url = bridge_url;
+        test_config.llm_providers.push(LlmProviderConfig {
+            id: "test-provider".to_string(),
+            provider_type: ProviderType::OpenAi,
+            base_url: "http://test.com".to_string(),
+            api_key: Some("test".to_string()),
+            timeout_secs: 120,
+            priority: 1,
+            models: vec![ModelCapability {
+                model_id: "gpt-4".to_string(),
+                task: ModelTask::ChatLarge,
+                context_window: 8192,
+                supports_vision: false,
+                supports_audio: false,
+                dimension: None,
+            }],
+        });
+
+        let llm_bridge = Arc::new(LlmBridgeClient::new(&test_config).unwrap());
+
+        Arc::new(AppState {
+            config,
+            repo: repo.clone(),
+            orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge.clone())),
+            embedding_service,
+            chroma_client,
+            llm_client: llm_bridge,
+        })
+    }
+
     /// FORCES lines 76-81 (success path in mcp_llm_status)
     #[tokio::test]
     async fn test_mcp_llm_status_success() {
@@ -245,7 +292,7 @@ mod tests {
     async fn test_mcp_llm_status_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-
+        
         // Don't mount any mock - this causes connection errors
         // Drop the server to ensure connection refused
         drop(mock_server);
@@ -279,7 +326,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
+        let state = create_test_state_with_v2_routing(mock_server.uri()).await;
         let request = RoutingInfoRequest {
             task: "chat".to_string(),
             preferred_model: None,
@@ -307,11 +354,12 @@ mod tests {
     async fn test_mcp_llm_routing_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-
+        
         // Drop server to cause connection failure
         drop(mock_server);
 
-        let state = create_test_state_with_mock_bridge(server_uri).await;
+        // Use v2 routing to ensure route_request is called (not legacy fallback)
+        let state = create_test_state_with_v2_routing(server_uri).await;
         let request = RoutingInfoRequest {
             task: "chat".to_string(),
             preferred_model: None,
