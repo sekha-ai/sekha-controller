@@ -134,17 +134,22 @@ async fn get_provider_status(
     // Check if bridge is healthy - propagate error if health check fails completely
     let is_healthy = bridge_client.health_check().await?;
 
+    // If bridge is unreachable (health_check returns Ok(false)), treat as error
+    if !is_healthy {
+        return Err(anyhow::anyhow!("Bridge is unreachable or unhealthy"));
+    }
+
     // Return basic status
     Ok(LlmStatusResponse {
         providers: vec![ProviderStatus {
             provider_id: "bridge".to_string(),
             provider_type: "bridge".to_string(),
-            status: if is_healthy { "healthy" } else { "unhealthy" }.to_string(),
+            status: "healthy".to_string(),
             models_count: 0,
             circuit_breaker_state: "closed".to_string(),
         }],
         total_providers: 1,
-        healthy_providers: if is_healthy { 1 } else { 0 },
+        healthy_providers: 1,
         total_models: 0,
     })
 }
@@ -240,9 +245,9 @@ mod tests {
     async fn test_mcp_llm_status_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-
+        
         // Don't mount any mock - this causes connection errors
-        // Then drop the server to ensure connection refused
+        // Drop the server to ensure connection refused
         drop(mock_server);
 
         let state = create_test_state_with_mock_bridge(server_uri).await;
@@ -250,7 +255,7 @@ mod tests {
 
         let response = mcp_llm_status(State(state), Json(request)).await;
 
-        // Lines 83-88 EXECUTED - connection failure triggers error path
+        // Lines 83-88 EXECUTED - connection failure -> health_check returns Ok(false) -> error path
         assert!(!response.0.success);
         assert!(response.0.data.is_none());
         assert!(response.0.error.is_some());
@@ -302,7 +307,7 @@ mod tests {
     async fn test_mcp_llm_routing_error() {
         let mock_server = MockServer::start().await;
         let server_uri = mock_server.uri();
-
+        
         // Drop server to cause connection failure
         drop(mock_server);
 
