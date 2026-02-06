@@ -352,9 +352,7 @@ mod tests {
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
-        let result = assembler
-            .assemble("test query", vec![], 4000, vec![])
-            .await;
+        let result = assembler.assemble("test query", vec![], 4000, vec![]).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 0);
@@ -367,16 +365,18 @@ mod tests {
         let msg_id = Uuid::new_v4();
         let conv_id = Uuid::new_v4();
 
-        mock_repo.expect_semantic_search().returning(move |_, _, _| {
-            Ok(vec![SemanticSearchResult {
-                message_id: msg_id,
-                conversation_id: conv_id,
-                score: 0.95,
-                timestamp: Utc::now().naive_utc(),
-                label: "test".to_string(),
-                folder: "/test".to_string(),
-            }])
-        });
+        mock_repo
+            .expect_semantic_search()
+            .returning(move |_, _, _| {
+                Ok(vec![SemanticSearchResult {
+                    message_id: msg_id,
+                    conversation_id: conv_id,
+                    score: 0.95,
+                    timestamp: Utc::now().naive_utc(),
+                    label: "test".to_string(),
+                    folder: "/test".to_string(),
+                }])
+            });
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
@@ -397,16 +397,18 @@ mod tests {
         let msg_id = Uuid::new_v4();
         let conv_id = Uuid::new_v4();
 
-        mock_repo.expect_semantic_search().returning(move |_, _, _| {
-            Ok(vec![SemanticSearchResult {
-                message_id: msg_id,
-                conversation_id: conv_id,
-                score: 0.95,
-                timestamp: Utc::now().naive_utc(),
-                label: "test".to_string(),
-                folder: "/excluded/subfolder".to_string(),
-            }])
-        });
+        mock_repo
+            .expect_semantic_search()
+            .returning(move |_, _, _| {
+                Ok(vec![SemanticSearchResult {
+                    message_id: msg_id,
+                    conversation_id: conv_id,
+                    score: 0.95,
+                    timestamp: Utc::now().naive_utc(),
+                    label: "test".to_string(),
+                    folder: "/excluded/subfolder".to_string(),
+                }])
+            });
 
         let assembler = ContextAssembler::new(Arc::new(mock_repo));
 
