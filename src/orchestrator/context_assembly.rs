@@ -113,7 +113,8 @@ impl ContextAssembler {
     }
 
     /// Phase 3: Assembly - Build context within token budget
-    async fn assemble_context(
+    /// Made public for integration testing
+    pub async fn assemble_context(
         &self,
         candidates: &mut [CandidateMessage],
         context_budget: usize,
