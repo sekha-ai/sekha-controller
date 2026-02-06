@@ -290,14 +290,8 @@ mod tests {
     /// FORCES lines 83-88 (error path in mcp_llm_status)
     #[tokio::test]
     async fn test_mcp_llm_status_error() {
-        let mock_server = MockServer::start().await;
-        let server_uri = mock_server.uri();
-
-        // Don't mount any mock - this causes connection errors
-        // Drop the server to ensure connection refused
-        drop(mock_server);
-
-        let state = create_test_state_with_mock_bridge(server_uri).await;
+        // Use an invalid URL that will definitely fail
+        let state = create_test_state_with_mock_bridge("http://0.0.0.0:1".to_string()).await;
         let request = LlmStatusRequest { provider_id: None };
 
         let response = mcp_llm_status(State(state), Json(request)).await;
@@ -352,14 +346,8 @@ mod tests {
     /// FORCES lines 113-119 (error path in mcp_llm_routing)
     #[tokio::test]
     async fn test_mcp_llm_routing_error() {
-        let mock_server = MockServer::start().await;
-        let server_uri = mock_server.uri();
-
-        // Drop server to cause connection failure
-        drop(mock_server);
-
-        // Use v2 routing to ensure route_request is called (not legacy fallback)
-        let state = create_test_state_with_v2_routing(server_uri).await;
+        // Use invalid URL for guaranteed connection failure
+        let state = create_test_state_with_v2_routing("http://0.0.0.0:1".to_string()).await;
         let request = RoutingInfoRequest {
             task: "chat".to_string(),
             preferred_model: None,
