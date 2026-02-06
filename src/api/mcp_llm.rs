@@ -266,13 +266,11 @@ mod tests {
         // Mock routing endpoint to return success
         Mock::given(method("POST"))
             .and(path("/routing"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "provider_id": "test_provider",
-                    "model_id": "test_model",
-                    "estimated_cost": 0.001
-                })),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "provider_id": "test_provider",
+                "model_id": "test_model",
+                "estimated_cost": 0.001
+            })))
             .mount(&mock_server)
             .await;
 
