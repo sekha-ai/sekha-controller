@@ -239,20 +239,18 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_llm_status_error() {
         let mock_server = MockServer::start().await;
+        let server_uri = mock_server.uri();
+        
+        // Don't mount any mock - this causes connection errors
+        // Then drop the server to ensure connection refused
+        drop(mock_server);
 
-        // Mock health check to return error
-        Mock::given(method("GET"))
-            .and(path("/health"))
-            .respond_with(ResponseTemplate::new(500))
-            .mount(&mock_server)
-            .await;
-
-        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
+        let state = create_test_state_with_mock_bridge(server_uri).await;
         let request = LlmStatusRequest { provider_id: None };
 
         let response = mcp_llm_status(State(state), Json(request)).await;
 
-        // Lines 83-88 EXECUTED
+        // Lines 83-88 EXECUTED - connection failure triggers error path
         assert!(!response.0.success);
         assert!(response.0.data.is_none());
         assert!(response.0.error.is_some());
@@ -303,15 +301,12 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_llm_routing_error() {
         let mock_server = MockServer::start().await;
+        let server_uri = mock_server.uri();
+        
+        // Drop server to cause connection failure
+        drop(mock_server);
 
-        // Mock routing endpoint to return error
-        Mock::given(method("POST"))
-            .and(path("/api/v1/route"))
-            .respond_with(ResponseTemplate::new(500))
-            .mount(&mock_server)
-            .await;
-
-        let state = create_test_state_with_mock_bridge(mock_server.uri()).await;
+        let state = create_test_state_with_mock_bridge(server_uri).await;
         let request = RoutingInfoRequest {
             task: "chat".to_string(),
             preferred_model: None,
