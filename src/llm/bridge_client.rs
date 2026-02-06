@@ -363,14 +363,15 @@ mod tests {
     async fn test_route_request_success() {
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/route"))
-                .respond_with(json_encoded(serde_json::json!({
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
                     "provider_id": "test-provider",
                     "model_id": "gpt-4",
                     "estimated_cost": 0.05,
                     "reason": "Best quality",
                     "provider_type": "openai"
-                }))),
+                })),
+            ),
         );
 
         let mut config = Config::default();
@@ -378,7 +379,9 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // This covers lines 185-191: response parsing, info! log, Ok(routing)
-        let result = client.route_request("chat", Some("gpt-4".to_string()), Some(0.1)).await;
+        let result = client
+            .route_request("chat", Some("gpt-4".to_string()), Some(0.1))
+            .await;
         assert!(result.is_ok());
         let routing = result.unwrap();
         assert_eq!(routing.provider_id, "test-provider");
@@ -389,8 +392,8 @@ mod tests {
     async fn test_list_models_success() {
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::method_path("GET", "/api/v1/models"))
-                .respond_with(json_encoded(serde_json::json!([
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
                     {
                         "model_id": "gpt-4",
                         "provider_id": "openai",
@@ -400,7 +403,8 @@ mod tests {
                         "supports_vision": false,
                         "supports_audio": false
                     }
-                ]))),
+                ])),
+            ),
         );
 
         let mut config = Config::default();
@@ -451,7 +455,9 @@ mod tests {
         }];
 
         // This covers lines 239-245: response parsing, debug! log, Ok(completion)
-        let result = client.chat_completion(messages, Some("gpt-4".to_string()), Some(0.7)).await;
+        let result = client
+            .chat_completion(messages, Some("gpt-4".to_string()), Some(0.7))
+            .await;
         assert!(result.is_ok());
         let completion = result.unwrap();
         assert_eq!(completion.model, "gpt-4");
@@ -462,13 +468,14 @@ mod tests {
     async fn test_generate_embedding_success() {
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/embed"))
-                .respond_with(json_encoded(serde_json::json!({
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
                     "embedding": [0.1, 0.2, 0.3],
                     "model": "text-embedding-3-large",
                     "dimension": 3,
                     "tokens_used": 5
-                }))),
+                })),
+            ),
         );
 
         let mut config = Config::default();
@@ -476,7 +483,9 @@ mod tests {
         let client = BridgeClient::new(&config).unwrap();
 
         // This covers lines 299-305: response parsing, debug! log, Ok(embed)
-        let result = client.generate_embedding("test".to_string(), Some("text-embedding-3".to_string())).await;
+        let result = client
+            .generate_embedding("test".to_string(), Some("text-embedding-3".to_string()))
+            .await;
         assert!(result.is_ok());
         let embed = result.unwrap();
         assert_eq!(embed.dimension, 3);
