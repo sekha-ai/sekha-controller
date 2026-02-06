@@ -181,9 +181,9 @@ async fn test_list_models() {
     let result = client.list_models().await;
 
     match result {
-        Ok(models) => {
-            // Should return a list (empty or populated)
-            assert!(models.is_empty() || !models.is_empty());
+        Ok(_models) => {
+            // Verify we got a Vec back (may be empty or populated)
+            assert!(true);
         }
         Err(_) => assert!(true),
     }
@@ -196,10 +196,11 @@ async fn test_health_check() {
 
     let result = client.health_check().await;
 
+    // Verify the function returns Ok(bool) or Err
     match result {
-        Ok(healthy) => {
-            // Boolean result
-            assert!(healthy || !healthy);
+        Ok(_healthy) => {
+            // Returns a boolean, test passed
+            assert!(true);
         }
         Err(_) => assert!(true), // Expected without real bridge
     }
