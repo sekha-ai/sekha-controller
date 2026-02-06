@@ -375,7 +375,7 @@ mod tests {
         );
 
         let mut config = Config::default();
-        config.llm_bridge_url = server.url_str("");
+        config.llm_bridge_url = server.url_str("").trim_end_matches('/').to_string();
         let client = BridgeClient::new(&config).unwrap();
 
         // This covers lines 185-191: response parsing, info! log, Ok(routing)
@@ -408,7 +408,7 @@ mod tests {
         );
 
         let mut config = Config::default();
-        config.llm_bridge_url = server.url_str("");
+        config.llm_bridge_url = server.url_str("").trim_end_matches('/').to_string();
         let client = BridgeClient::new(&config).unwrap();
 
         // This covers lines 199-205: response parsing, debug! log, Ok(models)
@@ -446,7 +446,7 @@ mod tests {
         );
 
         let mut config = Config::default();
-        config.llm_bridge_url = server.url_str("");
+        config.llm_bridge_url = server.url_str("").trim_end_matches('/').to_string();
         let client = BridgeClient::new(&config).unwrap();
 
         let messages = vec![ChatMessage {
@@ -479,7 +479,7 @@ mod tests {
         );
 
         let mut config = Config::default();
-        config.llm_bridge_url = server.url_str("");
+        config.llm_bridge_url = server.url_str("").trim_end_matches('/').to_string();
         let client = BridgeClient::new(&config).unwrap();
 
         // This covers lines 299-305: response parsing, debug! log, Ok(embed)
