@@ -405,11 +405,11 @@ mod tests {
     async fn test_chat_completion_routed_v2_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        // Add provider to enable v2 routing - FIXED: use correct struct fields
+        // Add provider to enable v2 routing
         config.llm_providers.push(LlmProviderConfig {
-            id: "test-provider".to_string(),         // FIXED: was provider_id
-            provider_type: ProviderType::OpenAi,     // FIXED: was String
-            base_url: "http://test.com".to_string(), // FIXED: was Option
+            id: "test-provider".to_string(),
+            provider_type: ProviderType::OpenAi,
+            base_url: "http://test.com".to_string(),
             api_key: Some("test".to_string()),
             timeout_secs: 120,
             priority: 1,
@@ -478,11 +478,10 @@ mod tests {
     async fn test_generate_embedding_routed_v2_path() {
         let mut config = Config::default();
         config.llm_bridge_url = "http://localhost:8080".to_string();
-        // FIXED: use correct struct fields
         config.llm_providers.push(LlmProviderConfig {
-            id: "test-embedding".to_string(),        // FIXED: was provider_id
-            provider_type: ProviderType::OpenAi,     // FIXED: was String
-            base_url: "http://test.com".to_string(), // FIXED: was Option
+            id: "test-embedding".to_string(),
+            provider_type: ProviderType::OpenAi,
+            base_url: "http://test.com".to_string(),
             api_key: Some("test".to_string()),
             timeout_secs: 120,
             priority: 1,
@@ -529,12 +528,8 @@ mod tests {
 
         // Executes lines 336-344 (both Ok and Err paths)
         let result = client.health_check().await;
-        // Should return Ok(false) when bridge is unreachable
+        // Should return Ok(bool) regardless of bridge availability
         assert!(result.is_ok());
-        if let Ok(healthy) = result {
-            // When bridge is down, should be false
-            assert!(!healthy || healthy); // Always passes, tests execution
-        }
     }
 
     #[test]
