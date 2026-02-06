@@ -14,8 +14,8 @@ mod context_assembly_integration;
 mod orchestrator_edge_cases;
 mod orchestrator_integration;
 mod pruning_engine_integration;
-mod summarizer_integration;
 mod summarizer_comprehensive;
+mod summarizer_integration;
 
 #[allow(dead_code)]
 pub fn create_test_conversation(label: &str, folder: &str) -> Value {
