@@ -3,7 +3,11 @@ use sekha_controller::{
     models::internal::{Conversation, Message},
     orchestrator::pruning_engine::PruningEngine,
     services::llm_bridge_client::LlmBridgeClient,
-    storage::{chroma_client::ChromaClient, init_db, repository::SeaOrmConversationRepository},
+    storage::{
+        chroma_client::ChromaClient,
+        init_db,
+        repository::{ConversationRepository, SeaOrmConversationRepository},
+    },
 };
 use std::sync::Arc;
 use uuid::Uuid;
