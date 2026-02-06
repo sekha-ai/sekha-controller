@@ -302,8 +302,8 @@ pub struct CandidateMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::internal::{Conversation, SemanticSearchResult};
-    use crate::storage::repository::MockConversationRepository;
+    use crate::models::internal::Conversation;
+    use crate::storage::repository::{MockConversationRepository, SearchResult};
     use chrono::Utc;
     use mockall::predicate::*;
     use sea_orm::DatabaseConnection;
@@ -368,10 +368,12 @@ mod tests {
         mock_repo
             .expect_semantic_search()
             .returning(move |_, _, _| {
-                Ok(vec![SemanticSearchResult {
+                Ok(vec![SearchResult {
                     message_id: msg_id,
                     conversation_id: conv_id,
                     score: 0.95,
+                    content: "test content".to_string(),
+                    metadata: serde_json::json!({}),
                     timestamp: Utc::now().naive_utc(),
                     label: "test".to_string(),
                     folder: "/test".to_string(),
@@ -400,10 +402,12 @@ mod tests {
         mock_repo
             .expect_semantic_search()
             .returning(move |_, _, _| {
-                Ok(vec![SemanticSearchResult {
+                Ok(vec![SearchResult {
                     message_id: msg_id,
                     conversation_id: conv_id,
                     score: 0.95,
+                    content: "test content".to_string(),
+                    metadata: serde_json::json!({}),
                     timestamp: Utc::now().naive_utc(),
                     label: "test".to_string(),
                     folder: "/excluded/subfolder".to_string(),
