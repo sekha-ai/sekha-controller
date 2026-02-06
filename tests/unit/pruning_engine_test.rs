@@ -22,7 +22,7 @@ async fn test_pruning_engine_initialization() {
 #[tokio::test]
 async fn test_generate_suggestions_no_candidates() {
     let mut mock_repo = MockConversationRepository::new();
-    
+
     // Mock get_db to return a mock database connection
     mock_repo.expect_get_db().returning(|| {
         // Return a test database connection - this will be used by find_pruning_candidates

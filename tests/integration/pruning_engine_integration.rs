@@ -14,10 +14,12 @@ async fn setup_test_db() -> Arc<SeaOrmConversationRepository> {
         .expect("Failed to initialize test database");
 
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    let embedding_service = Arc::new(sekha_controller::services::embedding_service::EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
+    let embedding_service = Arc::new(
+        sekha_controller::services::embedding_service::EmbeddingService::new(
+            "http://localhost:11434".to_string(),
+            "http://localhost:8000".to_string(),
+        ),
+    );
 
     Arc::new(SeaOrmConversationRepository::new(
         db,
@@ -48,8 +50,8 @@ async fn test_generate_suggestions_with_old_conversations() {
     };
 
     // Insert conversation into database
-    use sekha_controller::storage::entities::conversations;
     use sea_orm::EntityTrait;
+    use sekha_controller::storage::entities::conversations;
 
     let conv_model = conversations::ActiveModel {
         id: sea_orm::ActiveValue::Set(old_conv_id),
@@ -133,8 +135,8 @@ async fn test_generate_suggestions_high_token_low_importance() {
     };
 
     // Insert conversation
-    use sekha_controller::storage::entities::conversations;
     use sea_orm::EntityTrait;
+    use sekha_controller::storage::entities::conversations;
 
     let conv_model = conversations::ActiveModel {
         id: sea_orm::ActiveValue::Set(conv_id),
@@ -207,8 +209,8 @@ async fn test_generate_suggestions_high_importance() {
     };
 
     // Insert conversation
-    use sekha_controller::storage::entities::conversations;
     use sea_orm::EntityTrait;
+    use sekha_controller::storage::entities::conversations;
 
     let conv_model = conversations::ActiveModel {
         id: sea_orm::ActiveValue::Set(conv_id),
@@ -297,8 +299,8 @@ async fn test_generate_suggestions_recent_conversations_excluded() {
     };
 
     // Insert conversation
-    use sekha_controller::storage::entities::conversations;
     use sea_orm::EntityTrait;
+    use sekha_controller::storage::entities::conversations;
 
     let conv_model = conversations::ActiveModel {
         id: sea_orm::ActiveValue::Set(recent_conv_id),
@@ -348,8 +350,8 @@ async fn test_generate_suggestions_inactive_conversations_excluded() {
     };
 
     // Insert conversation
-    use sekha_controller::storage::entities::conversations;
     use sea_orm::EntityTrait;
+    use sekha_controller::storage::entities::conversations;
 
     let conv_model = conversations::ActiveModel {
         id: sea_orm::ActiveValue::Set(inactive_conv_id),
