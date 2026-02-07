@@ -716,9 +716,10 @@ mod tests {
     async fn test_generate_embedding_with_retry_exhaustion() {
         let server = Server::run();
 
-        // All attempts fail with 500
+        // All attempts fail with 500 - with max_retries=2, we make 2 attempts (0..2 = 0,1)
         server.expect(
             Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(2)
                 .respond_with(status_code(500)),
         );
 
