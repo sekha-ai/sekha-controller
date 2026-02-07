@@ -6,7 +6,7 @@ use crate::storage::chroma_client::ChromaClient;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{AcquireError, Semaphore};
+use tokio::sync::{AcquireError, Semaphore, TryAcquireError};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -31,6 +31,12 @@ pub enum EmbeddingError {
 
 impl From<AcquireError> for EmbeddingError {
     fn from(err: AcquireError) -> Self {
+        EmbeddingError::SemaphoreError(err.to_string())
+    }
+}
+
+impl From<TryAcquireError> for EmbeddingError {
+    fn from(err: TryAcquireError) -> Self {
         EmbeddingError::SemaphoreError(err.to_string())
     }
 }
