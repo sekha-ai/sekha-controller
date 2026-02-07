@@ -9,6 +9,7 @@
 
 use sekha_controller::{
     config::Config,
+    llm::bridge_client::BridgeClient,
     orchestrator::summarizer::HierarchicalSummarizer,
     services::llm_bridge_client::LlmBridgeClient,
     storage::{
@@ -26,9 +27,11 @@ async fn setup_test_db() -> Arc<SeaOrmConversationRepository> {
         .expect("Failed to initialize test database");
 
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    let config = Config::default();
+    let bridge = BridgeClient::new(&config).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(
         sekha_controller::services::embedding_service::EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ),
     );
