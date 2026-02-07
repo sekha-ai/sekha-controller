@@ -50,11 +50,11 @@ impl MigrationTrait for Migration {
 
         // Enable WAL mode using raw SQL
         let db = manager.get_connection();
-        db.execute(sea_orm::Statement::from_string(
+        let stmt = sea_orm::Statement::from_string(
             manager.get_database_backend(),
             "PRAGMA journal_mode=WAL;".to_owned(),
-        ))
-        .await?;
+        );
+        db.execute(&stmt).await?;
 
         Ok(())
     }

@@ -9,7 +9,7 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Create trigger for conversations.updated_at
         let db = manager.get_connection();
-        db.execute(sea_orm::Statement::from_string(
+        let stmt = sea_orm::Statement::from_string(
             manager.get_database_backend(),
             r#"
                 CREATE TRIGGER IF NOT EXISTS update_conversations_updated_at
@@ -18,19 +18,19 @@ impl MigrationTrait for Migration {
                     UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
                 END;
             "#.to_owned(),
-        ))
-        .await?;
+        );
+        db.execute(&stmt).await?;
 
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let db = manager.get_connection();
-        db.execute(sea_orm::Statement::from_string(
+        let stmt = sea_orm::Statement::from_string(
             manager.get_database_backend(),
             "DROP TRIGGER IF EXISTS update_conversations_updated_at".to_owned(),
-        ))
-        .await?;
+        );
+        db.execute(&stmt).await?;
 
         Ok(())
     }
