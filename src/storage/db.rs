@@ -60,17 +60,15 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
 
-    // Enable WAL mode using SeaORM's query builder
-    use sea_orm::sea_query::{Expr, Query};
+    // Enable WAL mode using SeaORM's Statement
     use sea_orm::Statement;
 
     // WAL mode pragma - this is a SQLite-specific configuration pragma, not data manipulation
-    // SeaORM doesn't provide a builder for PRAGMA statements as they're database-specific config
     let wal_stmt = Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         "PRAGMA journal_mode=WAL".to_string(),
     );
-    db.execute(&wal_stmt)
+    db.query_one(wal_stmt)
         .await
         .map_err(|e| DbErr::Custom(format!("Failed to enable WAL mode: {}", e)))?;
 
@@ -130,7 +128,6 @@ async fn run_migrations(db: &DatabaseConnection) -> Result<(), DbErr> {
 /// Ensure the migrations tracking table exists using SeaORM schema builder
 async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
     use sea_orm::sea_query::{ColumnDef, Table};
-    use sea_orm::{Schema, Statement};
 
     // Create migrations table using SeaORM's schema builder
     let create_table = Table::create()
@@ -150,8 +147,8 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
         )
         .to_owned();
 
-    let stmt = db.get_database_backend().build(&create_table);
-    db.execute(&stmt).await?;
+    // Execute using the builder (implements StatementBuilder)
+    db.execute(db.get_database_backend().build(&create_table)).await?;
 
     tracing::debug!("Migrations tracking table ready");
     Ok(())
@@ -159,8 +156,8 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
 
 /// Get list of already applied migration versions using SeaORM query builder
 async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, DbErr> {
-    use sea_orm::sea_query::{Expr, Query};
-    use sea_orm::{FromQueryResult, Statement};
+    use sea_orm::sea_query::Query;
+    use sea_orm::FromQueryResult;
 
     #[derive(Debug, FromQueryResult)]
     struct MigrationRecord {
@@ -206,14 +203,13 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
         .ok_or_else(|| DbErr::Custom(format!("Migration index {} out of bounds", idx)))?;
 
     // Execute migration SQL by splitting into individual statements
-    // This is necessary because SQLite doesn't support executing multiple statements in one call
     use sea_orm::Statement;
     for statement in sql.split(';').filter(|s| !s.trim().is_empty()) {
         let stmt = Statement::from_string(
             sea_orm::DatabaseBackend::Sqlite,
             statement.trim().to_string(),
         );
-        db.execute(&stmt).await.map_err(|e| {
+        db.query_one(stmt).await.map_err(|e| {
             DbErr::Custom(format!(
                 "Failed to execute migration {} ({}): {}",
                 idx + 1,
@@ -224,7 +220,7 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
     }
 
     // Record that this migration was applied using SeaORM query builder
-    use sea_orm::sea_query::{Expr, Query};
+    use sea_orm::sea_query::Query;
 
     let insert = Query::insert()
         .into_table(sea_orm::sea_query::Alias::new("seaql_migrations"))
@@ -232,16 +228,18 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
         .values_panic(vec![version.into()])
         .to_owned();
 
-    // Use OR IGNORE for idempotency
+    // Build the statement
     let backend = db.get_database_backend();
-    let mut stmt = backend.build(&insert);
+    let stmt = backend.build(&insert);
 
-    // Modify the SQL to add OR IGNORE for SQLite
-    if let Statement { sql, .. } = &mut stmt {
-        *sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO");
-    }
+    // For SQLite, modify to use INSERT OR IGNORE for idempotency
+    use sea_orm::Statement;
+    let idempotent_stmt = Statement::from_string(
+        sea_orm::DatabaseBackend::Sqlite,
+        stmt.sql.replace("INSERT INTO", "INSERT OR IGNORE INTO"),
+    );
 
-    db.execute(&stmt).await.map_err(|e| {
+    db.query_one(idempotent_stmt).await.map_err(|e| {
         DbErr::Custom(format!(
             "Failed to record migration {} ({}): {}",
             idx + 1,
@@ -366,7 +364,6 @@ mod tests {
     }
 
     /// Critical bug fix test: container restart must not cause UNIQUE constraint error
-    /// This test verifies that migrations are properly detected and skipped on restart
     #[tokio::test]
     async fn test_migrations_idempotent_on_restart() {
         let temp_dir = TempDir::new().unwrap();
@@ -408,8 +405,8 @@ mod tests {
             );
         }
 
-        // Verify database is functional using SeaORM query builder
-        use sea_orm::sea_query::{Expr, Query};
+        // Verify database is functional
+        use sea_orm::sea_query::Query;
         use sea_orm::Statement;
 
         let insert = Query::insert()
@@ -423,7 +420,8 @@ mod tests {
             .to_owned();
 
         let stmt = db2.get_database_backend().build(&insert);
-        db2.execute(&stmt)
+        let exec_stmt = Statement::from_string(sea_orm::DatabaseBackend::Sqlite, stmt.sql);
+        db2.query_one(exec_stmt)
             .await
             .expect("Should be able to insert into conversations table");
     }
