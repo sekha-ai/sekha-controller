@@ -1,7 +1,9 @@
 pub mod api;
+pub mod auth;
 pub mod config;
 pub mod llm;
 pub mod models;
+pub mod orchestrator;
 pub mod services;
 pub mod storage;
 
