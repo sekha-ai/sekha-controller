@@ -83,10 +83,10 @@ mod tests {
         };
 
         let result = memory_search(
+            State(state),
             McpAuth {
                 token: "Bearer test_key_12345678901234567890123456789012".to_string(),
             },
-            State(state),
             Json(args),
         )
         .await;
@@ -180,8 +180,8 @@ pub struct MemoryStoreArgs {
 }
 
 pub async fn memory_store(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryStoreArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let id = Uuid::new_v4();
@@ -256,8 +256,8 @@ pub fn default_limit() -> Option<u32> {
 }
 
 pub async fn memory_search(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemorySearchArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let limit = args.limit.unwrap_or(10) as usize;
@@ -320,8 +320,8 @@ pub struct MemoryUpdateArgs {
 }
 
 pub async fn memory_update(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryUpdateArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     // Verify conversation exists
@@ -400,8 +400,8 @@ pub struct PruningSuggestionDto {
 }
 
 pub async fn memory_prune(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryPruneArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     use crate::orchestrator::pruning_engine::PruningEngine;
@@ -469,8 +469,8 @@ pub struct MemoryGetContextArgs {
 }
 
 pub async fn memory_get_context(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
@@ -515,8 +515,8 @@ fn default_true() -> bool {
 }
 
 pub async fn memory_export(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryExportArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     // Get conversation metadata
@@ -581,8 +581,8 @@ pub struct Stats {
 }
 
 pub async fn memory_stats(
-    _auth: McpAuth,
     State(state): State<AppState>,
+    _auth: McpAuth,
     Json(args): Json<MemoryStatsArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     match (args.folder, args.label) {
