@@ -177,9 +177,10 @@ mod tests {
         // Verify database is functional using entity operations
         use crate::storage::entities::conversations;
         use sea_orm::entity::*;
+        use uuid::Uuid;
 
         let conversation = conversations::ActiveModel {
-            id: Set("test-restart".to_string()),
+            id: Set(Uuid::new_v4()),
             label: Set("Test".to_string()),
             folder: Set("default".to_string()),
             ..Default::default()
