@@ -9,8 +9,8 @@ mod tests {
     use crate::storage::repository::ConversationRepository;
     use crate::storage::SeaOrmConversationRepository; // ✅ Fixed
     use serde_json::json;
-    use std::sync::Arc;
     use std::fs;
+    use std::sync::Arc;
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -21,21 +21,21 @@ mod tests {
 
     async fn create_test_db() -> (TempDir, sea_orm::DatabaseConnection) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        
+
         // Ensure the directory exists and is writable
         let dir_path = temp_dir.path();
         fs::create_dir_all(dir_path).expect("Failed to create parent directories");
-        
+
         // Use absolute path for SQLite
         let db_path = dir_path.join("test.db");
         let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
-        
+
         eprintln!("Creating test database at: {}", db_url);
-        
+
         let db = init_db(&db_url)
             .await
             .expect("Failed to initialize database");
-        
+
         (temp_dir, db)
     }
 
