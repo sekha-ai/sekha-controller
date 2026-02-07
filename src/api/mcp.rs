@@ -15,6 +15,7 @@ use crate::api::dto::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::bridge_client::BridgeClient;
     use crate::orchestrator::MemoryOrchestrator;
     use crate::services::embedding_service::EmbeddingService;
     use crate::services::llm_bridge_client::LlmBridgeClient;
@@ -55,9 +56,10 @@ mod tests {
         let config = Arc::new(RwLock::new(base_config.clone()));
         let repo = Arc::new(mock_repo);
 
-        // Create EmbeddingService for AppState
+        // ✅ FIXED: Create BridgeClient first, then pass to EmbeddingService
+        let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:1".to_string(),
+            bridge,
             "http://localhost:1".to_string(),
         ));
 
@@ -237,7 +239,7 @@ pub async fn memory_store(
 #[derive(Debug, Deserialize)]
 pub struct MemorySearchArgs {
     query: String,
-    #[serde(default)]
+    #serde(default)]
     filters: Option<Value>,
     #[serde(default = "default_limit")]
     limit: Option<u32>,
@@ -461,7 +463,7 @@ pub struct MemoryGetContextArgs {
 
 pub async fn memory_get_context(
     State(state): State<AppState>,
-    Json(args): Json<MemoryGetContextArgs>,
+    Json(args): Json(MemoryGetContextArgs),
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
         .repo
