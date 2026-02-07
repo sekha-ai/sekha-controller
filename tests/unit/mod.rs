@@ -25,6 +25,7 @@ mod mcp_tests;
 mod rate_limiter_test;
 mod route_test;
 mod routes_test;
-mod validation_comprehensive_test;
+// NOTE: validation module has been removed from sekha_controller crate
+// mod validation_comprehensive_test;
 
 // mod storage;
