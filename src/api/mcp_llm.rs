@@ -10,6 +10,7 @@ use tracing::{debug, error};
 
 use crate::api::mcp::McpToolResponse;
 use crate::api::routes::AppState;
+use crate::llm::bridge_client::BridgeClient;
 
 /// Request for LLM provider status
 #[derive(Debug, Deserialize, Serialize)]
@@ -192,8 +193,12 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        
+        let mut test_config = Config::default();
+        test_config.llm_bridge_url = bridge_url.clone();
+        let bridge = BridgeClient::new(&test_config).unwrap();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
@@ -203,8 +208,6 @@ mod tests {
             embedding_service.clone(),
         ));
 
-        let mut test_config = Config::default();
-        test_config.llm_bridge_url = bridge_url;
         let llm_bridge = Arc::new(LlmBridgeClient::new(&test_config).unwrap());
 
         Arc::new(AppState {
@@ -221,20 +224,10 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-        let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
-            "http://localhost:8000".to_string(),
-        ));
-
-        let repo = Arc::new(SeaOrmConversationRepository::new(
-            db,
-            chroma_client.clone(),
-            embedding_service.clone(),
-        ));
-
+        
         // Create config with v2 providers to enable routing
         let mut test_config = Config::default();
-        test_config.llm_bridge_url = bridge_url;
+        test_config.llm_bridge_url = bridge_url.clone();
         test_config.llm_providers.push(LlmProviderConfig {
             id: "test-provider".to_string(),
             provider_type: ProviderType::OpenAi,
@@ -251,6 +244,18 @@ mod tests {
                 dimension: None,
             }],
         });
+        
+        let bridge = BridgeClient::new(&test_config).unwrap();
+        let embedding_service = Arc::new(EmbeddingService::new(
+            bridge,
+            "http://localhost:8000".to_string(),
+        ));
+
+        let repo = Arc::new(SeaOrmConversationRepository::new(
+            db,
+            chroma_client.clone(),
+            embedding_service.clone(),
+        ));
 
         let llm_bridge = Arc::new(LlmBridgeClient::new(&test_config).unwrap());
 
