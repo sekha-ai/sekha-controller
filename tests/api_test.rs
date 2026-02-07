@@ -5,6 +5,7 @@ use axum::{
 use sekha_controller::{
     api::routes::{self, AppState},
     config::Config,
+    llm::bridge_client::BridgeClient,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
@@ -17,13 +18,14 @@ use tower::ServiceExt;
 async fn test_health_endpoint() {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
+    
+    let config_ref = config.read().await;
+    let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
+        bridge,
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
 
@@ -55,13 +57,14 @@ async fn test_health_endpoint() {
 async fn test_metrics_endpoint() {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
+    
+    let config_ref = config.read().await;
+    let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
+        bridge,
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
     let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
     drop(config_ref);
 
