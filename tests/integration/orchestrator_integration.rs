@@ -3,6 +3,7 @@ use sea_orm::ConnectionTrait;
 use sekha_controller::{
     config::Config,
     init_db,
+    llm::bridge_client::BridgeClient,
     models::internal::{Conversation, NewConversation, NewMessage},
     orchestrator::label_intelligence::LabelIntelligence,
     storage::repository::{ConversationRepository, SeaOrmConversationRepository},
@@ -25,8 +26,10 @@ async fn setup() -> (
 
     // Create mock services (use invalid URLs so they fail gracefully in tests)
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
+    let config = Config::default();
+    let bridge = BridgeClient::new(&config).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
+        bridge,
         "http://localhost:1".to_string(),
     ));
 
