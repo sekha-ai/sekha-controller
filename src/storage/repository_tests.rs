@@ -1,12 +1,22 @@
 #[cfg(test)]
 mod tests {
+    use crate::config::Config;
+    use crate::llm::bridge_client::BridgeClient;
     use crate::models::internal::{NewConversation, NewMessage};
+    use crate::services::embedding_service::EmbeddingService;  // ✅ Fixed
+    use crate::storage::chroma_client::ChromaClient;  // ✅ Fixed
     use crate::storage::repository::ConversationRepository;
-    use crate::{init_db, ChromaClient, EmbeddingService, SeaOrmConversationRepository};
+    use crate::storage::SeaOrmConversationRepository;  // ✅ Fixed
+    use crate::init_db;
     use serde_json::json;
     use std::sync::Arc;
     use tempfile::TempDir;
     use uuid::Uuid;
+
+    fn create_test_bridge() -> BridgeClient {
+        let config = Config::default();
+        BridgeClient::new(&config).expect("Failed to create BridgeClient")
+    }
 
     #[tokio::test]
     async fn test_create_with_messages_success() {
@@ -17,8 +27,9 @@ mod tests {
             .unwrap();
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
@@ -83,8 +94,9 @@ mod tests {
             .unwrap();
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
@@ -165,8 +177,9 @@ mod tests {
             .unwrap();
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
