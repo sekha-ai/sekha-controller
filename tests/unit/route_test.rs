@@ -19,7 +19,7 @@ use tower::ServiceExt;
 async fn test_metrics_route() {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
-    
+
     let config_ref = config.read().await;
     let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
@@ -57,7 +57,7 @@ async fn test_metrics_route() {
 async fn test_health_route() {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
-    
+
     let config_ref = config.read().await;
     let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(

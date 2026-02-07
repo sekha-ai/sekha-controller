@@ -90,7 +90,7 @@ async fn create_test_processor() -> (ImportProcessor, Arc<SeaOrmConversationRepo
     let db = init_db("sqlite::memory:").await.unwrap();
     let config = Config::default();
     let bridge = BridgeClient::new(&config).expect("Failed to create BridgeClient");
-    
+
     // Use mock services to avoid external dependencies
     let chroma_client = Arc::new(sekha_controller::storage::chroma_client::ChromaClient::new(
         "http://localhost:1".to_string(), // Invalid URL = graceful degradation

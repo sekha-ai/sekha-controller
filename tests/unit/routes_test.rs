@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 async fn test_router_creation() {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
-    
+
     let config_ref = config.read().await;
     let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
