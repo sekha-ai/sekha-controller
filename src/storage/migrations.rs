@@ -216,8 +216,17 @@ mod m20241211_003_create_semantic_tags {
                     Table::create()
                         .table(SemanticTags::Table)
                         .if_not_exists()
-                        .col(ColumnDef::new(SemanticTags::Id).text().not_null().primary_key())
-                        .col(ColumnDef::new(SemanticTags::ConversationId).text().not_null())
+                        .col(
+                            ColumnDef::new(SemanticTags::Id)
+                                .text()
+                                .not_null()
+                                .primary_key(),
+                        )
+                        .col(
+                            ColumnDef::new(SemanticTags::ConversationId)
+                                .text()
+                                .not_null(),
+                        )
                         .col(ColumnDef::new(SemanticTags::Tag).text().not_null())
                         .col(ColumnDef::new(SemanticTags::Confidence).float().not_null())
                         .col(ColumnDef::new(SemanticTags::ExtractedAt).text().not_null())
@@ -306,7 +315,11 @@ mod m20241211_004_create_hierarchical_summaries {
                                 .text()
                                 .not_null(),
                         )
-                        .col(ColumnDef::new(HierarchicalSummaries::Level).text().not_null())
+                        .col(
+                            ColumnDef::new(HierarchicalSummaries::Level)
+                                .text()
+                                .not_null(),
+                        )
                         .col(
                             ColumnDef::new(HierarchicalSummaries::SummaryText)
                                 .text()
@@ -317,7 +330,11 @@ mod m20241211_004_create_hierarchical_summaries {
                                 .text()
                                 .not_null(),
                         )
-                        .col(ColumnDef::new(HierarchicalSummaries::GeneratedAt).text().not_null())
+                        .col(
+                            ColumnDef::new(HierarchicalSummaries::GeneratedAt)
+                                .text()
+                                .not_null(),
+                        )
                         .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).text())
                         .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer())
                         .foreign_key(
@@ -400,15 +417,31 @@ mod m20241211_005_create_knowledge_graph_edges {
                     Table::create()
                         .table(KnowledgeGraphEdges::Table)
                         .if_not_exists()
-                        .col(ColumnDef::new(KnowledgeGraphEdges::SubjectId).text().not_null())
-                        .col(ColumnDef::new(KnowledgeGraphEdges::Predicate).text().not_null())
-                        .col(ColumnDef::new(KnowledgeGraphEdges::ObjectId).text().not_null())
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::SubjectId)
+                                .text()
+                                .not_null(),
+                        )
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::Predicate)
+                                .text()
+                                .not_null(),
+                        )
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::ObjectId)
+                                .text()
+                                .not_null(),
+                        )
                         .col(
                             ColumnDef::new(KnowledgeGraphEdges::ConversationId)
                                 .text()
                                 .not_null(),
                         )
-                        .col(ColumnDef::new(KnowledgeGraphEdges::ExtractedAt).text().not_null())
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::ExtractedAt)
+                                .text()
+                                .not_null(),
+                        )
                         .primary_key(
                             Index::create()
                                 .col(KnowledgeGraphEdges::SubjectId)
