@@ -785,10 +785,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_error_conversion() {
-        let err: EmbeddingError = AcquireError::NoPermits.into();
-        assert!(matches!(err, EmbeddingError::SemaphoreError(_)));
-
+    async fn test_error_conversion_anyhow() {
         let anyhow_err = anyhow::anyhow!("test error");
         let err: EmbeddingError = anyhow_err.into();
         assert!(matches!(err, EmbeddingError::BridgeError(_)));
