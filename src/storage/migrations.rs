@@ -40,18 +40,8 @@ mod m20241211_001_create_conversations {
                         )
                         .col(ColumnDef::new(Conversations::Label).string().not_null())
                         .col(ColumnDef::new(Conversations::Folder).string().not_null())
-                        .col(
-                            ColumnDef::new(Conversations::CreatedAt)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
-                        .col(
-                            ColumnDef::new(Conversations::UpdatedAt)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
+                        .col(ColumnDef::new(Conversations::CreatedAt).string().not_null())
+                        .col(ColumnDef::new(Conversations::UpdatedAt).string().not_null())
                         .col(
                             ColumnDef::new(Conversations::Status)
                                 .string()
@@ -143,21 +133,11 @@ mod m20241211_002_create_messages {
                     Table::create()
                         .table(Messages::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(Messages::Id)
-                                .string()
-                                .not_null()
-                                .primary_key(),
-                        )
+                        .col(ColumnDef::new(Messages::Id).string().not_null().primary_key())
                         .col(ColumnDef::new(Messages::ConversationId).string().not_null())
                         .col(ColumnDef::new(Messages::Role).string().not_null())
                         .col(ColumnDef::new(Messages::Content).string().not_null())
-                        .col(
-                            ColumnDef::new(Messages::Timestamp)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
+                        .col(ColumnDef::new(Messages::Timestamp).string().not_null())
                         .col(ColumnDef::new(Messages::EmbeddingId).string())
                         .col(ColumnDef::new(Messages::Metadata).string())
                         .foreign_key(
@@ -236,25 +216,11 @@ mod m20241211_003_create_semantic_tags {
                     Table::create()
                         .table(SemanticTags::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(SemanticTags::Id)
-                                .string()
-                                .not_null()
-                                .primary_key(),
-                        )
-                        .col(
-                            ColumnDef::new(SemanticTags::ConversationId)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(SemanticTags::Id).string().not_null().primary_key())
+                        .col(ColumnDef::new(SemanticTags::ConversationId).string().not_null())
                         .col(ColumnDef::new(SemanticTags::Tag).string().not_null())
                         .col(ColumnDef::new(SemanticTags::Confidence).float().not_null())
-                        .col(
-                            ColumnDef::new(SemanticTags::ExtractedAt)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
+                        .col(ColumnDef::new(SemanticTags::ExtractedAt).string().not_null())
                         .foreign_key(
                             ForeignKey::create()
                                 .name("fk_semantic_tags_conversation")
@@ -340,11 +306,7 @@ mod m20241211_004_create_hierarchical_summaries {
                                 .string()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(HierarchicalSummaries::Level)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(HierarchicalSummaries::Level).string().not_null())
                         .col(
                             ColumnDef::new(HierarchicalSummaries::SummaryText)
                                 .string()
@@ -355,12 +317,7 @@ mod m20241211_004_create_hierarchical_summaries {
                                 .string()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(HierarchicalSummaries::GeneratedAt)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
+                        .col(ColumnDef::new(HierarchicalSummaries::GeneratedAt).string().not_null())
                         .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).string())
                         .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer())
                         .foreign_key(
@@ -443,32 +400,15 @@ mod m20241211_005_create_knowledge_graph_edges {
                     Table::create()
                         .table(KnowledgeGraphEdges::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::SubjectId)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::Predicate)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::ObjectId)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(KnowledgeGraphEdges::SubjectId).string().not_null())
+                        .col(ColumnDef::new(KnowledgeGraphEdges::Predicate).string().not_null())
+                        .col(ColumnDef::new(KnowledgeGraphEdges::ObjectId).string().not_null())
                         .col(
                             ColumnDef::new(KnowledgeGraphEdges::ConversationId)
                                 .string()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::ExtractedAt)
-                                .string()
-                                .not_null()
-                                .default("CURRENT_TIMESTAMP"),
-                        )
+                        .col(ColumnDef::new(KnowledgeGraphEdges::ExtractedAt).string().not_null())
                         .primary_key(
                             Index::create()
                                 .col(KnowledgeGraphEdges::SubjectId)

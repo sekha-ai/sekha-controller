@@ -47,19 +47,22 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
     }
 
-    // Run SeaORM migrations with proper error handling
+    // Run SeaORM migrations with specific error handling
     tracing::info!("Running SeaORM migrations...");
-
+    
     match Migrator::up(&db, None).await {
         Ok(_) => {
             tracing::info!("All migrations applied successfully");
         }
         Err(e) => {
             let err_str = e.to_string();
-            // If it's just a duplicate migration record (already migrated), that's OK
-            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") {
+            // ONLY ignore duplicate migration version errors (idempotent check)
+            // All other errors (like table creation failures) should propagate
+            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") 
+                || err_str.contains("Duplicate entry") {
                 tracing::info!("Migrations already applied (idempotent check passed)");
             } else {
+                tracing::error!("Migration failed: {}", err_str);
                 return Err(DbErr::Custom(format!("Migration failed: {}", e)));
             }
         }
@@ -190,10 +193,13 @@ mod tests {
         use sea_orm::entity::*;
         use uuid::Uuid;
 
+        let now = chrono::Utc::now().naive_utc();
         let conversation = conversations::ActiveModel {
             id: Set(Uuid::new_v4()),
             label: Set("Test".to_string()),
             folder: Set("default".to_string()),
+            created_at: Set(now),
+            updated_at: Set(now),
             ..Default::default()
         };
 
