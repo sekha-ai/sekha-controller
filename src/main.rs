@@ -34,23 +34,13 @@ async fn main() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Failed to connect to database"))?;
     tracing::info!("✅ Database connected");
 
-    // Get Ollama URL from config
-    let ollama_url = config
-        .ollama_url
-        .clone()
-        .unwrap_or_else(|| "http://localhost:11434".to_string());
-
     // Initialize Chroma client
     let chroma_url =
         std::env::var("CHROMA_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
     let chroma_client = Arc::new(ChromaClient::new(chroma_url.clone()));
     tracing::info!("✅ Chroma client initialized: {}", chroma_url);
 
-    // Initialize embedding service
-    let embedding_service = Arc::new(EmbeddingService::new(ollama_url.clone(), chroma_url));
-    tracing::info!("✅ Embedding service initialized");
-
-    // Initialize LLM bridge client
+    // Initialize LLM bridge client (must be created before EmbeddingService)
     let llm_bridge = Arc::new(LlmBridgeClient::new(&config)?);
     tracing::info!("✅ LLM Bridge client initialized");
 
@@ -64,6 +54,12 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    // Initialize embedding service with BridgeClient from llm_bridge
+    // Note: We need to create a new BridgeClient since Arc<LlmBridgeClient> doesn't expose bridge
+    let bridge_client = crate::llm::bridge_client::BridgeClient::new(&config)?;
+    let embedding_service = Arc::new(EmbeddingService::new(bridge_client, chroma_url));
+    tracing::info!("✅ Embedding service initialized");
 
     // Create repository
     let repository = Arc::new(SeaOrmConversationRepository::new(
