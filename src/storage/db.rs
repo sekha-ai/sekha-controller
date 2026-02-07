@@ -4,7 +4,8 @@ use sea_orm_migration::MigratorTrait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::migrations::Migrator;
+// Use the migration crate from the migration/ directory
+use migration::Migrator;
 
 static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
@@ -40,12 +41,6 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     } else {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
-
-    // Enable WAL mode - SQLite-specific configuration pragma
-    match db.execute_unprepared("PRAGMA journal_mode=WAL;").await {
-        Ok(_) => tracing::info!("WAL mode enabled for database"),
-        Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
-    }
 
     // Run SeaORM migrations with idempotency check
     tracing::info!("Running SeaORM migrations...");
