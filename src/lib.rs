@@ -1,42 +1,28 @@
-//! Sekha Controller - AI Memory System
-
 pub mod api;
-pub mod auth;
 pub mod config;
 pub mod llm;
 pub mod models;
 pub mod orchestrator;
 pub mod services;
 pub mod storage;
-pub mod validation;
 
-// Re-export for convenience
-pub use services::embedding_service::EmbeddingService;
-pub use services::llm_bridge_client::LlmBridgeClient;
-
-// LLM module exports
-pub use llm::{BridgeClient, ChatMessage, ModelInfo, RoutingResponse};
-
-// MCP tool support
-pub use api::mcp::{create_mcp_router, McpToolResponse};
-
-// Validation exports
-pub use validation::{strip_images, validate_no_images, ValidationError};
-
-// Re-export main types for convenience
-pub use crate::api::dto::*;
-pub use crate::api::routes::{create_router, AppState};
-pub use crate::config::Config;
-pub use crate::models::internal::{Conversation, Message, NewConversation, NewMessage};
-pub use crate::storage::chroma_client::ChromaClient;
-pub use crate::storage::db::init_db;
-pub use crate::storage::repository::{ConversationRepository, SeaOrmConversationRepository};
-
-// Export mock for integration tests (via test-utils feature)
 #[cfg(any(test, feature = "test-utils"))]
-pub use crate::storage::repository::MockConversationRepository;
+pub mod test_helpers;
 
-#[cfg(test)]
-mod tests {
-    // Unit tests can go here if needed
+use sea_orm::{Database, DatabaseConnection, DbErr};
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
+
+static DB: OnceLock<Mutex<Option<DatabaseConnection>>> = OnceLock::new();
+
+pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
+    Database::connect(database_url).await
+}
+
+pub fn set_db(db: DatabaseConnection) {
+    let _ = DB.set(Mutex::new(Some(db)));
+}
+
+pub async fn get_db() -> Option<DatabaseConnection> {
+    DB.get()?.lock().await.clone()
 }
