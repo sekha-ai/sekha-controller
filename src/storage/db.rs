@@ -70,7 +70,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         sea_orm::DatabaseBackend::Sqlite,
         "PRAGMA journal_mode=WAL".to_string(),
     );
-    db.execute(wal_stmt)
+    db.execute(&wal_stmt)
         .await
         .map_err(|e| DbErr::Custom(format!("Failed to enable WAL mode: {}", e)))?;
 
@@ -151,7 +151,7 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
         .to_owned();
 
     let stmt = db.get_database_backend().build(&create_table);
-    db.execute(stmt).await?;
+    db.execute(&stmt).await?;
 
     tracing::debug!("Migrations tracking table ready");
     Ok(())
@@ -213,7 +213,7 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
             sea_orm::DatabaseBackend::Sqlite,
             statement.trim().to_string(),
         );
-        db.execute(stmt).await.map_err(|e| {
+        db.execute(&stmt).await.map_err(|e| {
             DbErr::Custom(format!(
                 "Failed to execute migration {} ({}): {}",
                 idx + 1,
@@ -241,7 +241,7 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
         *sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO");
     }
 
-    db.execute(stmt).await.map_err(|e| {
+    db.execute(&stmt).await.map_err(|e| {
         DbErr::Custom(format!(
             "Failed to record migration {} ({}): {}",
             idx + 1,
@@ -423,7 +423,7 @@ mod tests {
             .to_owned();
 
         let stmt = db2.get_database_backend().build(&insert);
-        db2.execute(stmt)
+        db2.execute(&stmt)
             .await
             .expect("Should be able to insert into conversations table");
     }
