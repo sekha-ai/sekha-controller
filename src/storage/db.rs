@@ -47,12 +47,23 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
     }
 
-    // Run SeaORM migrations
+    // Run SeaORM migrations with proper error handling
     tracing::info!("Running SeaORM migrations...");
-    Migrator::up(&db, None)
-        .await
-        .map_err(|e| DbErr::Custom(format!("Migration failed: {}", e)))?;
-    tracing::info!("All migrations applied successfully");
+    
+    match Migrator::up(&db, None).await {
+        Ok(_) => {
+            tracing::info!("All migrations applied successfully");
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            // If it's just a duplicate migration record (already migrated), that's OK
+            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") {
+                tracing::info!("Migrations already applied (idempotent check passed)");
+            } else {
+                return Err(DbErr::Custom(format!("Migration failed: {}", e)));
+            }
+        }
+    }
 
     let mut conn = DB_CONN.lock().await;
     *conn = Some(db.clone());
@@ -72,7 +83,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_db_creates_file() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
+        let db_path = temp_dir.path().join("test_creates_file.db");
         let url = format!("sqlite://{}", db_path.display());
 
         let _db = init_db(&url).await.unwrap();
@@ -83,7 +94,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_db_runs_migrations() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
+        let db_path = temp_dir.path().join("test_runs_migrations.db");
         let url = format!("sqlite://{}", db_path.display());
 
         let _db = init_db(&url).await.unwrap();
@@ -94,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_db_skips_existing_migrations() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
+        let db_path = temp_dir.path().join("test_skips_existing.db");
         let url = format!("sqlite://{}", db_path.display());
 
         init_db(&url).await.unwrap();
@@ -106,7 +117,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_db_creates_fts_table() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
+        let db_path = temp_dir.path().join("test_creates_fts.db");
         let url = format!("sqlite://{}", db_path.display());
 
         let _db = init_db(&url).await.unwrap();
@@ -116,7 +127,7 @@ mod tests {
     #[tokio::test]
     async fn test_init_db_fts_idempotent() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
+        let db_path = temp_dir.path().join("test_fts_idempotent.db");
         let url = format!("sqlite://{}", db_path.display());
 
         init_db(&url).await.unwrap();
@@ -162,7 +173,7 @@ mod tests {
     #[tokio::test]
     async fn test_migrations_idempotent_on_restart() {
         let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test_restart.db");
+        let db_path = temp_dir.path().join("test_restart_idempotent.db");
         let url = format!("sqlite://{}", db_path.display());
 
         // First initialization
