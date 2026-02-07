@@ -193,7 +193,7 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-        
+
         let mut test_config = Config::default();
         test_config.llm_bridge_url = bridge_url.clone();
         let bridge = BridgeClient::new(&test_config).unwrap();
@@ -224,7 +224,7 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-        
+
         // Create config with v2 providers to enable routing
         let mut test_config = Config::default();
         test_config.llm_bridge_url = bridge_url.clone();
@@ -244,7 +244,7 @@ mod tests {
                 dimension: None,
             }],
         });
-        
+
         let bridge = BridgeClient::new(&test_config).unwrap();
         let embedding_service = Arc::new(EmbeddingService::new(
             bridge,

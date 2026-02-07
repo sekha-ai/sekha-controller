@@ -17,14 +17,14 @@ async fn create_llm_test_state() -> AppState {
     let base_config = Config::default();
     let config = Arc::new(RwLock::new(base_config.clone()));
     let mock_repo = Arc::new(MockConversationRepository::new());
-    
+
     // Create BridgeClient first, then pass to EmbeddingService
     let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
         bridge,
         "http://localhost:8000".to_string(),
     ));
-    
+
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
     let llm_bridge = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
 
