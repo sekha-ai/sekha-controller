@@ -3,8 +3,7 @@ use mockall::automock;
 
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    prelude::*, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
 };
 use serde_json::json;
 use serde_json::Value as JsonValue;

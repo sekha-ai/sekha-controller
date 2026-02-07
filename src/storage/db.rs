@@ -1,7 +1,5 @@
 use once_cell::sync::Lazy;
-use sea_orm::{
-    ConnectionTrait, Database, DatabaseConnection, DbErr,
-};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -65,7 +63,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Enable WAL mode using SeaORM's query builder
     use sea_orm::sea_query::{Expr, Query};
     use sea_orm::Statement;
-    
+
     // WAL mode pragma - this is a SQLite-specific configuration pragma, not data manipulation
     // SeaORM doesn't provide a builder for PRAGMA statements as they're database-specific config
     let wal_stmt = Statement::from_string(
@@ -161,7 +159,7 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
 
 /// Get list of already applied migration versions using SeaORM query builder
 async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, DbErr> {
-    use sea_orm::sea_query::{Query, Expr};
+    use sea_orm::sea_query::{Expr, Query};
     use sea_orm::{FromQueryResult, Statement};
 
     #[derive(Debug, FromQueryResult)]
@@ -173,7 +171,10 @@ async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, 
     let query = Query::select()
         .column(sea_orm::sea_query::Alias::new("version"))
         .from(sea_orm::sea_query::Alias::new("seaql_migrations"))
-        .order_by(sea_orm::sea_query::Alias::new("version"), sea_orm::sea_query::Order::Asc)
+        .order_by(
+            sea_orm::sea_query::Alias::new("version"),
+            sea_orm::sea_query::Order::Asc,
+        )
         .to_owned();
 
     let stmt = db.get_database_backend().build(&query);
@@ -223,8 +224,8 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
     }
 
     // Record that this migration was applied using SeaORM query builder
-    use sea_orm::sea_query::{Query, Expr};
-    
+    use sea_orm::sea_query::{Expr, Query};
+
     let insert = Query::insert()
         .into_table(sea_orm::sea_query::Alias::new("seaql_migrations"))
         .columns(vec![sea_orm::sea_query::Alias::new("version")])
@@ -234,7 +235,7 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
     // Use OR IGNORE for idempotency
     let backend = db.get_database_backend();
     let mut stmt = backend.build(&insert);
-    
+
     // Modify the SQL to add OR IGNORE for SQLite
     if let Statement { sql, .. } = &mut stmt {
         *sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO");
@@ -408,9 +409,9 @@ mod tests {
         }
 
         // Verify database is functional using SeaORM query builder
-        use sea_orm::sea_query::{Query, Expr};
+        use sea_orm::sea_query::{Expr, Query};
         use sea_orm::Statement;
-        
+
         let insert = Query::insert()
             .into_table(sea_orm::sea_query::Alias::new("conversations"))
             .columns(vec![
@@ -418,11 +419,7 @@ mod tests {
                 sea_orm::sea_query::Alias::new("label"),
                 sea_orm::sea_query::Alias::new("folder"),
             ])
-            .values_panic(vec![
-                "test-restart".into(),
-                "Test".into(),
-                "default".into(),
-            ])
+            .values_panic(vec!["test-restart".into(), "Test".into(), "default".into()])
             .to_owned();
 
         let stmt = db2.get_database_backend().build(&insert);
