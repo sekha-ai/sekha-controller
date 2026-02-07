@@ -304,6 +304,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                         "conversation_id": conv_id.to_string(),
                         "timestamp": now,
                     }),
+                    None, // preferred_model
                 )
                 .await
             {
@@ -686,7 +687,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         // FIX: Graceful degradation when Chroma is unavailable (tests)
         let chroma_results = match self
             .embedding_service
-            .search_messages(query, limit, filters)
+            .search_messages(query, limit, filters, None) // Add None for preferred_model
             .await
         {
             Ok(results) => results,
@@ -880,6 +881,7 @@ impl SeaOrmConversationRepository {
                     "conversation_id": conversation_id.to_string(),
                     "timestamp": now,
                 }),
+                None, // preferred_model
             )
             .await
         {
