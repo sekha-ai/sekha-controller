@@ -21,15 +21,72 @@ use crate::storage::entities::{conversations, messages};
 use crate::config::Config;
 #[cfg(test)]
 use crate::llm::bridge_client::BridgeClient;
+#[cfg(test)]
+use std::fs;
+#[cfg(test)]
+use tempfile::TempDir;
+
+#[cfg(test)]
+async fn run_migrations_for_tests(db: &DatabaseConnection) -> Result<(), DbErr> {
+    // Apply all migrations from the migrations directory
+    // For SQLite, we'll run them manually in order
+    let migrations = vec![
+        include_str!("../../migrations/001_create_conversations.sql"),
+        include_str!("../../migrations/002_create_messages.sql"),
+        include_str!("../../migrations/003_add_embedding_id.sql"),
+        include_str!("../../migrations/004_add_metadata.sql"),
+        include_str!("../../migrations/005_add_importance.sql"),
+        include_str!("../../migrations/006_add_word_count.sql"),
+        include_str!("../../migrations/007_create_fts.sql"),
+    ];
+
+    for (idx, migration_sql) in migrations.iter().enumerate() {
+        eprintln!("Running migration {}...", idx + 1);
+        
+        // Split by semicolon and execute each statement
+        for statement in migration_sql.split(';').filter(|s| !s.trim().is_empty()) {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                statement.trim().to_string(),
+            ))
+            .await?;
+        }
+    }
+
+    eprintln!("All migrations applied successfully");
+    Ok(())
+}
+
+#[cfg(test)]
+async fn create_test_db() -> (TempDir, DatabaseConnection) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    
+    // Ensure the directory exists and is writable
+    let dir_path = temp_dir.path();
+    fs::create_dir_all(dir_path).expect("Failed to create parent directories");
+    
+    // Use absolute path for SQLite
+    let db_path = dir_path.join("test.db");
+    let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+    
+    eprintln!("Creating test database at: {}", db_url);
+    
+    let db = init_db(&db_url)
+        .await
+        .expect("Failed to initialize database");
+    
+    // Run migrations
+    run_migrations_for_tests(&db)
+        .await
+        .expect("Failed to run migrations");
+    
+    (temp_dir, db)
+}
 
 #[tokio::test]
 async fn test_create_message_with_fts_indexing() {
-    // Setup: Create in-memory DB and repository with graceful degradation
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("test.db");
-    let db = init_db(&format!("sqlite://{}", db_path.display()))
-        .await
-        .unwrap();
+    // Setup: Create test DB with migrations
+    let (_temp_dir, db) = create_test_db().await;
 
     // Use invalid URLs so embedding fails gracefully (creates message but no embedding)
     let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
