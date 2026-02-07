@@ -42,7 +42,7 @@ async fn run_migrations_for_tests(db: &DatabaseConnection) -> Result<(), DbErr> 
 
     for (idx, migration_sql) in migrations.iter().enumerate() {
         eprintln!("Running migration {}...", idx + 1);
-        
+
         // Split by semicolon and execute each statement
         for statement in migration_sql.split(';').filter(|s| !s.trim().is_empty()) {
             db.execute(Statement::from_string(
@@ -60,26 +60,26 @@ async fn run_migrations_for_tests(db: &DatabaseConnection) -> Result<(), DbErr> 
 #[cfg(test)]
 async fn create_test_db() -> (TempDir, DatabaseConnection) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    
+
     // Ensure the directory exists and is writable
     let dir_path = temp_dir.path();
     fs::create_dir_all(dir_path).expect("Failed to create parent directories");
-    
+
     // Use absolute path for SQLite
     let db_path = dir_path.join("test.db");
     let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
-    
+
     eprintln!("Creating test database at: {}", db_url);
-    
+
     let db = init_db(&db_url)
         .await
         .expect("Failed to initialize database");
-    
+
     // Run migrations
     run_migrations_for_tests(&db)
         .await
         .expect("Failed to run migrations");
-    
+
     (temp_dir, db)
 }
 
