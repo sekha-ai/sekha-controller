@@ -1,5 +1,7 @@
 use crate::api::routes::AppState;
+use crate::auth::mcp_auth_middleware::mcp_auth_middleware;
 use crate::config::Config;
+use axum::middleware;
 use axum::routing::post;
 use axum::{extract::State, http::StatusCode};
 use axum::{Json, Router};
@@ -82,11 +84,7 @@ mod tests {
             offset: None,
         };
 
-        let result = memory_search(
-            State(state),
-            Json(args),
-        )
-        .await;
+        let result = memory_search(State(state), Json(args)).await;
 
         // Verify success
         assert!(result.is_ok());
@@ -675,7 +673,7 @@ pub async fn memory_stats(
     }
 }
 
-// ==================== ROUTER & LEGACY COMPATIBILITY ====================
+// ==================== ROUTER & AUTH MIDDLEWARE ====================
 
 pub fn create_mcp_router(state: AppState) -> Router {
     Router::new()
@@ -686,5 +684,10 @@ pub fn create_mcp_router(state: AppState) -> Router {
         .route("/mcp/tools/memory_prune", post(memory_prune))
         .route("/mcp/tools/memory_export", post(memory_export))
         .route("/mcp/tools/memory_stats", post(memory_stats))
+        // Apply MCP auth middleware to all routes
+        .layer(middleware::from_fn_with_state(
+            state.config.clone(),
+            mcp_auth_middleware,
+        ))
         .with_state(state)
 }
