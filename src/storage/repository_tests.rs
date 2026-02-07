@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
     use crate::config::Config;
+    use crate::init_db;
     use crate::llm::bridge_client::BridgeClient;
     use crate::models::internal::{NewConversation, NewMessage};
-    use crate::services::embedding_service::EmbeddingService;  // ✅ Fixed
-    use crate::storage::chroma_client::ChromaClient;  // ✅ Fixed
+    use crate::services::embedding_service::EmbeddingService; // ✅ Fixed
+    use crate::storage::chroma_client::ChromaClient; // ✅ Fixed
     use crate::storage::repository::ConversationRepository;
-    use crate::storage::SeaOrmConversationRepository;  // ✅ Fixed
-    use crate::init_db;
+    use crate::storage::SeaOrmConversationRepository; // ✅ Fixed
     use serde_json::json;
     use std::sync::Arc;
     use tempfile::TempDir;

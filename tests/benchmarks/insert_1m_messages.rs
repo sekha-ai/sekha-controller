@@ -4,7 +4,7 @@ use sekha_controller::llm::bridge_client::BridgeClient;
 use sekha_controller::models::internal::{NewConversation, NewMessage};
 use sekha_controller::services::embedding_service::EmbeddingService;
 use sekha_controller::storage::chroma_client::ChromaClient;
-use sekha_controller::storage::repository::ConversationRepository;  // ✅ Fixed import
+use sekha_controller::storage::repository::ConversationRepository; // ✅ Fixed import
 use sekha_controller::storage::{init_db, SeaOrmConversationRepository};
 use std::sync::Arc;
 use tokio::time::Instant;
@@ -15,17 +15,17 @@ async fn main() {
 
     // Load config for BridgeClient
     let config = Config::load().expect("Failed to load config");
-    
+
     let db = init_db("sqlite://benchmark.db").await.unwrap();
     let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     // ✅ Create BridgeClient and pass to EmbeddingService
     let bridge_client = BridgeClient::new(&config).expect("Failed to create BridgeClient");
     let embedding = Arc::new(EmbeddingService::new(
         bridge_client,
         "http://localhost:8000".to_string(),
     ));
-    
+
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let start = Instant::now();
