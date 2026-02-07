@@ -1,6 +1,7 @@
 use sekha_controller::{
     api::routes::AppState,
     config::Config,
+    llm::bridge_client::BridgeClient,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{chroma_client::ChromaClient, init_db, repository::SeaOrmConversationRepository},
 };
@@ -39,8 +40,12 @@ pub async fn create_test_services() -> AppState {
         .await
         .expect("Failed to initialize test database");
 
+    let config_ref = config.read().await;
+    let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
+    drop(config_ref);
+
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
+        bridge.clone(),
         "http://localhost:8000".to_string(),
     ));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
