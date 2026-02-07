@@ -19,7 +19,7 @@ async fn setup_test_state() -> AppState {
     let db = init_db("sqlite::memory:").await.unwrap();
     let config = Arc::new(RwLock::new(Config::default()));
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    
+
     let config_for_bridge = Config::default();
     let bridge = BridgeClient::new(&config_for_bridge).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
