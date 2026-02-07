@@ -19,7 +19,7 @@ impl MigrationTrait for Migration {
                 END;
             "#.to_owned(),
         );
-        db.execute(&stmt).await?;
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }
@@ -30,7 +30,7 @@ impl MigrationTrait for Migration {
             manager.get_database_backend(),
             "DROP TRIGGER IF EXISTS update_conversations_updated_at".to_owned(),
         );
-        db.execute(&stmt).await?;
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }

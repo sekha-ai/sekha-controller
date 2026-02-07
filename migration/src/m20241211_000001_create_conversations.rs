@@ -54,7 +54,7 @@ impl MigrationTrait for Migration {
             manager.get_database_backend(),
             "PRAGMA journal_mode=WAL;".to_owned(),
         );
-        db.execute(&stmt).await?;
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }
