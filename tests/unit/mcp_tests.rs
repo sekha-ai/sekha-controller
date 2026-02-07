@@ -6,6 +6,7 @@ use sekha_controller::api::mcp::create_mcp_router;
 use sekha_controller::{
     api::routes::AppState,
     config::Config,
+    llm::bridge_client::BridgeClient,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
@@ -16,6 +17,33 @@ use tokio::sync::RwLock;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+/// Helper function to create test state with proper dependency initialization
+async fn create_test_state(mock_repo: MockConversationRepository) -> AppState {
+    let base_config = Config::default();
+    let config = Arc::new(RwLock::new(base_config.clone()));
+    
+    // Create BridgeClient first, then pass to EmbeddingService
+    let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
+    let embedding_service = Arc::new(EmbeddingService::new(
+        bridge,
+        "http://localhost:8000".to_string(),
+    ));
+    
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
+    let repo = Arc::new(mock_repo);
+    let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge.clone()));
+
+    AppState {
+        config,
+        repo,
+        orchestrator,
+        embedding_service,
+        chroma_client,
+        llm_client: llm_bridge,
+    }
+}
+
 #[tokio::test]
 async fn test_memory_store_creates_conversation() {
     let mut mock_repo = MockConversationRepository::new();
@@ -25,31 +53,8 @@ async fn test_memory_store_creates_conversation() {
         .expect_create_with_messages()
         .returning(move |_| Ok(test_id));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -109,31 +114,8 @@ async fn test_memory_search_returns_results() {
         .expect_semantic_search()
         .returning(move |_, _, _| Ok(test_results.clone()));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -193,31 +175,8 @@ async fn test_memory_update_label_and_folder() {
 
     mock_repo.expect_update_label().returning(|_, _, _| Ok(()));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -274,31 +233,8 @@ async fn test_memory_get_context_returns_conversation() {
         .expect_find_by_id()
         .returning(move |_| Ok(Some(conv.clone())));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -359,31 +295,8 @@ async fn test_memory_export_with_messages() {
         .expect_get_message_list()
         .returning(|_| Ok(vec![json!({"role": "user", "content": "test"})]));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -454,31 +367,8 @@ async fn test_memory_stats_by_folder() {
         .expect_find_by_folder()
         .returning(move |_, _, _| Ok(convs.clone()));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
@@ -538,31 +428,8 @@ async fn test_memory_stats_global() {
         .expect_find_with_filters()
         .returning(move |_, _, _| Ok((convs.clone(), 1)));
 
-    let config = Arc::new(RwLock::new(Config::default()));
-    let api_key = config.read().await.mcp_api_key.clone();
-
-    let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-
-    let config_ref = config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = AppState {
-        config,
-        repo: Arc::new(mock_repo),
-        orchestrator: Arc::new(MemoryOrchestrator::new(
-            Arc::new(MockConversationRepository::new()),
-            llm_bridge.clone(),
-        )),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state(mock_repo).await;
+    let api_key = state.config.read().await.mcp_api_key.clone();
     let app = create_mcp_router(state);
 
     let response = app
