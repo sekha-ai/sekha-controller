@@ -49,7 +49,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     // Run SeaORM migrations with proper error handling
     tracing::info!("Running SeaORM migrations...");
-    
+
     match Migrator::up(&db, None).await {
         Ok(_) => {
             tracing::info!("All migrations applied successfully");
