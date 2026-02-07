@@ -1,6 +1,7 @@
 pub mod chroma_client;
 pub mod db;
 pub mod entities;
+pub mod migrations;
 pub mod repository;
 
 pub use chroma_client::{ChromaClient, ChromaError};
