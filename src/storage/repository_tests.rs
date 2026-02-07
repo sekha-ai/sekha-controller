@@ -4,14 +4,14 @@ mod tests {
     use crate::init_db;
     use crate::llm::bridge_client::BridgeClient;
     use crate::models::internal::{NewConversation, NewMessage};
-    use crate::services::embedding_service::EmbeddingService; // ✅ Fixed
-    use crate::storage::chroma_client::ChromaClient; // ✅ Fixed
+    use crate::services::embedding_service::EmbeddingService;
+    use crate::storage::chroma_client::ChromaClient;
     use crate::storage::repository::ConversationRepository;
-    use crate::storage::SeaOrmConversationRepository; // ✅ Fixed
-    use sea_orm::{DatabaseBackend, DatabaseConnection, DbErr, Statement};
+    use crate::storage::SeaOrmConversationRepository;
+    use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, Statement};
     use serde_json::json;
-    use std::fs;
     use std::sync::Arc;
+    use std::fs;
     use tempfile::TempDir;
     use uuid::Uuid;
 
@@ -25,18 +25,18 @@ mod tests {
         let migrations = vec![
             include_str!("../../migrations/001_create_conversations.sql"),
             include_str!("../../migrations/002_create_messages.sql"),
-            include_str!("../../migrations/003_add_embedding_id.sql"),
-            include_str!("../../migrations/004_add_metadata.sql"),
-            include_str!("../../migrations/005_add_importance.sql"),
-            include_str!("../../migrations/006_add_word_count.sql"),
+            include_str!("../../migrations/003_create_semantic_tags.sql"),
+            include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
+            include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
+            include_str!("../../migrations/006_add_updated_at_triggers.sql"),
             include_str!("../../migrations/007_create_fts.sql"),
         ];
 
         for (idx, migration_sql) in migrations.iter().enumerate() {
             eprintln!("Running migration {}...", idx + 1);
-
+            
             // Split by semicolon and execute each statement
-            for statement in migration_sql.split(';').filter(|s| !s.trim().is_empty()) {
+            for statement in migration_sql.split(';').filter(|s: &&str| !s.trim().is_empty()) {
                 db.execute(Statement::from_string(
                     DatabaseBackend::Sqlite,
                     statement.trim().to_string(),
@@ -51,26 +51,26 @@ mod tests {
 
     async fn create_test_db() -> (TempDir, sea_orm::DatabaseConnection) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-
+        
         // Ensure the directory exists and is writable
         let dir_path = temp_dir.path();
         fs::create_dir_all(dir_path).expect("Failed to create parent directories");
-
+        
         // Use absolute path for SQLite
         let db_path = dir_path.join("test.db");
         let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
-
+        
         eprintln!("Creating test database at: {}", db_url);
-
+        
         let db = init_db(&db_url)
             .await
             .expect("Failed to initialize database");
-
+        
         // Run migrations
         run_migrations_for_tests(&db)
             .await
             .expect("Failed to run migrations");
-
+        
         (temp_dir, db)
     }
 
