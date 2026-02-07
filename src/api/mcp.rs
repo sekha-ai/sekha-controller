@@ -253,7 +253,7 @@ pub fn default_limit() -> Option<u32> {
 
 pub async fn memory_search(
     State(state): State<AppState>,
-    Json(args): Json(MemorySearchArgs>,
+    Json(args): Json<MemorySearchArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let limit = args.limit.unwrap_or(10) as usize;
     let filters = args.filters;
