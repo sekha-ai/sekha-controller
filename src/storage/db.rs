@@ -50,7 +50,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         "PRAGMA journal_mode=WAL;".to_string(),
     );
 
-    match db.query_one(wal_stmt).await {
+    match db.query_one(&wal_stmt).await {
         Ok(_) => tracing::info!("WAL mode enabled for database"),
         Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
     }
