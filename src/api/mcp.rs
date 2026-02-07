@@ -239,7 +239,7 @@ pub async fn memory_store(
 #[derive(Debug, Deserialize)]
 pub struct MemorySearchArgs {
     query: String,
-    #serde(default)]
+    #[serde(default)]
     filters: Option<Value>,
     #[serde(default = "default_limit")]
     limit: Option<u32>,
@@ -253,7 +253,7 @@ pub fn default_limit() -> Option<u32> {
 
 pub async fn memory_search(
     State(state): State<AppState>,
-    Json(args): Json<MemorySearchArgs>,
+    Json(args): Json(MemorySearchArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let limit = args.limit.unwrap_or(10) as usize;
     let filters = args.filters;
@@ -463,7 +463,7 @@ pub struct MemoryGetContextArgs {
 
 pub async fn memory_get_context(
     State(state): State<AppState>,
-    Json(args): Json(MemoryGetContextArgs),
+    Json(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     let conv = state
         .repo
