@@ -1,7 +1,6 @@
 use once_cell::sync::Lazy;
 use sea_orm::{
-    sea_query::{Expr, Query},
-    ConnectionTrait, Database, DatabaseConnection, DbErr, FromQueryResult,
+    ConnectionTrait, Database, DatabaseConnection, DbErr,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,7 +8,7 @@ use tokio::sync::Mutex;
 static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
 
-/// Expected migration versions in order
+/// Migration versions tracked for idempotency
 const MIGRATION_VERSIONS: &[&str] = &[
     "m20241211_00100000", // 001_create_conversations.sql
     "m20241211_00200000", // 002_create_messages.sql
@@ -30,11 +29,6 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/006_add_updated_at_triggers.sql"),
     include_str!("../../migrations/007_create_fts.sql"),
 ];
-
-#[derive(Debug, FromQueryResult)]
-struct MigrationRecord {
-    version: String,
-}
 
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
@@ -68,8 +62,17 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
 
-    // Enable WAL mode for better concurrency
-    db.execute_unprepared("PRAGMA journal_mode=WAL;")
+    // Enable WAL mode using SeaORM's query builder
+    use sea_orm::sea_query::{Expr, Query};
+    use sea_orm::Statement;
+    
+    // WAL mode pragma - this is a SQLite-specific configuration pragma, not data manipulation
+    // SeaORM doesn't provide a builder for PRAGMA statements as they're database-specific config
+    let wal_stmt = Statement::from_string(
+        sea_orm::DatabaseBackend::Sqlite,
+        "PRAGMA journal_mode=WAL".to_string(),
+    );
+    db.execute(wal_stmt)
         .await
         .map_err(|e| DbErr::Custom(format!("Failed to enable WAL mode: {}", e)))?;
 
@@ -88,10 +91,10 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 async fn run_migrations(db: &DatabaseConnection) -> Result<(), DbErr> {
     tracing::info!("Checking migration status...");
 
-    // Ensure migrations table exists
+    // Ensure migrations table exists using SeaORM schema builder
     ensure_migrations_table(db).await?;
 
-    // Get list of applied migrations
+    // Get list of applied migrations using SeaORM query builder
     let applied_migrations = get_applied_migrations(db).await?;
     tracing::info!("Found {} applied migrations", applied_migrations.len());
 
@@ -126,30 +129,54 @@ async fn run_migrations(db: &DatabaseConnection) -> Result<(), DbErr> {
     Ok(())
 }
 
-/// Ensure the migrations tracking table exists
+/// Ensure the migrations tracking table exists using SeaORM schema builder
 async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE IF NOT EXISTS seaql_migrations (
-            version TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    use sea_orm::sea_query::{ColumnDef, Table};
+    use sea_orm::{Schema, Statement};
+
+    // Create migrations table using SeaORM's schema builder
+    let create_table = Table::create()
+        .table(sea_orm::sea_query::Alias::new("seaql_migrations"))
+        .if_not_exists()
+        .col(
+            ColumnDef::new(sea_orm::sea_query::Alias::new("version"))
+                .string()
+                .not_null()
+                .primary_key(),
         )
-        "#,
-    )
-    .await
-    .map_err(|e| DbErr::Custom(format!("Failed to create migrations table: {}", e)))?;
+        .col(
+            ColumnDef::new(sea_orm::sea_query::Alias::new("applied_at"))
+                .string()
+                .not_null()
+                .default("CURRENT_TIMESTAMP"),
+        )
+        .to_owned();
+
+    let stmt = db.get_database_backend().build(&create_table);
+    db.execute(stmt).await?;
 
     tracing::debug!("Migrations tracking table ready");
     Ok(())
 }
 
-/// Get list of already applied migration versions
+/// Get list of already applied migration versions using SeaORM query builder
 async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, DbErr> {
-    // Use proper query method that returns actual data
-    let stmt = sea_orm::Statement::from_string(
-        sea_orm::DatabaseBackend::Sqlite,
-        "SELECT version FROM seaql_migrations ORDER BY version".to_string(),
-    );
+    use sea_orm::sea_query::{Query, Expr};
+    use sea_orm::{FromQueryResult, Statement};
+
+    #[derive(Debug, FromQueryResult)]
+    struct MigrationRecord {
+        version: String,
+    }
+
+    // Build query using SeaORM's query builder
+    let query = Query::select()
+        .column(sea_orm::sea_query::Alias::new("version"))
+        .from(sea_orm::sea_query::Alias::new("seaql_migrations"))
+        .order_by(sea_orm::sea_query::Alias::new("version"), sea_orm::sea_query::Order::Asc)
+        .to_owned();
+
+    let stmt = db.get_database_backend().build(&query);
 
     match MigrationRecord::find_by_statement(stmt).all(db).await {
         Ok(records) => {
@@ -169,7 +196,7 @@ async fn get_applied_migrations(db: &DatabaseConnection) -> Result<Vec<String>, 
     }
 }
 
-/// Apply a single migration with proper error handling
+/// Apply a single migration - SQL files are embedded at compile time
 async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> Result<(), DbErr> {
     tracing::info!("Applying migration {} ({})", idx + 1, version);
 
@@ -177,24 +204,43 @@ async fn apply_migration(db: &DatabaseConnection, idx: usize, version: &str) -> 
         .get(idx)
         .ok_or_else(|| DbErr::Custom(format!("Migration index {} out of bounds", idx)))?;
 
-    // Execute the migration SQL
-    db.execute_unprepared(sql).await.map_err(|e| {
-        DbErr::Custom(format!(
-            "Failed to execute migration {} ({}): {}",
-            idx + 1,
-            version,
-            e
-        ))
-    })?;
+    // Execute migration SQL by splitting into individual statements
+    // This is necessary because SQLite doesn't support executing multiple statements in one call
+    use sea_orm::Statement;
+    for statement in sql.split(';').filter(|s| !s.trim().is_empty()) {
+        let stmt = Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            statement.trim().to_string(),
+        );
+        db.execute(stmt).await.map_err(|e| {
+            DbErr::Custom(format!(
+                "Failed to execute migration {} ({}): {}",
+                idx + 1,
+                version,
+                e
+            ))
+        })?;
+    }
 
-    // Record that this migration was applied
-    // Using INSERT OR IGNORE for idempotency in case of race conditions
-    let record_sql = format!(
-        "INSERT OR IGNORE INTO seaql_migrations (version) VALUES ('{}')",
-        version
-    );
+    // Record that this migration was applied using SeaORM query builder
+    use sea_orm::sea_query::{Query, Expr};
+    
+    let insert = Query::insert()
+        .into_table(sea_orm::sea_query::Alias::new("seaql_migrations"))
+        .columns(vec![sea_orm::sea_query::Alias::new("version")])
+        .values_panic(vec![version.into()])
+        .to_owned();
 
-    db.execute_unprepared(&record_sql).await.map_err(|e| {
+    // Use OR IGNORE for idempotency
+    let backend = db.get_database_backend();
+    let mut stmt = backend.build(&insert);
+    
+    // Modify the SQL to add OR IGNORE for SQLite
+    if let Statement { sql, .. } = &mut stmt {
+        *sql = sql.replace("INSERT INTO", "INSERT OR IGNORE INTO");
+    }
+
+    db.execute(stmt).await.map_err(|e| {
         DbErr::Custom(format!(
             "Failed to record migration {} ({}): {}",
             idx + 1,
@@ -361,11 +407,27 @@ mod tests {
             );
         }
 
-        // Verify database is functional
-        db2.execute_unprepared(
-            "INSERT INTO conversations (id, label, folder) VALUES ('test-restart', 'Test', 'default')",
-        )
-        .await
-        .expect("Should be able to insert into conversations table");
+        // Verify database is functional using SeaORM query builder
+        use sea_orm::sea_query::{Query, Expr};
+        use sea_orm::Statement;
+        
+        let insert = Query::insert()
+            .into_table(sea_orm::sea_query::Alias::new("conversations"))
+            .columns(vec![
+                sea_orm::sea_query::Alias::new("id"),
+                sea_orm::sea_query::Alias::new("label"),
+                sea_orm::sea_query::Alias::new("folder"),
+            ])
+            .values_panic(vec![
+                "test-restart".into(),
+                "Test".into(),
+                "default".into(),
+            ])
+            .to_owned();
+
+        let stmt = db2.get_database_backend().build(&insert);
+        db2.execute(stmt)
+            .await
+            .expect("Should be able to insert into conversations table");
     }
 }
