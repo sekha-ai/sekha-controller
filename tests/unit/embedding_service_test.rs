@@ -568,8 +568,11 @@ async fn test_semaphore_rate_limiting() {
 // ============================================
 
 #[tokio::test]
-async fn test_error_conversion_from_acquire_error() {
-    let err: EmbeddingError = tokio::sync::AcquireError::NoPermits.into();
+async fn test_error_conversion_from_try_acquire_error() {
+    // FIXED: Use TryAcquireError::NoPermits instead of AcquireError::NoPermits
+    // In modern tokio, AcquireError only occurs when semaphore is closed
+    // NoPermits error is now part of TryAcquireError for try_acquire() operations
+    let err: EmbeddingError = tokio::sync::TryAcquireError::NoPermits.into();
     assert!(matches!(err, EmbeddingError::SemaphoreError(_)));
 }
 
