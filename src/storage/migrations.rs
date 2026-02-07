@@ -34,17 +34,17 @@ mod m20241211_001_create_conversations {
                         .if_not_exists()
                         .col(
                             ColumnDef::new(Conversations::Id)
-                                .string()
+                                .text()
                                 .not_null()
                                 .primary_key(),
                         )
-                        .col(ColumnDef::new(Conversations::Label).string().not_null())
-                        .col(ColumnDef::new(Conversations::Folder).string().not_null())
-                        .col(ColumnDef::new(Conversations::CreatedAt).string().not_null())
-                        .col(ColumnDef::new(Conversations::UpdatedAt).string().not_null())
+                        .col(ColumnDef::new(Conversations::Label).text().not_null())
+                        .col(ColumnDef::new(Conversations::Folder).text().not_null())
+                        .col(ColumnDef::new(Conversations::CreatedAt).text().not_null())
+                        .col(ColumnDef::new(Conversations::UpdatedAt).text().not_null())
                         .col(
                             ColumnDef::new(Conversations::Status)
-                                .string()
+                                .text()
                                 .not_null()
                                 .default("active"),
                         )
@@ -133,18 +133,13 @@ mod m20241211_002_create_messages {
                     Table::create()
                         .table(Messages::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(Messages::Id)
-                                .string()
-                                .not_null()
-                                .primary_key(),
-                        )
-                        .col(ColumnDef::new(Messages::ConversationId).string().not_null())
-                        .col(ColumnDef::new(Messages::Role).string().not_null())
-                        .col(ColumnDef::new(Messages::Content).string().not_null())
-                        .col(ColumnDef::new(Messages::Timestamp).string().not_null())
-                        .col(ColumnDef::new(Messages::EmbeddingId).string())
-                        .col(ColumnDef::new(Messages::Metadata).string())
+                        .col(ColumnDef::new(Messages::Id).text().not_null().primary_key())
+                        .col(ColumnDef::new(Messages::ConversationId).text().not_null())
+                        .col(ColumnDef::new(Messages::Role).text().not_null())
+                        .col(ColumnDef::new(Messages::Content).text().not_null())
+                        .col(ColumnDef::new(Messages::Timestamp).text().not_null())
+                        .col(ColumnDef::new(Messages::EmbeddingId).text())
+                        .col(ColumnDef::new(Messages::Metadata).text())
                         .foreign_key(
                             ForeignKey::create()
                                 .name("fk_messages_conversation")
@@ -221,24 +216,11 @@ mod m20241211_003_create_semantic_tags {
                     Table::create()
                         .table(SemanticTags::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(SemanticTags::Id)
-                                .string()
-                                .not_null()
-                                .primary_key(),
-                        )
-                        .col(
-                            ColumnDef::new(SemanticTags::ConversationId)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(ColumnDef::new(SemanticTags::Tag).string().not_null())
+                        .col(ColumnDef::new(SemanticTags::Id).text().not_null().primary_key())
+                        .col(ColumnDef::new(SemanticTags::ConversationId).text().not_null())
+                        .col(ColumnDef::new(SemanticTags::Tag).text().not_null())
                         .col(ColumnDef::new(SemanticTags::Confidence).float().not_null())
-                        .col(
-                            ColumnDef::new(SemanticTags::ExtractedAt)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(SemanticTags::ExtractedAt).text().not_null())
                         .foreign_key(
                             ForeignKey::create()
                                 .name("fk_semantic_tags_conversation")
@@ -315,36 +297,28 @@ mod m20241211_004_create_hierarchical_summaries {
                         .if_not_exists()
                         .col(
                             ColumnDef::new(HierarchicalSummaries::Id)
-                                .string()
+                                .text()
                                 .not_null()
                                 .primary_key(),
                         )
                         .col(
                             ColumnDef::new(HierarchicalSummaries::ConversationId)
-                                .string()
+                                .text()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(HierarchicalSummaries::Level)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(HierarchicalSummaries::Level).text().not_null())
                         .col(
                             ColumnDef::new(HierarchicalSummaries::SummaryText)
-                                .string()
+                                .text()
                                 .not_null(),
                         )
                         .col(
                             ColumnDef::new(HierarchicalSummaries::TimestampRange)
-                                .string()
+                                .text()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(HierarchicalSummaries::GeneratedAt)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).string())
+                        .col(ColumnDef::new(HierarchicalSummaries::GeneratedAt).text().not_null())
+                        .col(ColumnDef::new(HierarchicalSummaries::ModelUsed).text())
                         .col(ColumnDef::new(HierarchicalSummaries::TokenCount).integer())
                         .foreign_key(
                             ForeignKey::create()
@@ -426,31 +400,15 @@ mod m20241211_005_create_knowledge_graph_edges {
                     Table::create()
                         .table(KnowledgeGraphEdges::Table)
                         .if_not_exists()
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::SubjectId)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::Predicate)
-                                .string()
-                                .not_null(),
-                        )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::ObjectId)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(KnowledgeGraphEdges::SubjectId).text().not_null())
+                        .col(ColumnDef::new(KnowledgeGraphEdges::Predicate).text().not_null())
+                        .col(ColumnDef::new(KnowledgeGraphEdges::ObjectId).text().not_null())
                         .col(
                             ColumnDef::new(KnowledgeGraphEdges::ConversationId)
-                                .string()
+                                .text()
                                 .not_null(),
                         )
-                        .col(
-                            ColumnDef::new(KnowledgeGraphEdges::ExtractedAt)
-                                .string()
-                                .not_null(),
-                        )
+                        .col(ColumnDef::new(KnowledgeGraphEdges::ExtractedAt).text().not_null())
                         .primary_key(
                             Index::create()
                                 .col(KnowledgeGraphEdges::SubjectId)
