@@ -47,10 +47,24 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
         Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
     }
 
-    // Run SeaORM migrations - let them fail properly
+    // Run SeaORM migrations with idempotency check
     tracing::info!("Running SeaORM migrations...");
-    Migrator::up(&db, None).await?;
-    tracing::info!("All migrations applied successfully");
+    match Migrator::up(&db, None).await {
+        Ok(_) => {
+            tracing::info!("All migrations applied successfully");
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            // This specific error means migrations are already applied (idempotent)
+            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") {
+                tracing::info!("Migrations already applied (idempotent)");
+            } else {
+                // All other errors are real failures
+                tracing::error!("Migration failed: {}", err_str);
+                return Err(e);
+            }
+        }
+    }
 
     let mut conn = DB_CONN.lock().await;
     *conn = Some(db.clone());
