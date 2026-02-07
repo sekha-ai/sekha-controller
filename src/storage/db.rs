@@ -49,7 +49,7 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     // Run SeaORM migrations with specific error handling
     tracing::info!("Running SeaORM migrations...");
-
+    
     match Migrator::up(&db, None).await {
         Ok(_) => {
             tracing::info!("All migrations applied successfully");
@@ -58,12 +58,11 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
             let err_str = e.to_string();
             eprintln!("Migration error: {}", err_str);
             eprintln!("Full migration error: {:?}", e);
-
+            
             // ONLY ignore duplicate migration version errors (idempotent check)
             // All other errors (like table creation failures) should propagate
-            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version")
-                || err_str.contains("Duplicate entry")
-            {
+            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") 
+                || err_str.contains("Duplicate entry") {
                 tracing::info!("Migrations already applied (idempotent check passed)");
             } else {
                 tracing::error!("Migration failed: {}", err_str);
@@ -74,17 +73,13 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     // Verify tables were created
     let check_sql = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;";
-    match db
-        .query_all(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
-            check_sql.to_string(),
-        ))
-        .await
-    {
+    let stmt = Statement::from_string(sea_orm::DatabaseBackend::Sqlite, check_sql.to_string());
+    
+    match db.query_all(&stmt).await {
         Ok(tables) => {
             eprintln!("Tables in database: {:?}", tables);
             tracing::info!("Found {} tables in database", tables.len());
-
+            
             // Check if conversations table exists
             let has_conversations = tables.iter().any(|row| {
                 if let Ok(name) = row.try_get::<String>("", "name") {
@@ -93,12 +88,10 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
                     false
                 }
             });
-
+            
             if !has_conversations {
                 eprintln!("ERROR: conversations table not found after migrations!");
-                return Err(DbErr::Custom(
-                    "conversations table not created by migrations".to_string(),
-                ));
+                return Err(DbErr::Custom("conversations table not created by migrations".to_string()));
             } else {
                 eprintln!("SUCCESS: conversations table exists");
             }
