@@ -148,7 +148,8 @@ async fn ensure_migrations_table(db: &DatabaseConnection) -> Result<(), DbErr> {
         .to_owned();
 
     // Execute using the builder (implements StatementBuilder)
-    db.execute(db.get_database_backend().build(&create_table)).await?;
+    db.execute(db.get_database_backend().build(&create_table))
+        .await?;
 
     tracing::debug!("Migrations tracking table ready");
     Ok(())
