@@ -49,18 +49,20 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
 
     // Run SeaORM migrations with specific error handling
     tracing::info!("Running SeaORM migrations...");
-
+    
     match Migrator::up(&db, None).await {
         Ok(_) => {
             tracing::info!("All migrations applied successfully");
         }
         Err(e) => {
             let err_str = e.to_string();
+            eprintln!("Migration error: {}", err_str);
+            eprintln!("Full migration error: {:?}", e);
+            
             // ONLY ignore duplicate migration version errors (idempotent check)
             // All other errors (like table creation failures) should propagate
-            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version")
-                || err_str.contains("Duplicate entry")
-            {
+            if err_str.contains("UNIQUE constraint failed: seaql_migrations.version") 
+                || err_str.contains("Duplicate entry") {
                 tracing::info!("Migrations already applied (idempotent check passed)");
             } else {
                 tracing::error!("Migration failed: {}", err_str);
