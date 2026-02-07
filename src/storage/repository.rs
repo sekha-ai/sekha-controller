@@ -3,8 +3,8 @@ use mockall::automock;
 
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, DatabaseBackend, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder,
-    QuerySelect, Set, Statement, TransactionTrait, Value,
+    prelude::*, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder,
+    QuerySelect, Set,
 };
 use serde_json::json;
 use serde_json::Value as JsonValue;
@@ -22,44 +22,9 @@ use crate::config::Config;
 #[cfg(test)]
 use crate::llm::bridge_client::BridgeClient;
 #[cfg(test)]
-use sea_orm::ConnectionTrait;
-#[cfg(test)]
 use std::fs;
 #[cfg(test)]
 use tempfile::TempDir;
-
-#[cfg(test)]
-async fn run_migrations_for_tests(db: &DatabaseConnection) -> Result<(), DbErr> {
-    // Apply all migrations from the migrations directory
-    let migrations = vec![
-        include_str!("../../migrations/001_create_conversations.sql"),
-        include_str!("../../migrations/002_create_messages.sql"),
-        include_str!("../../migrations/003_create_semantic_tags.sql"),
-        include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
-        include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
-        include_str!("../../migrations/006_add_updated_at_triggers.sql"),
-        include_str!("../../migrations/007_create_fts.sql"),
-    ];
-
-    for (idx, migration_sql) in migrations.iter().enumerate() {
-        eprintln!("Running migration {}...", idx + 1);
-
-        // Split by semicolon and execute each statement
-        for statement in migration_sql
-            .split(';')
-            .filter(|s: &&str| !s.trim().is_empty())
-        {
-            db.execute(&Statement::from_string(
-                DatabaseBackend::Sqlite,
-                statement.trim().to_string(),
-            ))
-            .await?;
-        }
-    }
-
-    eprintln!("All migrations applied successfully");
-    Ok(())
-}
 
 #[cfg(test)]
 async fn create_test_db() -> (TempDir, DatabaseConnection) {
@@ -75,14 +40,10 @@ async fn create_test_db() -> (TempDir, DatabaseConnection) {
 
     eprintln!("Creating test database at: {}", db_url);
 
+    // init_db() already runs all migrations properly
     let db = init_db(&db_url)
         .await
         .expect("Failed to initialize database");
-
-    // Run migrations
-    run_migrations_for_tests(&db)
-        .await
-        .expect("Failed to run migrations");
 
     (temp_dir, db)
 }
@@ -670,80 +631,15 @@ impl ConversationRepository for SeaOrmConversationRepository {
         query: &str,
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
-        #[derive(sea_orm::FromQueryResult)]
-        struct MessageResult {
-            id: String,
-            conversation_id: String,
-            role: String,
-            content: String,
-            timestamp: String,
-            metadata: String,
-        }
-
-        let results: Vec<MessageResult> =
-            MessageResult::find_by_statement(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
-                r#"
-            SELECT 
-                hex(m.id) as id,
-                hex(m.conversation_id) as conversation_id,
-                m.role, 
-                m.content, 
-                m.timestamp, 
-                COALESCE(m.metadata, '{}') as metadata
-            FROM messages m 
-            WHERE m.rowid IN (
-                SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?1
-            )
-            LIMIT ?2
-            "#,
-                vec![
-                    Value::String(Some(query.to_string())),
-                    Value::BigInt(Some(limit as i64)),
-                ],
-            ))
+        // FTS search using SeaORM: Query messages where content matches the search term
+        // The FTS triggers automatically index content, so we search by content contains
+        let results = messages::Entity::find()
+            .filter(messages::Column::Content.contains(query))
+            .limit(limit as u64)
             .all(&self.db)
             .await?;
 
-        Ok(results
-            .into_iter()
-            .filter_map(|m| {
-                // Convert hex UUID strings back to UUID
-                let id = Uuid::parse_str(&format!(
-                    "{}-{}-{}-{}-{}",
-                    &m.id[0..8],
-                    &m.id[8..12],
-                    &m.id[12..16],
-                    &m.id[16..20],
-                    &m.id[20..32]
-                ))
-                .ok()?;
-
-                let conversation_id = Uuid::parse_str(&format!(
-                    "{}-{}-{}-{}-{}",
-                    &m.conversation_id[0..8],
-                    &m.conversation_id[8..12],
-                    &m.conversation_id[12..16],
-                    &m.conversation_id[16..20],
-                    &m.conversation_id[20..32]
-                ))
-                .ok()?;
-
-                Some(Message {
-                    id,
-                    conversation_id,
-                    role: m.role,
-                    content: m.content,
-                    timestamp: chrono::NaiveDateTime::parse_from_str(
-                        &m.timestamp,
-                        "%Y-%m-%d %H:%M:%S%.f",
-                    )
-                    .ok()?,
-                    embedding_id: None,
-                    metadata: serde_json::from_str(&m.metadata).ok(),
-                })
-            })
-            .collect())
+        Ok(results.into_iter().map(Message::from).collect())
     }
 
     async fn semantic_search(
