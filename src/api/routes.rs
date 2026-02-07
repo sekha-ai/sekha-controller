@@ -422,6 +422,7 @@ mod tests {
     use super::*;
     use crate::{
         config::Config,
+        llm::bridge_client::BridgeClient,
         orchestrator::MemoryOrchestrator,
         storage::{init_db, repository::SeaOrmConversationRepository},
     };
@@ -432,8 +433,12 @@ mod tests {
         let db = init_db("sqlite::memory:").await.unwrap();
         let config = Arc::new(RwLock::new(Config::default()));
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        
+        // Create BridgeClient first, then pass to EmbeddingService
+        let base_config = Config::default();
+        let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
