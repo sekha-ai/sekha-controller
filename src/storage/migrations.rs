@@ -143,7 +143,12 @@ mod m20241211_002_create_messages {
                     Table::create()
                         .table(Messages::Table)
                         .if_not_exists()
-                        .col(ColumnDef::new(Messages::Id).string().not_null().primary_key())
+                        .col(
+                            ColumnDef::new(Messages::Id)
+                                .string()
+                                .not_null()
+                                .primary_key(),
+                        )
                         .col(ColumnDef::new(Messages::ConversationId).string().not_null())
                         .col(ColumnDef::new(Messages::Role).string().not_null())
                         .col(ColumnDef::new(Messages::Content).string().not_null())
@@ -231,8 +236,17 @@ mod m20241211_003_create_semantic_tags {
                     Table::create()
                         .table(SemanticTags::Table)
                         .if_not_exists()
-                        .col(ColumnDef::new(SemanticTags::Id).string().not_null().primary_key())
-                        .col(ColumnDef::new(SemanticTags::ConversationId).string().not_null())
+                        .col(
+                            ColumnDef::new(SemanticTags::Id)
+                                .string()
+                                .not_null()
+                                .primary_key(),
+                        )
+                        .col(
+                            ColumnDef::new(SemanticTags::ConversationId)
+                                .string()
+                                .not_null(),
+                        )
                         .col(ColumnDef::new(SemanticTags::Tag).string().not_null())
                         .col(ColumnDef::new(SemanticTags::Confidence).float().not_null())
                         .col(
@@ -326,7 +340,11 @@ mod m20241211_004_create_hierarchical_summaries {
                                 .string()
                                 .not_null(),
                         )
-                        .col(ColumnDef::new(HierarchicalSummaries::Level).string().not_null())
+                        .col(
+                            ColumnDef::new(HierarchicalSummaries::Level)
+                                .string()
+                                .not_null(),
+                        )
                         .col(
                             ColumnDef::new(HierarchicalSummaries::SummaryText)
                                 .string()
@@ -425,9 +443,21 @@ mod m20241211_005_create_knowledge_graph_edges {
                     Table::create()
                         .table(KnowledgeGraphEdges::Table)
                         .if_not_exists()
-                        .col(ColumnDef::new(KnowledgeGraphEdges::SubjectId).string().not_null())
-                        .col(ColumnDef::new(KnowledgeGraphEdges::Predicate).string().not_null())
-                        .col(ColumnDef::new(KnowledgeGraphEdges::ObjectId).string().not_null())
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::SubjectId)
+                                .string()
+                                .not_null(),
+                        )
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::Predicate)
+                                .string()
+                                .not_null(),
+                        )
+                        .col(
+                            ColumnDef::new(KnowledgeGraphEdges::ObjectId)
+                                .string()
+                                .not_null(),
+                        )
                         .col(
                             ColumnDef::new(KnowledgeGraphEdges::ConversationId)
                                 .string()

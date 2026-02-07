@@ -44,12 +44,12 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     // Enable WAL mode using SeaORM query builder
     use sea_orm::sea_query::SimpleExpr;
     use sea_orm::Statement;
-    
+
     let wal_stmt = Statement::from_string(
         sea_orm::DatabaseBackend::Sqlite,
         "PRAGMA journal_mode=WAL;".to_string(),
     );
-    
+
     match db.query_one(wal_stmt).await {
         Ok(_) => tracing::info!("WAL mode enabled for database"),
         Err(e) => tracing::warn!("Could not enable WAL mode: {}", e),
