@@ -6,6 +6,7 @@ use sekha_controller::{
     api::routes::AppState,
     auth::McpAuth,
     config::Config,
+    llm::bridge_client::BridgeClient,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{chroma_client::ChromaClient, repository::MockConversationRepository},
@@ -14,15 +15,19 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 fn create_test_state() -> AppState {
-    let config = Arc::new(RwLock::new(Config::default()));
+    let base_config = Config::default();
+    let config = Arc::new(RwLock::new(base_config.clone()));
     let mock_repo = Arc::new(MockConversationRepository::new());
+    
+    // Create BridgeClient first, then pass to EmbeddingService
+    let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:11434".to_string(),
+        bridge,
         "http://localhost:8000".to_string(),
     ));
+    
     let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    let default_config = Config::default();
-    let llm_client = Arc::new(LlmBridgeClient::new(&default_config).unwrap());
+    let llm_client = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
     let orchestrator = Arc::new(MemoryOrchestrator::new(
         mock_repo.clone(),
         llm_client.clone(),
