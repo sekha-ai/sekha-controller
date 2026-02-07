@@ -2,6 +2,7 @@ use anyhow::Result;
 use sekha_controller::{
     api::routes::{create_router, AppState},
     config::Config,
+    llm::bridge_client::BridgeClient,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
@@ -57,7 +58,7 @@ async fn main() -> Result<()> {
 
     // Initialize embedding service with BridgeClient from llm_bridge
     // Note: We need to create a new BridgeClient since Arc<LlmBridgeClient> doesn't expose bridge
-    let bridge_client = crate::llm::bridge_client::BridgeClient::new(&config)?;
+    let bridge_client = BridgeClient::new(&config)?;
     let embedding_service = Arc::new(EmbeddingService::new(bridge_client, chroma_url));
     tracing::info!("✅ Embedding service initialized");
 
