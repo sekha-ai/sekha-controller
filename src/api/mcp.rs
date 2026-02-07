@@ -1,5 +1,5 @@
 use crate::api::routes::AppState;
-use crate::auth::mcp_auth_middleware;  // ✅ Fixed import
+use crate::auth::mcp_auth_middleware; // ✅ Fixed import
 use crate::config::Config;
 use axum::middleware;
 use axum::routing::post;

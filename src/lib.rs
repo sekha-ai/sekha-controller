@@ -1,5 +1,5 @@
 pub mod api;
-pub mod auth;  // ✅ Added auth module declaration
+pub mod auth; // ✅ Added auth module declaration
 pub mod config;
 pub mod llm;
 pub mod models;
