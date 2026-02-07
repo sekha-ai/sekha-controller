@@ -1,20 +1,20 @@
 // src/services/embedding_service.rs
-//! Embedding service with provider abstraction
+//! Embedding service using LLM Bridge with v2.0 routing and dimension-aware collections
 
-use crate::services::embedding_provider::{EmbeddingProvider, OllamaProvider, ProviderError};
+use crate::llm::bridge_client::BridgeClient;
 use crate::storage::chroma_client::ChromaClient;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::AcquireError;
-use tokio::sync::Semaphore;
+use tokio::sync::{AcquireError, Semaphore};
 use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EmbeddingError {
-    #[error("Ollama error: {0}")]
-    OllamaError(String),
+    #[error("Bridge error: {0}")]
+    BridgeError(String),
     #[error("Chroma error: {0}")]
     ChromaError(#[from] crate::storage::chroma_client::ChromaError),
     #[error("No embeddings returned")]
@@ -23,8 +23,10 @@ pub enum EmbeddingError {
     SemaphoreError(String),
     #[error("Max retries exceeded")]
     MaxRetriesExceeded,
-    #[error("Provider error: {0}")]
-    ProviderError(String),
+    #[error("Model not found: {0}")]
+    ModelNotFound(String),
+    #[error("No embedding models available")]
+    NoModelsAvailable,
 }
 
 impl From<AcquireError> for EmbeddingError {
@@ -33,56 +35,293 @@ impl From<AcquireError> for EmbeddingError {
     }
 }
 
+impl From<anyhow::Error> for EmbeddingError {
+    fn from(err: anyhow::Error) -> Self {
+        EmbeddingError::BridgeError(err.to_string())
+    }
+}
+
 #[derive(Clone)]
 pub struct EmbeddingService {
-    provider: Arc<dyn EmbeddingProvider>,
+    bridge: Arc<BridgeClient>,
     chroma: Arc<ChromaClient>,
     semaphore: Arc<Semaphore>,
     max_retries: u32,
+    // Cache for model dimensions to avoid repeated API calls
+    dimension_cache: Arc<tokio::sync::RwLock<HashMap<String, i32>>>,
 }
 
 impl EmbeddingService {
-    /// Production constructor with Ollama provider
-    pub fn new(ollama_url: String, chroma_url: String) -> Self {
-        let provider = Arc::new(OllamaProvider::new(
-            ollama_url,
-            "nomic-embed-text:latest".to_string(),
-        ));
-
+    /// Create new embedding service with bridge client
+    pub fn new(bridge: BridgeClient, chroma_url: String) -> Self {
         let chroma = Arc::new(ChromaClient::new(chroma_url));
         let semaphore = Arc::new(Semaphore::new(5));
         let max_retries = 3;
+        let dimension_cache = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
 
         Self {
-            provider,
+            bridge: Arc::new(bridge),
             chroma,
             semaphore,
             max_retries,
+            dimension_cache,
         }
     }
 
-    /// Test constructor with custom provider
-    pub fn with_provider(provider: Arc<dyn EmbeddingProvider>, chroma_url: String) -> Self {
-        let chroma = Arc::new(ChromaClient::new(chroma_url));
-        let semaphore = Arc::new(Semaphore::new(5));
-        let max_retries = 3;
-
-        Self {
-            provider,
-            chroma,
-            semaphore,
-            max_retries,
+    /// Get the dimension of a model from bridge
+    pub async fn get_model_dimension(&self, model: Option<&str>) -> Result<i32, EmbeddingError> {
+        // Check cache first
+        if let Some(model_id) = model {
+            let cache = self.dimension_cache.read().await;
+            if let Some(&dim) = cache.get(model_id) {
+                debug!("Cache hit for model dimension: {} -> {}", model_id, dim);
+                return Ok(dim);
+            }
         }
+
+        // Query bridge for model list
+        let models = self.bridge.list_models().await?;
+
+        // Filter for embedding models
+        let embedding_models: Vec<_> = models
+            .iter()
+            .filter(|m| m.task == "embedding" && m.dimension.is_some())
+            .collect();
+
+        if embedding_models.is_empty() {
+            return Err(EmbeddingError::NoModelsAvailable);
+        }
+
+        // If model specified, find it
+        if let Some(model_id) = model {
+            if let Some(model_info) = embedding_models.iter().find(|m| m.model_id == model_id) {
+                let dim = model_info.dimension.unwrap();
+                // Update cache
+                let mut cache = self.dimension_cache.write().await;
+                cache.insert(model_id.to_string(), dim);
+                return Ok(dim);
+            } else {
+                return Err(EmbeddingError::ModelNotFound(model_id.to_string()));
+            }
+        }
+
+        // No model specified, use first available
+        let default_model = embedding_models[0];
+        let dim = default_model.dimension.unwrap();
+        let model_id = &default_model.model_id;
+
+        // Update cache
+        let mut cache = self.dimension_cache.write().await;
+        cache.insert(model_id.clone(), dim);
+
+        debug!("Using default embedding model: {} (dim={})", model_id, dim);
+        Ok(dim)
+    }
+
+    /// Generate embedding with automatic collection routing based on dimension
+    pub async fn embed_with_collection_routing(
+        &self,
+        content: &str,
+        preferred_model: Option<String>,
+    ) -> Result<(Vec<f32>, i32, String), EmbeddingError> {
+        let _permit = self.semaphore.acquire().await?;
+
+        // Generate embedding through bridge with routing
+        let (embed_response, routing) = self
+            .bridge
+            .generate_embedding_routed(content.to_string(), preferred_model, None)
+            .await?;
+
+        let dimension = embed_response.dimension;
+        let model_used = routing.model_id;
+
+        // Update dimension cache
+        {
+            let mut cache = self.dimension_cache.write().await;
+            cache.insert(model_used.clone(), dimension);
+        }
+
+        debug!(
+            "Generated embedding: model={}, dimension={}, provider={}",
+            model_used, dimension, routing.provider_id
+        );
+
+        Ok((embed_response.embedding, dimension, model_used))
+    }
+
+    /// Search across all dimension-specific collections and merge results
+    pub async fn search_all_dimensions(
+        &self,
+        query: &str,
+        limit: usize,
+        filters: Option<Value>,
+        preferred_model: Option<String>,
+    ) -> Result<Vec<crate::storage::chroma_client::ScoredResult>, EmbeddingError> {
+        // Generate query embedding
+        let (query_embedding, query_dim, _) = self
+            .embed_with_collection_routing(query, preferred_model)
+            .await?;
+
+        // Search in primary collection for this dimension
+        let primary_collection = format!("conversations_{}", query_dim);
+        let mut results = self
+            .chroma
+            .query(
+                &primary_collection,
+                query_embedding.clone(),
+                limit as u32,
+                filters.clone(),
+            )
+            .await
+            .unwrap_or_default();
+
+        // If we have enough results, return them
+        if results.len() >= limit {
+            return Ok(results);
+        }
+
+        // Otherwise, try to find other dimensions and search them too
+        let remaining = limit - results.len();
+
+        // Get all available embedding models
+        if let Ok(models) = self.bridge.list_models().await {
+            let other_dimensions: Vec<i32> = models
+                .iter()
+                .filter(|m| m.task == "embedding" && m.dimension.is_some())
+                .filter_map(|m| m.dimension)
+                .filter(|&d| d != query_dim)
+                .collect();
+
+            // Search other dimension collections
+            for other_dim in other_dimensions {
+                if results.len() >= limit {
+                    break;
+                }
+
+                let other_collection = format!("conversations_{}", other_dim);
+
+                // Generate embedding in the other dimension
+                // Try to find a model with that dimension
+                if let Some(other_model) = models
+                    .iter()
+                    .find(|m| m.dimension == Some(other_dim) && m.task == "embedding")
+                {
+                    match self
+                        .embed_with_collection_routing(query, Some(other_model.model_id.clone()))
+                        .await
+                    {
+                        Ok((other_embedding, _, _)) => {
+                            if let Ok(other_results) = self
+                                .chroma
+                                .query(
+                                    &other_collection,
+                                    other_embedding,
+                                    remaining as u32,
+                                    filters.clone(),
+                                )
+                                .await
+                            {
+                                results.extend(other_results);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to search dimension {}: {}", other_dim, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by score and limit
+        results.sort_by(|a, b| a.score.partial_cmp(&b.score).unwrap());
+        results.truncate(limit);
+
+        Ok(results)
+    }
+
+    /// Generate embedding for a message and store in dimension-specific Chroma collection
+    pub async fn process_message(
+        &self,
+        message_id: Uuid,
+        content: &str,
+        conversation_id: Uuid,
+        metadata: Value,
+        preferred_model: Option<String>,
+    ) -> Result<String, EmbeddingError> {
+        let _permit = self.semaphore.acquire().await?;
+
+        debug!("Generating embedding for message: {}", message_id);
+
+        // Generate embedding with routing
+        let (embedding, dimension, model_used) = self
+            .embed_with_collection_routing(content, preferred_model)
+            .await?;
+
+        // Use dimension-specific collection
+        let collection_name = format!("conversations_{}", dimension);
+
+        // Flatten metadata for Chroma
+        let mut chroma_metadata = json!({
+            "conversation_id": conversation_id.to_string(),
+            "message_id": message_id.to_string(),
+            "content_preview": &content[..content.len().min(100)],
+            "model": model_used,
+            "dimension": dimension,
+        });
+
+        // Extract and flatten nested metadata fields
+        if let Some(meta_obj) = metadata.as_object() {
+            for (key, value) in meta_obj {
+                match value {
+                    Value::String(s) => {
+                        chroma_metadata[key] = Value::String(s.clone());
+                    }
+                    Value::Number(n) => {
+                        chroma_metadata[key] = Value::Number(n.clone());
+                    }
+                    Value::Bool(b) => {
+                        chroma_metadata[key] = Value::Bool(*b);
+                    }
+                    _ => {
+                        chroma_metadata[key] = Value::String(value.to_string());
+                    }
+                }
+            }
+        }
+
+        // Ensure collection exists with correct dimension
+        self.chroma
+            .ensure_collection(&collection_name, dimension)
+            .await?;
+
+        // Store in Chroma
+        let embedding_id = message_id.to_string();
+        self.chroma
+            .upsert(
+                &collection_name,
+                &embedding_id,
+                embedding,
+                chroma_metadata,
+                Some(content.to_string()),
+            )
+            .await?;
+
+        info!(
+            "Stored embedding for message {} in collection {} (model={}, dim={})",
+            message_id, collection_name, model_used, dimension
+        );
+
+        Ok(embedding_id)
     }
 
     /// Generate embedding for a message and store in Chroma with retry logic
-    #[cfg(not(tarpaulin_include))]
     pub async fn process_message_with_retry(
         &self,
         message_id: Uuid,
         content: &str,
         conversation_id: Uuid,
         metadata: Value,
+        preferred_model: Option<String>,
     ) -> Result<String, EmbeddingError> {
         let mut last_error = None;
 
@@ -90,16 +329,20 @@ impl EmbeddingService {
             if attempt > 0 {
                 let delay = Duration::from_millis(100 * 2_u64.pow(attempt - 1));
                 warn!(
-                    "Embedding attempt {} failed, retrying in {:?}: {}",
-                    attempt,
-                    delay,
-                    last_error.as_ref().unwrap()
+                    "Embedding attempt {} failed, retrying in {:?}",
+                    attempt, delay
                 );
                 sleep(delay).await;
             }
 
             match self
-                .process_message(message_id, content, conversation_id, metadata.clone())
+                .process_message(
+                    message_id,
+                    content,
+                    conversation_id,
+                    metadata.clone(),
+                    preferred_model.clone(),
+                )
                 .await
             {
                 Ok(result) => {
@@ -115,96 +358,28 @@ impl EmbeddingService {
                 Err(e) => {
                     last_error = Some(e);
                     debug!(
-                        "Embedding attempt {} failed for message {}: {}",
+                        "Embedding attempt {} failed for message {}",
                         attempt + 1,
-                        message_id,
-                        last_error.as_ref().unwrap()
+                        message_id
                     );
                 }
             }
         }
 
-        error!(
-            "Max retries exceeded for message {}: {}",
-            message_id,
-            last_error.as_ref().unwrap()
-        );
+        error!("Max retries exceeded for message {}", message_id);
         Err(EmbeddingError::MaxRetriesExceeded)
     }
 
-    /// Generate embedding for a message and store in Chroma (no retry)
-    pub async fn process_message(
+    /// Generate embedding using bridge (simplified interface)
+    pub async fn generate_embedding(
         &self,
-        message_id: Uuid,
         content: &str,
-        conversation_id: Uuid,
-        metadata: Value,
-    ) -> Result<String, EmbeddingError> {
-        let _permit = self.semaphore.acquire().await?;
-
-        debug!("Generating embedding for message: {}", message_id);
-
-        // Generate embedding via provider
-        let embedding = self.generate_embedding(content).await?;
-
-        // Flatten metadata for Chroma (Chroma only accepts flat key-value pairs with simple types)
-        let mut chroma_metadata = json!({
-            "conversation_id": conversation_id.to_string(),
-            "message_id": message_id.to_string(),
-            "content_preview": &content[..content.len().min(100)],
-        });
-
-        // Extract and flatten nested metadata fields
-        if let Some(meta_obj) = metadata.as_object() {
-            for (key, value) in meta_obj {
-                // Only include simple types that Chroma accepts
-                match value {
-                    Value::String(s) => {
-                        chroma_metadata[key] = Value::String(s.clone());
-                    }
-                    Value::Number(n) => {
-                        chroma_metadata[key] = Value::Number(n.clone());
-                    }
-                    Value::Bool(b) => {
-                        chroma_metadata[key] = Value::Bool(*b);
-                    }
-                    // Convert other types to strings
-                    _ => {
-                        chroma_metadata[key] = Value::String(value.to_string());
-                    }
-                }
-            }
-        }
-
-        // Store in Chroma
-        let embedding_id = message_id.to_string();
-        self.chroma
-            .ensure_collection("conversations", embedding.len() as i32)
+        preferred_model: Option<String>,
+    ) -> Result<Vec<f32>, EmbeddingError> {
+        let (embedding, _, _) = self
+            .embed_with_collection_routing(content, preferred_model)
             .await?;
-
-        self.chroma
-            .upsert(
-                "conversations",
-                &embedding_id,
-                embedding.clone(),
-                chroma_metadata,
-                Some(content.to_string()),
-            )
-            .await?;
-
-        info!("Successfully stored embedding for message: {}", message_id);
-
-        Ok(embedding_id)
-    }
-
-    /// Generate embedding using configured provider
-    pub async fn generate_embedding(&self, content: &str) -> Result<Vec<f32>, EmbeddingError> {
-        let _permit = self.semaphore.acquire().await?;
-
-        self.provider
-            .generate_embedding(content)
-            .await
-            .map_err(|e| EmbeddingError::ProviderError(e.to_string()))
+        Ok(embedding)
     }
 
     /// Generate embedding with retry logic
@@ -212,20 +387,18 @@ impl EmbeddingService {
         &self,
         content: &str,
         max_retries: u32,
+        preferred_model: Option<String>,
     ) -> Result<Vec<f32>, EmbeddingError> {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
-            match self.provider.generate_embedding(content).await {
+            match self.generate_embedding(content, preferred_model.clone()).await {
                 Ok(embedding) => return Ok(embedding),
-                Err(ProviderError::NoEmbeddings) => {
-                    // Don't retry - immediately return NoEmbeddings
+                Err(EmbeddingError::NoEmbeddings) => {
                     return Err(EmbeddingError::NoEmbeddings);
                 }
                 Err(e) => {
-                    last_error = Some(EmbeddingError::ProviderError(e.to_string()));
-
-                    // Exponential backoff (except on last attempt)
+                    last_error = Some(e);
                     if attempt < max_retries - 1 {
                         sleep(Duration::from_millis(100 * (2_u64.pow(attempt)))).await;
                     }
@@ -241,20 +414,19 @@ impl EmbeddingService {
         &self,
         texts: Vec<String>,
         batch_size: usize,
+        preferred_model: Option<String>,
     ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         let mut all_embeddings = Vec::new();
 
         for chunk in texts.chunks(batch_size) {
-            // Process batch concurrently
             let mut batch_futures = Vec::new();
 
             for text in chunk {
-                batch_futures.push(self.generate_embedding(text));
+                batch_futures.push(self.generate_embedding(text, preferred_model.clone()));
             }
 
             let batch_results = futures::future::join_all(batch_futures).await;
 
-            // Collect results, failing if any individual embedding fails
             for result in batch_results {
                 all_embeddings.push(result?);
             }
@@ -263,90 +435,364 @@ impl EmbeddingService {
         Ok(all_embeddings)
     }
 
-    /// Semantic search across messages
+    /// Semantic search in dimension-specific collection
     pub async fn search_messages(
         &self,
         query: &str,
         limit: usize,
         filters: Option<Value>,
+        preferred_model: Option<String>,
     ) -> Result<Vec<crate::storage::chroma_client::ScoredResult>, EmbeddingError> {
-        // Generate query embedding
-        let query_embedding = self.generate_embedding(query).await?;
-
-        // Search in Chroma - clone before first use since it's used multiple times
-        let results = self
-            .chroma
-            .query(
-                "conversations",
-                query_embedding.clone(),
-                limit as u32,
-                filters.clone(),
-            )
-            .await?;
-
-        // If primary collection has no results, try secondary collections
-        if results.is_empty() {
-            // Try fallback collections if needed
-            let fallback_results = self
-                .chroma
-                .query(
-                    "conversations_backup",
-                    query_embedding.clone(),
-                    limit as u32,
-                    filters,
-                )
-                .await
-                .unwrap_or_default();
-
-            if !fallback_results.is_empty() {
-                return Ok(fallback_results);
-            }
-        }
-
-        Ok(results)
+        // Use cross-dimensional search for best results
+        self.search_all_dimensions(query, limit, filters, preferred_model)
+            .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::embedding_provider::MockProvider;
-    use std::sync::Arc;
+    use crate::config::{Config, LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
+    use httptest::{matchers::*, responders::*, Expectation, Server};
 
-    #[tokio::test]
-    async fn test_generate_embedding_with_retry_success() {
-        let provider = Arc::new(MockProvider::new_success(vec![0.1; 768]));
-        let service =
-            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
-
-        let result = service
-            .generate_embedding_with_retry("test content", 3)
-            .await;
-
-        assert!(result.is_ok());
-        let embedding = result.unwrap();
-        assert_eq!(embedding.len(), 768);
+    fn create_test_config(bridge_url: &str) -> Config {
+        let mut config = Config::default();
+        config.llm_bridge_url = bridge_url.to_string();
+        config.llm_providers.push(LlmProviderConfig {
+            id: "test-provider".to_string(),
+            provider_type: ProviderType::Ollama,
+            base_url: "http://test".to_string(),
+            api_key: None,
+            timeout_secs: 120,
+            priority: 1,
+            models: vec![ModelCapability {
+                model_id: "nomic-embed-text".to_string(),
+                task: ModelTask::Embedding,
+                context_window: 8192,
+                supports_vision: false,
+                supports_audio: false,
+                dimension: Some(768),
+            }],
+        });
+        config
     }
 
     #[tokio::test]
-    async fn test_generate_embedding_error() {
-        let provider = Arc::new(MockProvider::new_error(ProviderError::NoEmbeddings));
-        let service =
-            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+    async fn test_get_model_dimension_success() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
+                    {
+                        "model_id": "nomic-embed-text",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 768,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ])),
+            ),
+        );
 
-        let result = service.generate_embedding("test").await;
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .get_model_dimension(Some("nomic-embed-text"))
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 768);
+    }
+
+    #[tokio::test]
+    async fn test_get_model_dimension_not_found() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
+                    {
+                        "model_id": "other-model",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 1536,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ])),
+            ),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .get_model_dimension(Some("nonexistent-model"))
+            .await;
         assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), EmbeddingError::ModelNotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn test_get_model_dimension_no_models() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models"))
+                .respond_with(json_encoded(serde_json::json!([]))),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service.get_model_dimension(None).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            EmbeddingError::NoModelsAvailable
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_get_model_dimension_cache() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models"))
+                .times(1)
+                .respond_with(json_encoded(serde_json::json!([
+                    {
+                        "model_id": "nomic-embed-text",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 768,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ]))),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        // First call - hits API
+        let result1 = service
+            .get_model_dimension(Some("nomic-embed-text"))
+            .await;
+        assert_eq!(result1.unwrap(), 768);
+
+        // Second call - hits cache (server expectation of .times(1) ensures this)
+        let result2 = service
+            .get_model_dimension(Some("nomic-embed-text"))
+            .await;
+        assert_eq!(result2.unwrap(), 768);
+    }
+
+    #[tokio::test]
+    async fn test_embed_with_collection_routing_success() {
+        let server = Server::run();
+
+        // Mock /api/v1/route endpoint
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        // Mock /api/v1/embed endpoint
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .embed_with_collection_routing("test content", None)
+            .await;
+        assert!(result.is_ok());
+        let (embedding, dimension, model) = result.unwrap();
+        assert_eq!(embedding.len(), 768);
+        assert_eq!(dimension, 768);
+        assert_eq!(model, "nomic-embed-text");
+    }
+
+    #[tokio::test]
+    async fn test_generate_embedding_success() {
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service.generate_embedding("test", None).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 768);
+    }
+
+    #[tokio::test]
+    async fn test_generate_embedding_with_retry_success() {
+        let server = Server::run();
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .generate_embedding_with_retry("test", 3, None)
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 768);
     }
 
     #[tokio::test]
     async fn test_generate_embedding_with_retry_exhaustion() {
-        let provider = Arc::new(MockProvider::new_error(ProviderError::Http(
-            "Connection failed".to_string(),
-        )));
-        let service =
-            EmbeddingService::with_provider(provider, "http://localhost:8000".to_string());
+        let server = Server::run();
 
-        let result = service.generate_embedding_with_retry("test", 2).await;
+        // All attempts fail with 500
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .respond_with(status_code(500)),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .generate_embedding_with_retry("test", 2, None)
+            .await;
         assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            EmbeddingError::MaxRetriesExceeded
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_generate_embeddings_batch() {
+        let server = Server::run();
+
+        // Mock route and embed for batch
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(3)
+                .respond_with(json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                }))),
+        );
+
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed"))
+                .times(3)
+                .respond_with(json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                }))),
+        );
+
+        let config = create_test_config(&server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
+        let result = service.generate_embeddings_batch(texts, 2, None).await;
+
+        assert!(result.is_ok());
+        let embeddings = result.unwrap();
+        assert_eq!(embeddings.len(), 3);
+        assert_eq!(embeddings[0].len(), 768);
+    }
+
+    #[tokio::test]
+    async fn test_generate_embeddings_batch_empty() {
+        let config = create_test_config("http://localhost:5001");
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service.generate_embeddings_batch(vec![], 10, None).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_error_conversion() {
+        let err: EmbeddingError = AcquireError::NoPermits.into();
+        assert!(matches!(err, EmbeddingError::SemaphoreError(_)));
+
+        let anyhow_err = anyhow::anyhow!("test error");
+        let err: EmbeddingError = anyhow_err.into();
+        assert!(matches!(err, EmbeddingError::BridgeError(_)));
     }
 }
