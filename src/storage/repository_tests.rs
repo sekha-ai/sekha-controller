@@ -8,7 +8,6 @@ mod tests {
     use crate::storage::chroma_client::ChromaClient;
     use crate::storage::repository::ConversationRepository;
     use crate::storage::SeaOrmConversationRepository;
-    use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, Statement};
     use serde_json::json;
     use std::fs;
     use std::sync::Arc;
@@ -18,38 +17,6 @@ mod tests {
     fn create_test_bridge() -> BridgeClient {
         let config = Config::default();
         BridgeClient::new(&config).expect("Failed to create BridgeClient")
-    }
-
-    async fn run_migrations_for_tests(db: &DatabaseConnection) -> Result<(), DbErr> {
-        // Apply all migrations from the migrations directory
-        let migrations = vec![
-            include_str!("../../migrations/001_create_conversations.sql"),
-            include_str!("../../migrations/002_create_messages.sql"),
-            include_str!("../../migrations/003_create_semantic_tags.sql"),
-            include_str!("../../migrations/004_create_hierarchical_summaries.sql"),
-            include_str!("../../migrations/005_create_knowledge_graph_edges.sql"),
-            include_str!("../../migrations/006_add_updated_at_triggers.sql"),
-            include_str!("../../migrations/007_create_fts.sql"),
-        ];
-
-        for (idx, migration_sql) in migrations.iter().enumerate() {
-            eprintln!("Running migration {}...", idx + 1);
-
-            // Split by semicolon and execute each statement
-            for statement in migration_sql
-                .split(';')
-                .filter(|s: &&str| !s.trim().is_empty())
-            {
-                db.execute(&Statement::from_string(
-                    DatabaseBackend::Sqlite,
-                    statement.trim().to_string(),
-                ))
-                .await?;
-            }
-        }
-
-        eprintln!("All migrations applied successfully");
-        Ok(())
     }
 
     async fn create_test_db() -> (TempDir, sea_orm::DatabaseConnection) {
@@ -65,14 +32,10 @@ mod tests {
 
         eprintln!("Creating test database at: {}", db_url);
 
+        // init_db() already runs all migrations properly - no need for manual SQL execution
         let db = init_db(&db_url)
             .await
             .expect("Failed to initialize database");
-
-        // Run migrations
-        run_migrations_for_tests(&db)
-            .await
-            .expect("Failed to run migrations");
 
         (temp_dir, db)
     }
