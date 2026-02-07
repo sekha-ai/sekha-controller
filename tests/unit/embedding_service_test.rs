@@ -2,7 +2,9 @@
 //! Unit tests for embedding service with BridgeClient integration
 
 use httptest::{matchers::*, responders::*, Expectation, Server};
-use sekha_controller::config::{Config, LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
+use sekha_controller::config::{
+    Config, LlmProviderConfig, ModelCapability, ModelTask, ProviderType,
+};
 use sekha_controller::llm::bridge_client::BridgeClient;
 use sekha_controller::services::embedding_service::{EmbeddingError, EmbeddingService};
 use serde_json::json;
@@ -67,9 +69,7 @@ async fn test_get_model_dimension_with_model_specified() {
     let bridge = BridgeClient::new(&config).unwrap();
     let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-    let result = service
-        .get_model_dimension(Some("nomic-embed-text"))
-        .await;
+    let result = service.get_model_dimension(Some("nomic-embed-text")).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), 768);
 }
@@ -270,14 +270,15 @@ async fn test_embed_with_collection_routing_with_preferred_model() {
     let server = Server::run();
 
     server.expect(
-        Expectation::matching(request::method_path("POST", "/api/v1/route"))
-            .respond_with(json_encoded(json!({
+        Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+            json_encoded(json!({
                 "provider_id": "openai",
                 "model_id": "text-embedding-3-large",
                 "estimated_cost": 0.0001,
                 "reason": "Preferred model",
                 "provider_type": "openai"
-            }))),
+            })),
+        ),
     );
 
     server.expect(
@@ -403,9 +404,7 @@ async fn test_generate_embedding_with_retry_exhaustion() {
     let bridge = BridgeClient::new(&config).unwrap();
     let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-    let result = service
-        .generate_embedding_with_retry("test", 2, None)
-        .await;
+    let result = service.generate_embedding_with_retry("test", 2, None).await;
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err(),
@@ -444,9 +443,7 @@ async fn test_generate_embedding_with_retry_no_embeddings_immediate_fail() {
     let bridge = BridgeClient::new(&config).unwrap();
     let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-    let result = service
-        .generate_embedding_with_retry("test", 3, None)
-        .await;
+    let result = service.generate_embedding_with_retry("test", 3, None).await;
     assert!(result.is_err());
     // Should fail with NoEmbeddings, not MaxRetriesExceeded
     assert!(matches!(result.unwrap_err(), EmbeddingError::NoEmbeddings));
@@ -487,7 +484,11 @@ async fn test_generate_embeddings_batch_success() {
     let bridge = BridgeClient::new(&config).unwrap();
     let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-    let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
+    let texts = vec![
+        "text1".to_string(),
+        "text2".to_string(),
+        "text3".to_string(),
+    ];
     let result = service.generate_embeddings_batch(texts, 2, None).await;
 
     assert!(result.is_ok());
@@ -628,5 +629,8 @@ async fn test_process_message_creates_dimension_specific_collection() {
 
     // Expect ChromaError because we don't have a real Chroma instance
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), EmbeddingError::ChromaError(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        EmbeddingError::ChromaError(_)
+    ));
 }

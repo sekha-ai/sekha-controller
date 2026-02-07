@@ -392,7 +392,10 @@ impl EmbeddingService {
         let mut last_error = None;
 
         for attempt in 0..max_retries {
-            match self.generate_embedding(content, preferred_model.clone()).await {
+            match self
+                .generate_embedding(content, preferred_model.clone())
+                .await
+            {
                 Ok(embedding) => return Ok(embedding),
                 Err(EmbeddingError::NoEmbeddings) => {
                     return Err(EmbeddingError::NoEmbeddings);
@@ -500,9 +503,7 @@ mod tests {
         let bridge = BridgeClient::new(&config).unwrap();
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-        let result = service
-            .get_model_dimension(Some("nomic-embed-text"))
-            .await;
+        let result = service.get_model_dimension(Some("nomic-embed-text")).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 768);
     }
@@ -530,11 +531,12 @@ mod tests {
         let bridge = BridgeClient::new(&config).unwrap();
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-        let result = service
-            .get_model_dimension(Some("nonexistent-model"))
-            .await;
+        let result = service.get_model_dimension(Some("nonexistent-model")).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), EmbeddingError::ModelNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            EmbeddingError::ModelNotFound(_)
+        ));
     }
 
     #[tokio::test]
@@ -581,15 +583,11 @@ mod tests {
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
         // First call - hits API
-        let result1 = service
-            .get_model_dimension(Some("nomic-embed-text"))
-            .await;
+        let result1 = service.get_model_dimension(Some("nomic-embed-text")).await;
         assert_eq!(result1.unwrap(), 768);
 
         // Second call - hits cache (server expectation of .times(1) ensures this)
-        let result2 = service
-            .get_model_dimension(Some("nomic-embed-text"))
-            .await;
+        let result2 = service.get_model_dimension(Some("nomic-embed-text")).await;
         assert_eq!(result2.unwrap(), 768);
     }
 
@@ -703,9 +701,7 @@ mod tests {
         let bridge = BridgeClient::new(&config).unwrap();
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-        let result = service
-            .generate_embedding_with_retry("test", 3, None)
-            .await;
+        let result = service.generate_embedding_with_retry("test", 3, None).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 768);
     }
@@ -724,9 +720,7 @@ mod tests {
         let bridge = BridgeClient::new(&config).unwrap();
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-        let result = service
-            .generate_embedding_with_retry("test", 2, None)
-            .await;
+        let result = service.generate_embedding_with_retry("test", 2, None).await;
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -766,7 +760,11 @@ mod tests {
         let bridge = BridgeClient::new(&config).unwrap();
         let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
 
-        let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
+        let texts = vec![
+            "text1".to_string(),
+            "text2".to_string(),
+            "text3".to_string(),
+        ];
         let result = service.generate_embeddings_batch(texts, 2, None).await;
 
         assert!(result.is_ok());
