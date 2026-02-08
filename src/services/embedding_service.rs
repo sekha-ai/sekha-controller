@@ -474,6 +474,7 @@ impl EmbeddingService {
 mod tests {
     use super::*;
     use crate::config::{Config, LlmProviderConfig, ModelCapability, ModelTask, ProviderType};
+    use crate::storage::chroma_client::ScoredResult;
     use httptest::{matchers::*, responders::*, Expectation, Server};
 
     fn create_test_config(bridge_url: &str) -> Config {
@@ -808,5 +809,414 @@ mod tests {
         let anyhow_err = anyhow::anyhow!("test error");
         let err: EmbeddingError = anyhow_err.into();
         assert!(matches!(err, EmbeddingError::BridgeError(_)));
+    }
+
+    // NEW TESTS FOR UNCOVERED LINES
+
+    #[tokio::test]
+    async fn test_search_all_dimensions_enough_results_in_primary() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        // Mock embedding generation
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        // Mock Chroma query with enough results
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "ids": [["id1", "id2", "id3"]],
+                    "distances": [[0.1, 0.2, 0.3]],
+                    "documents": [["doc1", "doc2", "doc3"]],
+                    "metadatas": [[{"key": "value1"}, {"key": "value2"}, {"key": "value3"}]]
+                }))),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let mut service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        let result = service.search_all_dimensions("query", 3, None, None).await;
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert_eq!(results.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_search_all_dimensions_cross_dimensional_search() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        // Mock embedding generation for primary dimension
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(2)
+                .respond_with(json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                }))),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed"))
+                .times(2)
+                .respond_with(json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                }))),
+        );
+
+        // Mock list_models to provide other dimensions
+        bridge_server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
+                    {
+                        "model_id": "nomic-embed-text",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 768,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    },
+                    {
+                        "model_id": "text-embedding-3-small",
+                        "provider_id": "openai",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 1536,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ])),
+            ),
+        );
+
+        // Mock Chroma query for primary dimension (returns 1 result)
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "ids": [["id1"]],
+                    "distances": [[0.1]],
+                    "documents": [["doc1"]],
+                    "metadatas": [[{"key": "value1"}]]
+                }))),
+        );
+
+        // Mock Chroma query for other dimension
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_1536/query"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "ids": [["id2"]],
+                    "distances": [[0.2]],
+                    "documents": [["doc2"]],
+                    "metadatas": [[{"key": "value2"}]]
+                }))),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        let result = service.search_all_dimensions("query", 5, None, None).await;
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert!(results.len() >= 1); // At least primary result
+    }
+
+    #[tokio::test]
+    async fn test_search_all_dimensions_with_failed_secondary() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        // Mock primary embedding
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(2)
+                .respond_with(json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                }))),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed"))
+                .times(1) // Primary succeeds
+                .respond_with(json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })))
+                .then()
+                .times(1) // Secondary fails
+                .respond_with(status_code(500)),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
+                    {
+                        "model_id": "nomic-embed-text",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "dimension": 768
+                    },
+                    {
+                        "model_id": "other-model",
+                        "provider_id": "openai",
+                        "task": "embedding",
+                        "dimension": 1536
+                    }
+                ])),
+            ),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "ids": [["id1"]],
+                    "distances": [[0.1]],
+                    "documents": [["doc1"]],
+                    "metadatas": [[{"key": "value1"}]]
+                }))),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        // Should succeed with primary results even if secondary fails
+        let result = service.search_all_dimensions("query", 5, None, None).await;
+        assert!(result.is_ok());
+        let results = result.unwrap();
+        assert_eq!(results.len(), 1); // Only primary result
+    }
+
+    #[tokio::test]
+    async fn test_process_message_with_metadata_types() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768"))
+                .respond_with(status_code(200)),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/upsert"))
+                .respond_with(status_code(200)),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        // Test with various metadata types
+        let metadata = json!({
+            "string_field": "value",
+            "number_field": 42,
+            "bool_field": true,
+            "array_field": [1, 2, 3], // Will be converted to string
+            "nested_object": {"inner": "value"} // Will be converted to string
+        });
+
+        let result = service
+            .process_message(
+                Uuid::new_v4(),
+                "test content",
+                Uuid::new_v4(),
+                metadata,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_process_message_with_retry_success_after_failure() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        // First attempt fails, second succeeds
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(1)
+                .respond_with(status_code(500))
+                .then()
+                .times(1)
+                .respond_with(json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                }))),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768"))
+                .respond_with(status_code(200)),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/upsert"))
+                .respond_with(status_code(200)),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        let result = service
+            .process_message_with_retry(
+                Uuid::new_v4(),
+                "test content",
+                Uuid::new_v4(),
+                json!({}),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_process_message_with_retry_max_retries_exceeded() {
+        let bridge_server = Server::run();
+
+        // All attempts fail (max_retries=3 means 4 total attempts: 0,1,2,3)
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route"))
+                .times(4)
+                .respond_with(status_code(500)),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+
+        let result = service
+            .process_message_with_retry(
+                Uuid::new_v4(),
+                "test content",
+                Uuid::new_v4(),
+                json!({}),
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            EmbeddingError::MaxRetriesExceeded
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_search_messages_delegates_to_search_all_dimensions() {
+        let chroma_server = Server::run();
+        let bridge_server = Server::run();
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/route")).respond_with(
+                json_encoded(serde_json::json!({
+                    "provider_id": "ollama",
+                    "model_id": "nomic-embed-text",
+                    "estimated_cost": 0.0,
+                    "reason": "Best match",
+                    "provider_type": "ollama"
+                })),
+            ),
+        );
+
+        bridge_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/embed")).respond_with(
+                json_encoded(serde_json::json!({
+                    "embedding": vec![0.1; 768],
+                    "model": "nomic-embed-text",
+                    "dimension": 768,
+                    "tokens_used": 5
+                })),
+            ),
+        );
+
+        chroma_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
+                .respond_with(json_encoded(serde_json::json!({
+                    "ids": [["id1"]],
+                    "distances": [[0.1]],
+                    "documents": [["doc1"]],
+                    "metadatas": [[{"key": "value1"}]]
+                }))),
+        );
+
+        let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
+        let bridge = BridgeClient::new(&config).unwrap();
+        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+
+        let result = service.search_messages("query", 5, None, None).await;
+        assert!(result.is_ok());
     }
 }
