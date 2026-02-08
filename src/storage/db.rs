@@ -192,9 +192,12 @@ mod tests {
             id: Set(Uuid::new_v4()),
             label: Set("Test".to_string()),
             folder: Set("default".to_string()),
+            status: Set("active".to_string()),
+            importance_score: Set(0),
+            word_count: Set(0),
+            session_count: Set(0),
             created_at: Set(now),
             updated_at: Set(now),
-            ..Default::default()
         };
 
         conversation
