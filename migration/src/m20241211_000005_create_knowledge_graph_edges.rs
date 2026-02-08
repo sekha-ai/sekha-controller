@@ -36,6 +36,14 @@ impl MigrationTrait for Migration {
                             .timestamp()
                             .not_null(),
                     )
+                    .primary_key(
+                        Index::create()
+                            .name("pk-knowledge_graph_edges")
+                            .col(KnowledgeGraphEdges::SubjectId)
+                            .col(KnowledgeGraphEdges::Predicate)
+                            .col(KnowledgeGraphEdges::ObjectId)
+                            .col(KnowledgeGraphEdges::ConversationId),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk-knowledge_graph_edges-conversation_id")
@@ -46,21 +54,6 @@ impl MigrationTrait for Migration {
                             .to(Conversations::Table, Conversations::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
-                    .to_owned(),
-            )
-            .await?;
-
-        // Create unique index to enforce uniqueness (composite primary key equivalent)
-        manager
-            .create_index(
-                Index::create()
-                    .name("idx_knowledge_graph_edges_unique")
-                    .table(KnowledgeGraphEdges::Table)
-                    .col(KnowledgeGraphEdges::SubjectId)
-                    .col(KnowledgeGraphEdges::Predicate)
-                    .col(KnowledgeGraphEdges::ObjectId)
-                    .col(KnowledgeGraphEdges::ConversationId)
-                    .unique()
                     .to_owned(),
             )
             .await?;
