@@ -138,6 +138,11 @@ impl EmbeddingService {
             .generate_embedding_routed(content.to_string(), preferred_model, None)
             .await?;
 
+        // Validate embedding is not empty
+        if embed_response.embedding.is_empty() {
+            return Err(EmbeddingError::NoEmbeddings);
+        }
+
         let dimension = embed_response.dimension;
         let model_used = routing.model_id;
 
@@ -300,7 +305,7 @@ impl EmbeddingService {
             .ensure_collection(&collection_name, dimension)
             .await?;
 
-        // Store in Chroma
+        // Store in Chroma - this WILL fail if Chroma is unavailable
         let embedding_id = message_id.to_string();
         self.chroma
             .upsert(
@@ -402,8 +407,15 @@ impl EmbeddingService {
                 .generate_embedding(content, preferred_model.clone())
                 .await
             {
-                Ok(embedding) => return Ok(embedding),
+                Ok(embedding) => {
+                    // Validate embedding is not empty
+                    if embedding.is_empty() {
+                        return Err(EmbeddingError::NoEmbeddings);
+                    }
+                    return Ok(embedding);
+                }
                 Err(EmbeddingError::NoEmbeddings) => {
+                    // Don't retry on NoEmbeddings - immediate fail
                     return Err(EmbeddingError::NoEmbeddings);
                 }
                 Err(e) => {
