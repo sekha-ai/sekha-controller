@@ -1151,6 +1151,23 @@ mod tests {
             ),
         );
 
+        // Mock GET /api/v1/models - needed when results < limit to check for cross-dimensional search
+        bridge_server.expect(
+            Expectation::matching(request::method_path("GET", "/api/v1/models")).respond_with(
+                json_encoded(serde_json::json!([
+                    {
+                        "model_id": "nomic-embed-text",
+                        "provider_id": "ollama",
+                        "task": "embedding",
+                        "context_window": 8192,
+                        "dimension": 768,
+                        "supports_vision": false,
+                        "supports_audio": false
+                    }
+                ])),
+            ),
+        );
+
         // Mock Chroma v2 API - GET collection by name
         chroma_server.expect(
             Expectation::matching(request::method_path(
