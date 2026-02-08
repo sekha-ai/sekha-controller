@@ -18,8 +18,17 @@ fn test_default_cors_enabled() {
 
 #[test]
 fn test_default_timeout() {
-    let circuit_breaker = CircuitBreakerConfig::default();
-    assert_eq!(circuit_breaker.timeout_secs, 60);
+    // default_timeout() is for provider timeout_secs
+    let provider = LlmProviderConfig {
+        id: "test".to_string(),
+        provider_type: ProviderType::Ollama,
+        base_url: "http://test".to_string(),
+        api_key: None,
+        timeout_secs: 120, // Uses default_timeout
+        priority: 1,
+        models: vec![],
+    };
+    assert_eq!(provider.timeout_secs, 120);
 }
 
 #[test]
@@ -31,7 +40,7 @@ fn test_default_auto_fallback() {
 #[test]
 fn test_default_require_vision() {
     let routing = RoutingConfig::default();
-    assert_eq!(routing.require_vision, true);
+    assert_eq!(routing.require_vision_for_images, true);
 }
 
 #[test]
@@ -42,17 +51,8 @@ fn test_default_failure_threshold() {
 
 #[test]
 fn test_default_timeout_secs() {
-    let provider = LlmProviderConfig {
-        id: "test".to_string(),
-        provider_type: ProviderType::Ollama,
-        base_url: "http://test".to_string(),
-        api_key: None,
-        timeout_secs: 120,
-        priority: 1,
-        models: vec![],
-    };
-    // Default is applied via serde, test that it works
-    assert_eq!(provider.timeout_secs, 120);
+    let circuit_breaker = CircuitBreakerConfig::default();
+    assert_eq!(circuit_breaker.timeout_secs, 60);
 }
 
 #[test]
@@ -105,19 +105,16 @@ fn test_config_load_with_v1_auto_migration() {
     let config = Config::load().expect("Failed to load config");
 
     // Should have auto-migrated to v2.0
-    assert!(
-        !config.llm_providers.is_empty(),
-        "Should have migrated providers"
-    );
+    assert!(!config.llm_providers.is_empty(), "Should have migrated providers");
     assert_eq!(config.llm_providers[0].id, "ollama_migrated");
     assert_eq!(config.llm_providers[0].provider_type, ProviderType::Ollama);
     assert_eq!(config.llm_providers[0].base_url, "http://localhost:11434");
     assert_eq!(config.llm_providers[0].timeout_secs, 120);
     assert_eq!(config.llm_providers[0].priority, 1);
-
+    
     // Check models were migrated
     assert_eq!(config.llm_providers[0].models.len(), 3);
-
+    
     // Embedding model
     let embedding = &config.llm_providers[0].models[0];
     assert_eq!(embedding.model_id, "nomic-embed-text");
@@ -126,17 +123,17 @@ fn test_config_load_with_v1_auto_migration() {
     assert_eq!(embedding.supports_vision, false);
     assert_eq!(embedding.supports_audio, false);
     assert_eq!(embedding.dimension, Some(768));
-
+    
     // Chat models
     let chat_small = &config.llm_providers[0].models[1];
     assert_eq!(chat_small.model_id, "llama3.1:8b");
     assert_eq!(chat_small.task, ModelTask::ChatSmall);
     assert_eq!(chat_small.context_window, 8192);
-
+    
     let chat_smart = &config.llm_providers[0].models[2];
     assert_eq!(chat_smart.model_id, "llama3.1:8b");
     assert_eq!(chat_smart.task, ModelTask::ChatSmart);
-
+    
     // Check default models
     assert!(config.default_models.is_some());
     let defaults = config.default_models.unwrap();
@@ -144,7 +141,7 @@ fn test_config_load_with_v1_auto_migration() {
     assert_eq!(defaults.chat_fast, "llama3.1:8b");
     assert_eq!(defaults.chat_smart, "llama3.1:8b");
     assert_eq!(defaults.chat_vision, None);
-
+    
     // Check version
     assert_eq!(config.config_version, Some("2.0".to_string()));
 
@@ -172,7 +169,7 @@ fn test_config_load_with_v1_default_models() {
     assert!(!config.llm_providers.is_empty());
     let embedding = &config.llm_providers[0].models[0];
     assert_eq!(embedding.model_id, "nomic-embed-text"); // Default
-
+    
     let chat = &config.llm_providers[0].models[1];
     assert_eq!(chat.model_id, "llama3.1:8b"); // Default
 
@@ -193,7 +190,7 @@ fn test_config_no_migration_when_v2_providers_exist() {
     env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
     env::set_var(
         "SEKHA_LLM_PROVIDERS",
-        r#"[{"id":"test","provider_type":"ollama","base_url":"http://test","api_key":null,"timeout_secs":120,"priority":1,"models":[]}]"#,
+        r#"[{"id":"test","type":"ollama","base_url":"http://test","api_key":null,"timeout_secs":120,"priority":1,"models":[]}]"#,
     );
 
     let config = Config::load().expect("Failed to load config");
@@ -240,9 +237,9 @@ fn test_config_env_var_override() {
 #[test]
 fn test_routing_config_defaults() {
     let routing = RoutingConfig::default();
-    assert_eq!(routing.timeout, 120);
     assert_eq!(routing.auto_fallback, true);
-    assert_eq!(routing.require_vision, true);
+    assert_eq!(routing.require_vision_for_images, true);
+    assert!(routing.max_cost_per_request.is_none());
 }
 
 #[test]
@@ -285,17 +282,17 @@ fn test_config_validation_called() {
 fn test_config_home_directory_fallback() {
     // This tests the HOME env var fallback in config file loading
     let original_home = env::var("HOME").ok();
-
+    
     // Test with HOME set
     env::set_var("HOME", "/tmp/test_home");
     let config = Config::load();
     assert!(config.is_ok());
-
+    
     // Test with HOME unset (uses "." fallback)
     env::remove_var("HOME");
     let config = Config::load();
     assert!(config.is_ok());
-
+    
     // Restore HOME
     if let Some(home) = original_home {
         env::set_var("HOME", home);
@@ -317,10 +314,7 @@ fn test_all_v1_defaults_in_migration() {
     let config = Config::load().expect("Failed to load config");
 
     // Verify v1.x compatibility fields are set
-    assert_eq!(
-        config.ollama_url,
-        Some("http://localhost:11434".to_string())
-    );
+    assert_eq!(config.ollama_url, Some("http://localhost:11434".to_string()));
     assert_eq!(config.embedding_model, Some("nomic-embed-text".to_string()));
     assert_eq!(config.summarization_model, Some("llama3.1:8b".to_string()));
 
