@@ -617,7 +617,8 @@ async fn test_process_message_creates_dimension_specific_collection() {
 
     let config = create_test_config(&server.url_str("").trim_end_matches('/'));
     let bridge = BridgeClient::new(&config).unwrap();
-    let service = EmbeddingService::new(bridge, "http://localhost:8000".to_string());
+    // Use an invalid/unreachable Chroma URL that will definitely fail
+    let service = EmbeddingService::new(bridge, "http://240.0.0.1:1".to_string());
 
     // Note: This will fail with Chroma connection error, but we're testing the routing logic
     let result = service
