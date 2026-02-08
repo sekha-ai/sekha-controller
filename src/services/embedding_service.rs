@@ -811,7 +811,7 @@ mod tests {
         assert!(matches!(err, EmbeddingError::BridgeError(_)));
     }
 
-    // NEW TESTS FOR UNCOVERED LINES
+    // NEW TESTS FOR UNCOVERED LINES - FIXED TO USE V2 API
 
     #[tokio::test]
     async fn test_search_all_dimensions_enough_results_in_primary() {
@@ -842,11 +842,23 @@ mod tests {
             ),
         );
 
-        // Mock Chroma query with enough results
+        // Mock Chroma v2 API - GET collection by name to retrieve ID
+        chroma_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/conversations_768",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "id": "collection-uuid-768",
+                "name": "conversations_768"
+            }))),
+        );
+
+        // Mock Chroma v2 API - POST query with collection ID
         chroma_server.expect(
             Expectation::matching(request::method_path(
                 "POST",
-                "/api/v1/collections/conversations_768/query",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/collection-uuid-768/query",
             ))
             .respond_with(json_encoded(serde_json::json!({
                 "ids": [["id1", "id2", "id3"]],
@@ -858,7 +870,7 @@ mod tests {
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let mut service = EmbeddingService::new(
+        let service = EmbeddingService::new(
             bridge,
             chroma_server.url_str("").trim_end_matches('/').to_string(),
         );
@@ -874,7 +886,7 @@ mod tests {
         let chroma_server = Server::run();
         let bridge_server = Server::run();
 
-        // Mock embedding generation for primary dimension
+        // Mock embedding generation for primary dimension (2 times - primary + secondary)
         bridge_server.expect(
             Expectation::matching(request::method_path("POST", "/api/v1/route"))
                 .times(2)
@@ -924,11 +936,23 @@ mod tests {
             ),
         );
 
-        // Mock Chroma query for primary dimension (returns 1 result)
+        // Mock Chroma v2 API - GET collection 768 by name
+        chroma_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/conversations_768",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "id": "collection-uuid-768",
+                "name": "conversations_768"
+            }))),
+        );
+
+        // Mock Chroma v2 API - POST query for primary (returns 1 result)
         chroma_server.expect(
             Expectation::matching(request::method_path(
                 "POST",
-                "/api/v1/collections/conversations_768/query",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/collection-uuid-768/query",
             ))
             .respond_with(json_encoded(serde_json::json!({
                 "ids": [["id1"]],
@@ -938,11 +962,23 @@ mod tests {
             }))),
         );
 
-        // Mock Chroma query for other dimension
+        // Mock Chroma v2 API - GET collection 1536 by name
+        chroma_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/conversations_1536",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "id": "collection-uuid-1536",
+                "name": "conversations_1536"
+            }))),
+        );
+
+        // Mock Chroma v2 API - POST query for other dimension
         chroma_server.expect(
             Expectation::matching(request::method_path(
                 "POST",
-                "/api/v1/collections/conversations_1536/query",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/collection-uuid-1536/query",
             ))
             .respond_with(json_encoded(serde_json::json!({
                 "ids": [["id2"]],
@@ -993,18 +1029,37 @@ mod tests {
             ),
         );
 
+        // Mock Chroma v2 API - GET collections list for ensure_collection
         chroma_server.expect(
             Expectation::matching(request::method_path(
-                "POST",
-                "/api/v1/collections/conversations_768",
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections",
             ))
-            .respond_with(status_code(200)),
+            .respond_with(json_encoded(serde_json::json!([
+                {
+                    "id": "collection-uuid-768",
+                    "name": "conversations_768"
+                }
+            ]))),
         );
 
+        // Mock Chroma v2 API - GET collection by name for upsert
+        chroma_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/conversations_768",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "id": "collection-uuid-768",
+                "name": "conversations_768"
+            }))),
+        );
+
+        // Mock Chroma v2 API - POST upsert with collection ID
         chroma_server.expect(
             Expectation::matching(request::method_path(
                 "POST",
-                "/api/v1/collections/conversations_768/upsert",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/collection-uuid-768/upsert",
             ))
             .respond_with(status_code(200)),
         );
@@ -1096,10 +1151,23 @@ mod tests {
             ),
         );
 
+        // Mock Chroma v2 API - GET collection by name
+        chroma_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/conversations_768",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "id": "collection-uuid-768",
+                "name": "conversations_768"
+            }))),
+        );
+
+        // Mock Chroma v2 API - POST query
         chroma_server.expect(
             Expectation::matching(request::method_path(
                 "POST",
-                "/api/v1/collections/conversations_768/query",
+                "/api/v2/tenants/default_tenant/databases/default_database/collections/collection-uuid-768/query",
             ))
             .respond_with(json_encoded(serde_json::json!({
                 "ids": [["id1"]],
