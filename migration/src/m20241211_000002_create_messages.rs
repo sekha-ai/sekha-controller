@@ -38,21 +38,33 @@ impl MigrationTrait for Migration {
                             .to(Conversations::Table, Conversations::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
-                    .index(
-                        Index::create()
-                            .name("idx_messages_conversation_id")
-                            .col(Messages::ConversationId),
-                    )
-                    .index(
-                        Index::create()
-                            .name("idx_messages_timestamp")
-                            .col(Messages::Timestamp),
-                    )
                     .to_owned(),
             )
-            .await
-    }
+            .await?;
 
+        // Create indexes
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_messages_conversation_id")
+                    .table(Messages::Table)
+                    .col(Messages::ConversationId)
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_messages_timestamp")
+                    .table(Messages::Table)
+                    .col(Messages::Timestamp)
+                    .to_owned(),
+            )
+            .await?;
+
+        Ok(())
+    }
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(Messages::Table).to_owned())
