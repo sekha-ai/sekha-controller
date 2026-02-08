@@ -844,18 +844,24 @@ mod tests {
 
         // Mock Chroma query with enough results
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
-                .respond_with(json_encoded(serde_json::json!({
-                    "ids": [["id1", "id2", "id3"]],
-                    "distances": [[0.1, 0.2, 0.3]],
-                    "documents": [["doc1", "doc2", "doc3"]],
-                    "metadatas": [[{"key": "value1"}, {"key": "value2"}, {"key": "value3"}]]
-                }))),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/query",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "ids": [["id1", "id2", "id3"]],
+                "distances": [[0.1, 0.2, 0.3]],
+                "documents": [["doc1", "doc2", "doc3"]],
+                "metadatas": [[{"key": "value1"}, {"key": "value2"}, {"key": "value3"}]]
+            }))),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let mut service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let mut service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         let result = service.search_all_dimensions("query", 3, None, None).await;
         assert!(result.is_ok());
@@ -920,29 +926,38 @@ mod tests {
 
         // Mock Chroma query for primary dimension (returns 1 result)
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
-                .respond_with(json_encoded(serde_json::json!({
-                    "ids": [["id1"]],
-                    "distances": [[0.1]],
-                    "documents": [["doc1"]],
-                    "metadatas": [[{"key": "value1"}]]
-                }))),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/query",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "ids": [["id1"]],
+                "distances": [[0.1]],
+                "documents": [["doc1"]],
+                "metadatas": [[{"key": "value1"}]]
+            }))),
         );
 
         // Mock Chroma query for other dimension
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_1536/query"))
-                .respond_with(json_encoded(serde_json::json!({
-                    "ids": [["id2"]],
-                    "distances": [[0.2]],
-                    "documents": [["doc2"]],
-                    "metadatas": [[{"key": "value2"}]]
-                }))),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_1536/query",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "ids": [["id2"]],
+                "distances": [[0.2]],
+                "documents": [["doc2"]],
+                "metadatas": [[{"key": "value2"}]]
+            }))),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         let result = service.search_all_dimensions("query", 5, None, None).await;
         assert!(result.is_ok());
@@ -1002,18 +1017,24 @@ mod tests {
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
-                .respond_with(json_encoded(serde_json::json!({
-                    "ids": [["id1"]],
-                    "distances": [[0.1]],
-                    "documents": [["doc1"]],
-                    "metadatas": [[{"key": "value1"}]]
-                }))),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/query",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "ids": [["id1"]],
+                "distances": [[0.1]],
+                "documents": [["doc1"]],
+                "metadatas": [[{"key": "value1"}]]
+            }))),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         // Should succeed with primary results even if secondary fails
         let result = service.search_all_dimensions("query", 5, None, None).await;
@@ -1051,18 +1072,27 @@ mod tests {
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768"))
-                .respond_with(status_code(200)),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768",
+            ))
+            .respond_with(status_code(200)),
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/upsert"))
-                .respond_with(status_code(200)),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/upsert",
+            ))
+            .respond_with(status_code(200)),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         // Test with various metadata types
         let metadata = json!({
@@ -1118,18 +1148,27 @@ mod tests {
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768"))
-                .respond_with(status_code(200)),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768",
+            ))
+            .respond_with(status_code(200)),
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/upsert"))
-                .respond_with(status_code(200)),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/upsert",
+            ))
+            .respond_with(status_code(200)),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         let result = service
             .process_message_with_retry(
@@ -1203,18 +1242,24 @@ mod tests {
         );
 
         chroma_server.expect(
-            Expectation::matching(request::method_path("POST", "/api/v1/collections/conversations_768/query"))
-                .respond_with(json_encoded(serde_json::json!({
-                    "ids": [["id1"]],
-                    "distances": [[0.1]],
-                    "documents": [["doc1"]],
-                    "metadatas": [[{"key": "value1"}]]
-                }))),
+            Expectation::matching(request::method_path(
+                "POST",
+                "/api/v1/collections/conversations_768/query",
+            ))
+            .respond_with(json_encoded(serde_json::json!({
+                "ids": [["id1"]],
+                "distances": [[0.1]],
+                "documents": [["doc1"]],
+                "metadatas": [[{"key": "value1"}]]
+            }))),
         );
 
         let config = create_test_config(&bridge_server.url_str("").trim_end_matches('/'));
         let bridge = BridgeClient::new(&config).unwrap();
-        let service = EmbeddingService::new(bridge, chroma_server.url_str("").trim_end_matches('/'). to_string());
+        let service = EmbeddingService::new(
+            bridge,
+            chroma_server.url_str("").trim_end_matches('/').to_string(),
+        );
 
         let result = service.search_messages("query", 5, None, None).await;
         assert!(result.is_ok());
