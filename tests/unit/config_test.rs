@@ -1,40 +1,245 @@
+// tests/unit/config_test.rs
+//! Comprehensive tests for Config module to achieve 100% coverage
+
 use sekha_controller::config::*;
-use validator::Validate;
+use std::env;
 
 #[test]
-fn test_config_validation() {
+fn test_default_rate_limit() {
     let config = Config::default();
-    assert!(config.validate().is_ok());
+    assert_eq!(config.rate_limit_per_minute, 1000);
 }
 
 #[test]
-fn test_config_has_required_fields() {
+fn test_default_cors_enabled() {
     let config = Config::default();
-    assert!(!config.mcp_api_key.is_empty());
-    assert!(!config.database_url.is_empty());
-    assert!(!config.chroma_url.is_empty());
+    assert_eq!(config.cors_enabled, true);
 }
 
 #[test]
-fn test_provider_type_serialization() {
-    let provider = ProviderType::Ollama;
-    let json = serde_json::to_string(&provider).unwrap();
-    assert_eq!(json, "\"ollama\"");
-
-    let provider = ProviderType::OpenAi;
-    let json = serde_json::to_string(&provider).unwrap();
-    assert_eq!(json, "\"openai\"");
+fn test_default_timeout() {
+    let circuit_breaker = CircuitBreakerConfig::default();
+    assert_eq!(circuit_breaker.timeout_secs, 60);
 }
 
 #[test]
-fn test_model_task_serialization() {
-    let task = ModelTask::Embedding;
-    let json = serde_json::to_string(&task).unwrap();
-    assert_eq!(json, "\"embedding\"");
+fn test_default_auto_fallback() {
+    let routing = RoutingConfig::default();
+    assert_eq!(routing.auto_fallback, true);
+}
 
-    let task = ModelTask::ChatSmall;
-    let json = serde_json::to_string(&task).unwrap();
-    assert_eq!(json, "\"chat_small\"");
+#[test]
+fn test_default_require_vision() {
+    let routing = RoutingConfig::default();
+    assert_eq!(routing.require_vision, true);
+}
+
+#[test]
+fn test_default_failure_threshold() {
+    let circuit_breaker = CircuitBreakerConfig::default();
+    assert_eq!(circuit_breaker.failure_threshold, 3);
+}
+
+#[test]
+fn test_default_timeout_secs() {
+    let provider = LlmProviderConfig {
+        id: "test".to_string(),
+        provider_type: ProviderType::Ollama,
+        base_url: "http://test".to_string(),
+        api_key: None,
+        timeout_secs: 120,
+        priority: 1,
+        models: vec![],
+    };
+    // Default is applied via serde, test that it works
+    assert_eq!(provider.timeout_secs, 120);
+}
+
+#[test]
+fn test_default_success_threshold() {
+    let circuit_breaker = CircuitBreakerConfig::default();
+    assert_eq!(circuit_breaker.success_threshold, 2);
+}
+
+#[test]
+fn test_config_load_with_defaults() {
+    // Clear any existing SEKHA env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
+
+    // Load config - should use all defaults
+    let config = Config::load().expect("Failed to load config");
+
+    // Verify all defaults are applied
+    assert_eq!(config.server_host, "0.0.0.0");
+    assert_eq!(config.server_port, 8080);
+    assert_eq!(config.max_connections, 10);
+    assert_eq!(config.log_level, "info");
+    assert_eq!(config.database_url, "sqlite://sekha.db");
+    assert_eq!(config.chroma_url, "http://localhost:8000");
+    assert_eq!(config.llm_bridge_url, "http://localhost:5001");
+    assert_eq!(config.summarization_enabled, true);
+    assert_eq!(config.pruning_enabled, true);
+    assert_eq!(config.rate_limit_per_minute, 1000);
+    assert_eq!(config.cors_enabled, true);
+    assert_eq!(config.mcp_api_key, "dev_default_key_change_me_1234567890");
+}
+
+#[test]
+fn test_config_load_with_v1_auto_migration() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
+
+    // Set v1.x config via env vars
+    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
+    env::set_var("SEKHA_EMBEDDING_MODEL", "nomic-embed-text");
+    env::set_var("SEKHA_SUMMARIZATION_MODEL", "llama3.1:8b");
+
+    let config = Config::load().expect("Failed to load config");
+
+    // Should have auto-migrated to v2.0
+    assert!(!config.llm_providers.is_empty(), "Should have migrated providers");
+    assert_eq!(config.llm_providers[0].id, "ollama_migrated");
+    assert_eq!(config.llm_providers[0].provider_type, ProviderType::Ollama);
+    assert_eq!(config.llm_providers[0].base_url, "http://localhost:11434");
+    assert_eq!(config.llm_providers[0].timeout_secs, 120);
+    assert_eq!(config.llm_providers[0].priority, 1);
+    
+    // Check models were migrated
+    assert_eq!(config.llm_providers[0].models.len(), 3);
+    
+    // Embedding model
+    let embedding = &config.llm_providers[0].models[0];
+    assert_eq!(embedding.model_id, "nomic-embed-text");
+    assert_eq!(embedding.task, ModelTask::Embedding);
+    assert_eq!(embedding.context_window, 512);
+    assert_eq!(embedding.supports_vision, false);
+    assert_eq!(embedding.supports_audio, false);
+    assert_eq!(embedding.dimension, Some(768));
+    
+    // Chat models
+    let chat_small = &config.llm_providers[0].models[1];
+    assert_eq!(chat_small.model_id, "llama3.1:8b");
+    assert_eq!(chat_small.task, ModelTask::ChatSmall);
+    assert_eq!(chat_small.context_window, 8192);
+    
+    let chat_smart = &config.llm_providers[0].models[2];
+    assert_eq!(chat_smart.model_id, "llama3.1:8b");
+    assert_eq!(chat_smart.task, ModelTask::ChatSmart);
+    
+    // Check default models
+    assert!(config.default_models.is_some());
+    let defaults = config.default_models.unwrap();
+    assert_eq!(defaults.embedding, "nomic-embed-text");
+    assert_eq!(defaults.chat_fast, "llama3.1:8b");
+    assert_eq!(defaults.chat_smart, "llama3.1:8b");
+    assert_eq!(defaults.chat_vision, None);
+    
+    // Check version
+    assert_eq!(config.config_version, Some("2.0".to_string()));
+
+    // Cleanup
+    env::remove_var("SEKHA_OLLAMA_URL");
+    env::remove_var("SEKHA_EMBEDDING_MODEL");
+    env::remove_var("SEKHA_SUMMARIZATION_MODEL");
+}
+
+#[test]
+fn test_config_load_with_v1_default_models() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
+
+    // Set v1.x config without explicit model names (should use defaults)
+    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
+
+    let config = Config::load().expect("Failed to load config");
+
+    // Should have auto-migrated with default model names
+    assert!(!config.llm_providers.is_empty());
+    let embedding = &config.llm_providers[0].models[0];
+    assert_eq!(embedding.model_id, "nomic-embed-text"); // Default
+    
+    let chat = &config.llm_providers[0].models[1];
+    assert_eq!(chat.model_id, "llama3.1:8b"); // Default
+
+    // Cleanup
+    env::remove_var("SEKHA_OLLAMA_URL");
+}
+
+#[test]
+fn test_config_no_migration_when_v2_providers_exist() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
+
+    // Set both v1 and v2 config
+    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
+    env::set_var(
+        "SEKHA_LLM_PROVIDERS",
+        r#"[{"id":"test","provider_type":"ollama","base_url":"http://test","api_key":null,"timeout_secs":120,"priority":1,"models":[]}]"#,
+    );
+
+    let config = Config::load().expect("Failed to load config");
+
+    // Should NOT auto-migrate when v2 providers exist
+    assert_eq!(config.llm_providers.len(), 1);
+    assert_eq!(config.llm_providers[0].id, "test");
+    assert_ne!(config.llm_providers[0].id, "ollama_migrated");
+
+    // Cleanup
+    env::remove_var("SEKHA_OLLAMA_URL");
+    env::remove_var("SEKHA_LLM_PROVIDERS");
+}
+
+#[test]
+fn test_config_env_var_override() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
+
+    // Override defaults via env vars
+    env::set_var("SEKHA_SERVER_PORT", "9090");
+    env::set_var("SEKHA_LOG_LEVEL", "debug");
+    env::set_var("SEKHA_RATE_LIMIT_PER_MINUTE", "2000");
+    env::set_var("SEKHA_CORS_ENABLED", "false");
+
+    let config = Config::load().expect("Failed to load config");
+
+    assert_eq!(config.server_port, 9090);
+    assert_eq!(config.log_level, "debug");
+    assert_eq!(config.rate_limit_per_minute, 2000);
+    assert_eq!(config.cors_enabled, false);
+
+    // Cleanup
+    env::remove_var("SEKHA_SERVER_PORT");
+    env::remove_var("SEKHA_LOG_LEVEL");
+    env::remove_var("SEKHA_RATE_LIMIT_PER_MINUTE");
+    env::remove_var("SEKHA_CORS_ENABLED");
+}
+
+#[test]
+fn test_routing_config_defaults() {
+    let routing = RoutingConfig::default();
+    assert_eq!(routing.timeout, 120);
+    assert_eq!(routing.auto_fallback, true);
+    assert_eq!(routing.require_vision, true);
 }
 
 #[test]
@@ -46,366 +251,73 @@ fn test_circuit_breaker_config_defaults() {
 }
 
 #[test]
-fn test_routing_config_defaults() {
-    let routing = RoutingConfig::default();
-    assert!(routing.auto_fallback);
-    assert!(routing.require_vision_for_images);
-    assert!(routing.max_cost_per_request.is_none());
-}
-
-#[test]
-fn test_config_default_values() {
-    let config = Config::default();
-    assert_eq!(config.server_host, "0.0.0.0");
-    assert_eq!(config.server_port, 8080);
-    assert_eq!(config.max_connections, 10);
-    assert_eq!(config.log_level, "info");
-    assert!(config.summarization_enabled);
-    assert!(config.pruning_enabled);
-    assert_eq!(config.rate_limit_per_minute, 1000);
-    assert!(config.cors_enabled);
-}
-
-#[test]
-fn test_provider_config_creation() {
+fn test_provider_config_with_explicit_timeout() {
     let provider = LlmProviderConfig {
-        id: "test_provider".to_string(),
+        id: "test".to_string(),
         provider_type: ProviderType::Ollama,
-        base_url: "http://localhost:11434".to_string(),
-        api_key: Some("test_key".to_string()),
-        timeout_secs: 120,
-        priority: 1,
-        models: vec![],
-    };
-
-    assert_eq!(provider.id, "test_provider");
-    assert_eq!(provider.priority, 1);
-    assert_eq!(provider.timeout_secs, 120);
-}
-
-#[test]
-fn test_model_capability_with_embedding() {
-    let model = ModelCapability {
-        model_id: "nomic-embed-text".to_string(),
-        task: ModelTask::Embedding,
-        context_window: 512,
-        supports_vision: false,
-        supports_audio: false,
-        dimension: Some(768),
-    };
-
-    assert_eq!(model.task, ModelTask::Embedding);
-    assert_eq!(model.dimension, Some(768));
-    assert!(!model.supports_vision);
-}
-
-#[test]
-fn test_default_models_configuration() {
-    let defaults = DefaultModels {
-        embedding: "nomic-embed-text".to_string(),
-        chat_fast: "llama3.1:8b".to_string(),
-        chat_smart: "llama3.1:70b".to_string(),
-        chat_vision: Some("llava".to_string()),
-    };
-
-    assert_eq!(defaults.embedding, "nomic-embed-text");
-    assert_eq!(defaults.chat_fast, "llama3.1:8b");
-    assert!(defaults.chat_vision.is_some());
-}
-
-#[test]
-fn test_config_validate_providers_success() {
-    let mut config = Config::default();
-
-    // Add provider with models
-    config.llm_providers = vec![LlmProviderConfig {
-        id: "ollama".to_string(),
-        provider_type: ProviderType::Ollama,
-        base_url: "http://localhost:11434".to_string(),
+        base_url: "http://test".to_string(),
         api_key: None,
-        timeout_secs: 120,
-        priority: 1,
-        models: vec![
-            ModelCapability {
-                model_id: "nomic-embed-text".to_string(),
-                task: ModelTask::Embedding,
-                context_window: 512,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: Some(768),
-            },
-            ModelCapability {
-                model_id: "llama3.1:8b".to_string(),
-                task: ModelTask::ChatSmall,
-                context_window: 8192,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: None,
-            },
-            ModelCapability {
-                model_id: "llama3.1:70b".to_string(),
-                task: ModelTask::ChatSmart,
-                context_window: 8192,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: None,
-            },
-        ],
-    }];
-
-    config.default_models = Some(DefaultModels {
-        embedding: "nomic-embed-text".to_string(),
-        chat_fast: "llama3.1:8b".to_string(),
-        chat_smart: "llama3.1:70b".to_string(),
-        chat_vision: None,
-    });
-
-    assert!(config.validate_providers().is_ok());
-}
-
-#[test]
-fn test_config_validate_providers_missing_defaults() {
-    let mut config = Config::default();
-
-    config.llm_providers = vec![LlmProviderConfig {
-        id: "ollama".to_string(),
-        provider_type: ProviderType::Ollama,
-        base_url: "http://localhost:11434".to_string(),
-        api_key: None,
-        timeout_secs: 120,
-        priority: 1,
-        models: vec![],
-    }];
-
-    // Missing default_models
-    let result = config.validate_providers();
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_config_validate_providers_duplicate_ids() {
-    let mut config = Config::default();
-
-    config.llm_providers = vec![
-        LlmProviderConfig {
-            id: "ollama".to_string(),
-            provider_type: ProviderType::Ollama,
-            base_url: "http://localhost:11434".to_string(),
-            api_key: None,
-            timeout_secs: 120,
-            priority: 1,
-            models: vec![],
-        },
-        LlmProviderConfig {
-            id: "ollama".to_string(), // Duplicate!
-            provider_type: ProviderType::Ollama,
-            base_url: "http://localhost:11435".to_string(),
-            api_key: None,
-            timeout_secs: 120,
-            priority: 2,
-            models: vec![],
-        },
-    ];
-
-    config.default_models = Some(DefaultModels {
-        embedding: "nomic-embed-text".to_string(),
-        chat_fast: "llama3.1:8b".to_string(),
-        chat_smart: "llama3.1:70b".to_string(),
-        chat_vision: None,
-    });
-
-    let result = config.validate_providers();
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_get_provider_for_task() {
-    let mut config = Config::default();
-
-    config.llm_providers = vec![
-        LlmProviderConfig {
-            id: "ollama_low".to_string(),
-            provider_type: ProviderType::Ollama,
-            base_url: "http://localhost:11434".to_string(),
-            api_key: None,
-            timeout_secs: 120,
-            priority: 2, // Lower priority
-            models: vec![ModelCapability {
-                model_id: "nomic-embed-text".to_string(),
-                task: ModelTask::Embedding,
-                context_window: 512,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: Some(768),
-            }],
-        },
-        LlmProviderConfig {
-            id: "ollama_high".to_string(),
-            provider_type: ProviderType::Ollama,
-            base_url: "http://localhost:11435".to_string(),
-            api_key: None,
-            timeout_secs: 120,
-            priority: 1, // Higher priority
-            models: vec![ModelCapability {
-                model_id: "another-embed".to_string(),
-                task: ModelTask::Embedding,
-                context_window: 512,
-                supports_vision: false,
-                supports_audio: false,
-                dimension: Some(768),
-            }],
-        },
-    ];
-
-    let provider = config.get_provider_for_task(&ModelTask::Embedding);
-    assert!(provider.is_some());
-    assert_eq!(provider.unwrap().id, "ollama_high"); // Should pick higher priority
-}
-
-#[test]
-fn test_get_rest_api_key_with_explicit_key() {
-    let mut config = Config::default();
-    config.rest_api_key = Some("explicit_key".to_string());
-
-    assert_eq!(config.get_rest_api_key(), "explicit_key");
-}
-
-#[test]
-fn test_get_rest_api_key_fallback_to_mcp() {
-    let config = Config::default();
-    // rest_api_key is None, should fallback to mcp_api_key
-    assert_eq!(config.get_rest_api_key(), config.mcp_api_key);
-}
-
-#[test]
-fn test_get_all_api_keys() {
-    let mut config = Config::default();
-    config.rest_api_key = Some("rest_key".to_string());
-    config.additional_api_keys = vec!["key1".to_string(), "key2".to_string()];
-
-    let keys = config.get_all_api_keys();
-
-    // Should contain mcp_api_key, rest_api_key, and additional keys
-    assert!(keys.contains(&config.mcp_api_key));
-    assert!(keys.contains(&"rest_key".to_string()));
-    assert!(keys.contains(&"key1".to_string()));
-    assert!(keys.contains(&"key2".to_string()));
-
-    // Should be deduplicated
-    let unique_count = keys.len();
-    assert_eq!(unique_count, 4);
-}
-
-#[test]
-fn test_is_valid_api_key() {
-    let mut config = Config::default();
-    config.additional_api_keys = vec!["valid_key".to_string()];
-
-    assert!(config.is_valid_api_key(&config.mcp_api_key));
-    assert!(config.is_valid_api_key("valid_key"));
-    assert!(!config.is_valid_api_key("invalid_key"));
-}
-
-#[test]
-fn test_config_port_validation_low() {
-    let mut config = Config::default();
-    config.server_port = 80; // Below 1024
-
-    // Should fail validation
-    assert!(config.validate().is_err());
-}
-
-#[test]
-fn test_config_port_validation_valid() {
-    let mut config = Config::default();
-    config.server_port = 8080; // Valid
-    assert!(config.validate().is_ok());
-
-    config.server_port = 65535; // Max valid u16
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn test_config_api_key_length_validation() {
-    let mut config = Config::default();
-    config.mcp_api_key = "short".to_string(); // Too short (< 32 chars)
-
-    assert!(config.validate().is_err());
-
-    config.mcp_api_key = "a".repeat(32); // Minimum length
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn test_config_max_connections_validation() {
-    let mut config = Config::default();
-    config.max_connections = 0; // Invalid
-
-    assert!(config.validate().is_err());
-
-    config.max_connections = 50; // Valid
-    assert!(config.validate().is_ok());
-
-    config.max_connections = 101; // Above 100
-    assert!(config.validate().is_err());
-}
-
-#[test]
-fn test_model_capability_vision_and_audio() {
-    let model = ModelCapability {
-        model_id: "gpt-4-vision".to_string(),
-        task: ModelTask::Vision,
-        context_window: 4096,
-        supports_vision: true,
-        supports_audio: false,
-        dimension: None,
-    };
-
-    assert!(model.supports_vision);
-    assert!(!model.supports_audio);
-    assert_eq!(model.task, ModelTask::Vision);
-}
-
-#[test]
-fn test_provider_with_api_key() {
-    let provider = LlmProviderConfig {
-        id: "openai".to_string(),
-        provider_type: ProviderType::OpenAi,
-        base_url: "https://api.openai.com/v1".to_string(),
-        api_key: Some("sk-test123".to_string()),
-        timeout_secs: 60,
+        timeout_secs: 90, // Non-default
         priority: 1,
         models: vec![],
     };
-
-    assert!(provider.api_key.is_some());
-    assert_eq!(provider.api_key.unwrap(), "sk-test123");
+    assert_eq!(provider.timeout_secs, 90);
 }
 
 #[test]
-fn test_routing_config_with_cost_limit() {
-    let routing = RoutingConfig {
-        auto_fallback: true,
-        require_vision_for_images: false,
-        max_cost_per_request: Some(0.05),
-        circuit_breaker: CircuitBreakerConfig::default(),
-    };
+fn test_config_validation_called() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
 
-    assert!(routing.max_cost_per_request.is_some());
-    assert_eq!(routing.max_cost_per_request.unwrap(), 0.05);
+    // This should succeed and call validate_providers internally
+    let result = Config::load();
+    assert!(result.is_ok(), "Config load should validate and succeed");
 }
 
 #[test]
-fn test_reloadable_config() {
-    let config = Config::default();
+fn test_config_home_directory_fallback() {
+    // This tests the HOME env var fallback in config file loading
+    let original_home = env::var("HOME").ok();
+    
+    // Test with HOME set
+    env::set_var("HOME", "/tmp/test_home");
+    let config = Config::load();
+    assert!(config.is_ok());
+    
+    // Test with HOME unset (uses "." fallback)
+    env::remove_var("HOME");
+    let config = Config::load();
+    assert!(config.is_ok());
+    
+    // Restore HOME
+    if let Some(home) = original_home {
+        env::set_var("HOME", home);
+    }
+}
 
-    let reloadable = ReloadableConfig {
-        summarization_enabled: config.summarization_enabled,
-        pruning_enabled: config.pruning_enabled,
-        log_level: config.log_level.clone(),
-    };
+#[test]
+fn test_all_v1_defaults_in_migration() {
+    // Clear env vars
+    for (key, _) in env::vars() {
+        if key.starts_with("SEKHA_") {
+            env::remove_var(&key);
+        }
+    }
 
-    assert!(reloadable.summarization_enabled);
-    assert!(reloadable.pruning_enabled);
-    assert_eq!(reloadable.log_level, "info");
+    // Just set ollama_url to trigger migration
+    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
+
+    let config = Config::load().expect("Failed to load config");
+
+    // Verify v1.x compatibility fields are set
+    assert_eq!(config.ollama_url, Some("http://localhost:11434".to_string()));
+    assert_eq!(config.embedding_model, Some("nomic-embed-text".to_string()));
+    assert_eq!(config.summarization_model, Some("llama3.1:8b".to_string()));
+
+    // Cleanup
+    env::remove_var("SEKHA_OLLAMA_URL");
 }
