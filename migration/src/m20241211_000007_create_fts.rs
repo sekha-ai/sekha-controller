@@ -10,7 +10,7 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         // Create FTS virtual table
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             r#"CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
                 content,
@@ -20,7 +20,7 @@ impl MigrationTrait for Migration {
         .await?;
 
         // Create insert trigger
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             r#"CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages
             BEGIN
@@ -30,7 +30,7 @@ impl MigrationTrait for Migration {
         .await?;
 
         // Create delete trigger
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             r#"CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages
             BEGIN
@@ -40,7 +40,7 @@ impl MigrationTrait for Migration {
         .await?;
 
         // Create update trigger
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             r#"CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages
             BEGIN
@@ -57,26 +57,26 @@ impl MigrationTrait for Migration {
         let db = manager.get_connection();
 
         // Drop triggers first
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             "DROP TRIGGER IF EXISTS messages_au".to_string(),
         ))
         .await?;
 
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             "DROP TRIGGER IF EXISTS messages_ad".to_string(),
         ))
         .await?;
 
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             "DROP TRIGGER IF EXISTS messages_ai".to_string(),
         ))
         .await?;
 
         // Drop FTS table
-        db.execute(Statement::from_string(
+        db.execute(&Statement::from_string(
             manager.get_database_backend(),
             "DROP TABLE IF EXISTS messages_fts".to_string(),
         ))
