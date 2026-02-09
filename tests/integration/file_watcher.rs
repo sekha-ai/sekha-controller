@@ -4,6 +4,8 @@
 
 use super::{create_test_services, Arc, ConversationRepository};
 use sekha_controller::{
+    config::Config,
+    llm::bridge_client::BridgeClient,
     services::file_watcher::{ImportProcessor, ImportWatcher},
     storage::{init_db, SeaOrmConversationRepository},
 };
@@ -12,6 +14,18 @@ use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 
 use super::{ChromaClient, EmbeddingService};
+
+// Helper function to create test services
+fn create_test_embedding_service() -> (Arc<ChromaClient>, Arc<EmbeddingService>) {
+    let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+    let config = Config::default();
+    let bridge = BridgeClient::new(&config).expect("Failed to create BridgeClient");
+    let embedding = Arc::new(EmbeddingService::new(
+        bridge,
+        "http://localhost:8000".to_string(),
+    ));
+    (chroma, embedding)
+}
 
 // ============================================
 // Integration Tests
@@ -55,7 +69,7 @@ async fn test_file_watcher_end_to_end_chatgpt() {
 
     // Setup repository
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -95,7 +109,7 @@ async fn test_file_watcher_multiple_conversations_integration() {
     fs::write(&import_file, chatgpt_json).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -131,11 +145,7 @@ async fn test_watcher_creates_directories() {
     let watch_path = temp_dir.path().join("import");
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let watcher = ImportWatcher::new(watch_path.clone(), repo);
@@ -169,11 +179,7 @@ async fn test_processor_processes_existing_files() {
     fs::write(&chatgpt_file, create_chatgpt_single_export()).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let processor = ImportProcessor::new(repo);
@@ -206,11 +212,7 @@ async fn test_watcher_construction_and_file_processing() {
     fs::create_dir_all(&watch_path).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let watcher = ImportWatcher::new(watch_path.clone(), repo.clone());
@@ -284,11 +286,7 @@ async fn test_processor_mixed_file_types() {
     fs::write(&ignore_file, "not a valid format").unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let processor = ImportProcessor::new(repo);
@@ -327,11 +325,7 @@ async fn test_processor_error_nonexistent_directory() {
     // Don't create the directory
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let processor = ImportProcessor::new(repo);
@@ -354,11 +348,7 @@ async fn test_processor_concurrent_processing() {
     fs::create_dir_all(&watch_path).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let processor = ImportProcessor::new(repo);
@@ -404,11 +394,7 @@ async fn test_processor_graceful_error_handling() {
     fs::write(&malformed_file, "{invalid json}").unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-    let embedding = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
-        "http://localhost:1".to_string(),
-    ));
+    let (chroma, embedding) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(db, chroma, embedding));
 
     let processor = ImportProcessor::new(repo);
@@ -471,7 +457,7 @@ async fn test_watch_spawns_watcher_task() {
 
     // Use real repository setup
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -510,7 +496,7 @@ async fn test_watch_ignores_non_supported_files() {
     fs::create_dir_all(&watch_path).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -548,7 +534,7 @@ async fn test_watch_processes_multiple_files_sequentially() {
     fs::create_dir_all(&watch_path).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -588,7 +574,7 @@ async fn test_ensure_directories_creates_nested_paths() {
     let watch_path = tempdir.path().join("deep").join("nested").join("import");
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -625,7 +611,7 @@ async fn test_ensure_directories_handles_existing_paths() {
     fs::create_dir_all(watch_path.parent().unwrap().join("imported")).unwrap();
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,
@@ -670,7 +656,7 @@ async fn test_process_existing_files_handles_read_errors() {
     }
 
     let db = init_db("sqlite::memory:").await.unwrap();
-    let (chroma_client, embedding_service) = create_test_services();
+    let (chroma_client, embedding_service) = create_test_embedding_service();
     let repo = Arc::new(SeaOrmConversationRepository::new(
         db,
         chroma_client,

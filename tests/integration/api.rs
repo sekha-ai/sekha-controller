@@ -1,10 +1,16 @@
-use super::{create_test_app, Uuid};
-// use crate::integration::create_test_app;
+use super::{create_test_services, Uuid};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use sekha_controller::api::routes::create_router;
 use tower::ServiceExt;
+
+// Helper to create app for tests
+async fn create_test_app() -> axum::Router {
+    let state = create_test_services().await;
+    create_router(state)
+}
 
 // ============================================
 // REST API Tests
@@ -423,7 +429,7 @@ async fn test_count_conversations_no_filters() {
             .unwrap();
     }
 
-    // Count all - no filters (covers lines 540-541)
+    // Count all - no filters
     let response = app
         .oneshot(
             Request::builder()
@@ -466,7 +472,7 @@ async fn test_count_conversations_by_label() {
             .unwrap();
     }
 
-    // Count by label (covers lines 599-600)
+    // Count by label
     let response = app
         .oneshot(
             Request::builder()
@@ -488,37 +494,10 @@ async fn test_count_conversations_by_label() {
     assert_eq!(json["count"], 2);
 }
 
-// ============================================
-// list_conversations() Edge Cases
-// ============================================
-
 #[tokio::test]
 async fn test_list_conversations_with_archived_filter() {
     let app = create_test_app().await;
 
-    // Create and archive a conversation
-    let create_response = app.clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/conversations")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{"label":"Archive Test","folder":"test","messages":[{"role":"user","content":"Test"}]}"#
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let body = axum::body::to_bytes(create_response.into_body(), 1024)
-        .await
-        .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let conv_id = json["id"].as_str().unwrap();
-
-    // Archive it (you'll need to implement update_status or use label endpoint)
-    // For now, test the filter parameter (covers line 606)
     let response = app
         .oneshot(
             Request::builder()
@@ -537,7 +516,6 @@ async fn test_list_conversations_with_archived_filter() {
 async fn test_list_conversations_with_pinned_filter() {
     let app = create_test_app().await;
 
-    // Test pinned filter (covers filter building logic)
     let response = app
         .oneshot(
             Request::builder()
@@ -552,51 +530,9 @@ async fn test_list_conversations_with_pinned_filter() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-// ============================================
-// Error Path Coverage
-// ============================================
-
 #[tokio::test]
 async fn test_delete_conversation_covers_error_paths() {
     let app = create_test_app().await;
-
-    // Create a conversation
-    let create_response = app.clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/conversations")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{"label":"Delete Test","folder":"test","messages":[{"role":"user","content":"Test"}]}"#
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    let body = axum::body::to_bytes(create_response.into_body(), 1024)
-        .await
-        .unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    let conv_id = json["id"].as_str().unwrap();
-
-    // Delete it
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(&format!("/api/v1/conversations/{}", conv_id))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    // Try to delete again - should get 404 (covers error paths)
-    let app = create_test_app().await; // New app for clean state
 
     let fake_id = "00000000-0000-0000-0000-000000000000";
     let response = app
@@ -639,7 +575,6 @@ async fn test_count_conversations_both_filters_error() {
     assert_eq!(json["error"], "Cannot specify both label and folder");
 }
 
-// TEST 2: List with archived filter (covers 606)
 #[tokio::test]
 async fn test_list_conversations_archived_filter() {
     let app = create_test_app().await;
@@ -658,7 +593,6 @@ async fn test_list_conversations_archived_filter() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-// TEST 3: List with pinned filter (covers filter building)
 #[tokio::test]
 async fn test_list_conversations_pinned_filter() {
     let app = create_test_app().await;

@@ -1,4 +1,5 @@
 use sea_orm_migration::prelude::*;
+use sea_orm::ConnectionTrait;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -7,25 +8,29 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         // Create trigger for conversations.updated_at
-        manager
-            .execute_unprepared(
-                r#"
+        let db = manager.get_connection();
+        let stmt = sea_orm::Statement::from_string(
+            manager.get_database_backend(),
+            r#"
                 CREATE TRIGGER IF NOT EXISTS update_conversations_updated_at
                 AFTER UPDATE ON conversations
                 BEGIN
                     UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
                 END;
-                "#,
-            )
-            .await?;
+            "#.to_owned(),
+        );
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .execute_unprepared("DROP TRIGGER IF EXISTS update_conversations_updated_at")
-            .await?;
+        let db = manager.get_connection();
+        let stmt = sea_orm::Statement::from_string(
+            manager.get_database_backend(),
+            "DROP TRIGGER IF EXISTS update_conversations_updated_at".to_owned(),
+        );
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }

@@ -1,24 +1,53 @@
 #[cfg(test)]
 mod tests {
+    use crate::config::Config;
+    use crate::init_db;
+    use crate::llm::bridge_client::BridgeClient;
     use crate::models::internal::{NewConversation, NewMessage};
+    use crate::services::embedding_service::EmbeddingService;
+    use crate::storage::chroma_client::ChromaClient;
     use crate::storage::repository::ConversationRepository;
-    use crate::{init_db, ChromaClient, EmbeddingService, SeaOrmConversationRepository};
+    use crate::storage::SeaOrmConversationRepository;
     use serde_json::json;
+    use std::fs;
     use std::sync::Arc;
     use tempfile::TempDir;
     use uuid::Uuid;
 
+    fn create_test_bridge() -> BridgeClient {
+        let config = Config::default();
+        BridgeClient::new(&config).expect("Failed to create BridgeClient")
+    }
+
+    async fn create_test_db() -> (TempDir, sea_orm::DatabaseConnection) {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+        // Ensure the directory exists and is writable
+        let dir_path = temp_dir.path();
+        fs::create_dir_all(dir_path).expect("Failed to create parent directories");
+
+        // Use absolute path for SQLite
+        let db_path = dir_path.join("test.db");
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        eprintln!("Creating test database at: {}", db_url);
+
+        // init_db() already runs all migrations properly - no need for manual SQL execution
+        let db = init_db(&db_url)
+            .await
+            .expect("Failed to initialize database");
+
+        (temp_dir, db)
+    }
+
     #[tokio::test]
     async fn test_create_with_messages_success() {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let db = init_db(&format!("sqlite://{}", db_path.display()))
-            .await
-            .unwrap();
+        let (_temp_dir, db) = create_test_db().await;
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
@@ -76,15 +105,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_cascades_to_messages() {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let db = init_db(&format!("sqlite://{}", db_path.display()))
-            .await
-            .unwrap();
+        let (_temp_dir, db) = create_test_db().await;
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 
@@ -158,15 +184,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_semantic_search_with_filters() {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("test.db");
-        let db = init_db(&format!("sqlite://{}", db_path.display()))
-            .await
-            .unwrap();
+        let (_temp_dir, db) = create_test_db().await;
 
         let chroma = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+        let bridge = create_test_bridge();
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:11434".to_string(),
+            bridge,
             "http://localhost:8000".to_string(),
         ));
 

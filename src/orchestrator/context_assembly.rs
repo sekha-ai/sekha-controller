@@ -113,7 +113,8 @@ impl ContextAssembler {
     }
 
     /// Phase 3: Assembly - Build context within token budget
-    async fn assemble_context(
+    /// Made public for integration testing
+    pub async fn assemble_context(
         &self,
         candidates: &mut [CandidateMessage],
         context_budget: usize,
@@ -179,7 +180,7 @@ impl ContextAssembler {
     }
 
     /// Helper: Get pinned messages (always included)
-    async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
+    pub async fn get_pinned_messages(&self) -> Result<Vec<CandidateMessage>, RepositoryError> {
         use crate::storage::entities::{conversations, messages};
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
@@ -218,7 +219,7 @@ impl ContextAssembler {
     }
 
     /// Helper: Get recent messages from preferred labels
-    async fn get_recent_labeled_messages(
+    pub async fn get_recent_labeled_messages(
         &self,
         labels: &[String],
         days: i64,
@@ -267,7 +268,7 @@ impl ContextAssembler {
         Ok(candidates)
     }
 
-    async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
+    pub async fn fetch_message(&self, id: Uuid) -> Result<Option<Message>, RepositoryError> {
         use crate::storage::entities::messages as message_entity;
 
         let model = message_entity::Entity::find_by_id(id) // CHANGED: Remove .to_string()
@@ -289,14 +290,296 @@ impl ContextAssembler {
 
 /// Internal candidate message with scoring metadata
 #[derive(Debug, Clone)]
-struct CandidateMessage {
-    message_id: Uuid,
-    #[allow(dead_code)] // Used in Phase 3
-    conversation_id: Uuid,
-    score: f32,
-    timestamp: chrono::NaiveDateTime,
-    label: String,
-    #[allow(dead_code)] // Will be used when pinned messages implemented
-    is_pinned: bool,
-    importance: f32,
+pub struct CandidateMessage {
+    pub message_id: Uuid,
+    pub conversation_id: Uuid,
+    pub score: f32,
+    pub timestamp: chrono::NaiveDateTime,
+    pub label: String,
+    pub is_pinned: bool,
+    pub importance: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::internal::Conversation;
+    use crate::storage::repository::MockConversationRepository;
+    use chrono::Utc;
+    use mockall::predicate::*;
+
+    fn create_test_message(id: Uuid, conv_id: Uuid, content: &str) -> Message {
+        Message {
+            id,
+            conversation_id: conv_id,
+            role: "user".to_string(),
+            content: content.to_string(),
+            timestamp: Utc::now().naive_utc(),
+            embedding_id: None,
+            metadata: Some(serde_json::json!({"test": true})),
+        }
+    }
+
+    fn create_test_conversation(id: Uuid, label: &str, folder: &str) -> Conversation {
+        Conversation {
+            id,
+            label: label.to_string(),
+            folder: folder.to_string(),
+            status: "active".to_string(),
+            importance_score: 5,
+            created_at: Utc::now().naive_utc(),
+            updated_at: Utc::now().naive_utc(),
+            word_count: 0,
+            session_count: 1,
+        }
+    }
+
+    #[test]
+    fn test_new_context_assembler() {
+        let repo = Arc::new(MockConversationRepository::new());
+        let assembler = ContextAssembler::new(repo);
+        assert!(std::mem::size_of_val(&assembler) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_rank_candidates_with_preferred_labels() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let now = Utc::now().naive_utc();
+        let candidates = vec![
+            CandidateMessage {
+                message_id: Uuid::new_v4(),
+                conversation_id: Uuid::new_v4(),
+                score: 0.5,
+                timestamp: now,
+                label: "preferred".to_string(),
+                is_pinned: false,
+                importance: 5.0,
+            },
+            CandidateMessage {
+                message_id: Uuid::new_v4(),
+                conversation_id: Uuid::new_v4(),
+                score: 0.5,
+                timestamp: now,
+                label: "other".to_string(),
+                is_pinned: false,
+                importance: 5.0,
+            },
+        ];
+
+        let ranked = assembler
+            .rank_candidates(candidates, "test", &["preferred".to_string()])
+            .await
+            .unwrap();
+
+        assert_eq!(ranked[0].label, "preferred");
+        assert!(ranked[0].score > ranked[1].score);
+    }
+
+    #[tokio::test]
+    async fn test_rank_candidates_empty_labels() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let now = Utc::now().naive_utc();
+        let candidates = vec![CandidateMessage {
+            message_id: Uuid::new_v4(),
+            conversation_id: Uuid::new_v4(),
+            score: 0.5,
+            timestamp: now,
+            label: "test".to_string(),
+            is_pinned: false,
+            importance: 8.0,
+        }];
+
+        let ranked = assembler
+            .rank_candidates(candidates, "test", &[])
+            .await
+            .unwrap();
+
+        assert_eq!(ranked.len(), 1);
+        assert!(ranked[0].score > 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_enhance_context_with_conversation() {
+        let mut mock_repo = MockConversationRepository::new();
+
+        let msg_id = Uuid::new_v4();
+        let conv_id = Uuid::new_v4();
+        let conversation = create_test_conversation(conv_id, "test-label", "/test-folder");
+
+        mock_repo
+            .expect_find_by_id()
+            .with(eq(conv_id))
+            .returning(move |_| Ok(Some(conversation.clone())));
+
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let messages = vec![create_test_message(msg_id, conv_id, "test content")];
+
+        let enhanced = assembler.enhance_context(messages).await.unwrap();
+
+        assert_eq!(enhanced.len(), 1);
+        assert!(enhanced[0].metadata.is_some());
+        let meta = enhanced[0].metadata.as_ref().unwrap();
+        assert!(meta["citation"].is_object());
+        assert_eq!(meta["citation"]["label"], "test-label");
+        assert_eq!(meta["citation"]["folder"], "/test-folder");
+    }
+
+    #[tokio::test]
+    async fn test_enhance_context_no_conversation() {
+        let mut mock_repo = MockConversationRepository::new();
+
+        let msg_id = Uuid::new_v4();
+        let conv_id = Uuid::new_v4();
+
+        mock_repo
+            .expect_find_by_id()
+            .with(eq(conv_id))
+            .returning(|_| Ok(None));
+
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let messages = vec![create_test_message(msg_id, conv_id, "test content")];
+
+        let enhanced = assembler.enhance_context(messages).await.unwrap();
+
+        assert_eq!(enhanced.len(), 1);
+        // Metadata should remain unchanged when conversation not found
+        assert!(enhanced[0].metadata.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_enhance_context_empty() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let enhanced = assembler.enhance_context(vec![]).await.unwrap();
+        assert_eq!(enhanced.len(), 0);
+    }
+
+    #[test]
+    fn test_calculate_recency_score_recent() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let recent = Utc::now().naive_utc();
+        let score = assembler.calculate_recency_score(&recent);
+
+        assert!(score >= 0.9);
+        assert!(score <= 1.0);
+    }
+
+    #[test]
+    fn test_calculate_recency_score_old() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let old = Utc::now().naive_utc() - chrono::Duration::days(30);
+        let score = assembler.calculate_recency_score(&old);
+
+        assert!(score >= 0.1);
+        assert!(score < 0.3);
+    }
+
+    #[test]
+    fn test_calculate_recency_score_minimum() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let very_old = Utc::now().naive_utc() - chrono::Duration::days(365);
+        let score = assembler.calculate_recency_score(&very_old);
+
+        assert_eq!(score, 0.1);
+    }
+
+    #[test]
+    fn test_candidate_message_structure() {
+        let msg_id = Uuid::new_v4();
+        let conv_id = Uuid::new_v4();
+        let timestamp = Utc::now().naive_utc();
+
+        let candidate = CandidateMessage {
+            message_id: msg_id,
+            conversation_id: conv_id,
+            score: 5.5,
+            timestamp,
+            label: "test".to_string(),
+            is_pinned: true,
+            importance: 10.0,
+        };
+
+        assert_eq!(candidate.message_id, msg_id);
+        assert_eq!(candidate.conversation_id, conv_id);
+        assert_eq!(candidate.score, 5.5);
+        assert_eq!(candidate.label, "test");
+        assert!(candidate.is_pinned);
+        assert_eq!(candidate.importance, 10.0);
+    }
+
+    #[tokio::test]
+    async fn test_enhance_context_with_no_metadata() {
+        let mut mock_repo = MockConversationRepository::new();
+
+        let msg_id = Uuid::new_v4();
+        let conv_id = Uuid::new_v4();
+        let conversation = create_test_conversation(conv_id, "label", "/folder");
+
+        mock_repo
+            .expect_find_by_id()
+            .returning(move |_| Ok(Some(conversation.clone())));
+
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let mut message = create_test_message(msg_id, conv_id, "content");
+        message.metadata = None;
+
+        let enhanced = assembler.enhance_context(vec![message]).await.unwrap();
+
+        assert_eq!(enhanced.len(), 1);
+        assert!(enhanced[0].metadata.is_some());
+        assert!(enhanced[0].metadata.as_ref().unwrap()["citation"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_rank_candidates_sorts_by_composite_score() {
+        let mock_repo = MockConversationRepository::new();
+        let assembler = ContextAssembler::new(Arc::new(mock_repo));
+
+        let now = Utc::now().naive_utc();
+        let old = now - chrono::Duration::days(10);
+
+        let candidates = vec![
+            CandidateMessage {
+                message_id: Uuid::new_v4(),
+                conversation_id: Uuid::new_v4(),
+                score: 0.5,
+                timestamp: old,
+                label: "other".to_string(),
+                is_pinned: false,
+                importance: 3.0,
+            },
+            CandidateMessage {
+                message_id: Uuid::new_v4(),
+                conversation_id: Uuid::new_v4(),
+                score: 0.5,
+                timestamp: now,
+                label: "preferred".to_string(),
+                is_pinned: false,
+                importance: 8.0,
+            },
+        ];
+
+        let ranked = assembler
+            .rank_candidates(candidates, "query", &["preferred".to_string()])
+            .await
+            .unwrap();
+
+        // Second candidate should rank higher (newer + preferred label + higher importance)
+        assert_eq!(ranked[0].label, "preferred");
+        assert!(ranked[0].score > ranked[1].score);
+    }
 }

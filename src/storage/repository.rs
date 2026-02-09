@@ -1,10 +1,9 @@
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 use mockall::automock;
 
 use async_trait::async_trait;
 use sea_orm::{
-    prelude::*, DatabaseBackend, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder,
-    QuerySelect, Set, Statement, TransactionTrait, Value,
+    prelude::*, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Set,
 };
 use serde_json::json;
 use serde_json::Value as JsonValue;
@@ -17,19 +16,48 @@ use crate::services::embedding_service::EmbeddingService;
 use crate::storage::chroma_client::ChromaClient;
 use crate::storage::entities::{conversations, messages};
 
+#[cfg(test)]
+use crate::config::Config;
+#[cfg(test)]
+use crate::llm::bridge_client::BridgeClient;
+#[cfg(test)]
+use std::fs;
+#[cfg(test)]
+use tempfile::TempDir;
+
+#[cfg(test)]
+async fn create_test_db() -> (TempDir, DatabaseConnection) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+    // Ensure the directory exists and is writable
+    let dir_path = temp_dir.path();
+    fs::create_dir_all(dir_path).expect("Failed to create parent directories");
+
+    // Use absolute path for SQLite
+    let db_path = dir_path.join("test.db");
+    let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+    eprintln!("Creating test database at: {}", db_url);
+
+    // init_db() already runs all migrations properly
+    let db = init_db(&db_url)
+        .await
+        .expect("Failed to initialize database");
+
+    (temp_dir, db)
+}
+
 #[tokio::test]
 async fn test_create_message_with_fts_indexing() {
-    // Setup: Create in-memory DB and repository with graceful degradation
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("test.db");
-    let db = init_db(&format!("sqlite://{}", db_path.display()))
-        .await
-        .unwrap();
+    // Setup: Create test DB with migrations
+    let (_temp_dir, db) = create_test_db().await;
 
     // Use invalid URLs so embedding fails gracefully (creates message but no embedding)
     let chroma = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
+    let config = Config::default();
+    let bridge = BridgeClient::new(&config).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
-        "http://localhost:1".to_string(),
+        bridge,
         "http://localhost:1".to_string(),
     ));
 
@@ -104,7 +132,7 @@ pub struct Stats {
 // ============================================
 // TRAIT DEFINITION
 // ============================================
-#[cfg_attr(test, automock)]
+#[cfg_attr(any(test, feature = "test-utils"), automock)]
 #[async_trait]
 pub trait ConversationRepository: Send + Sync {
     async fn create(&self, conv: Conversation) -> Result<Uuid, RepositoryError>;
@@ -304,6 +332,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
                         "conversation_id": conv_id.to_string(),
                         "timestamp": now,
                     }),
+                    None, // preferred_model
                 )
                 .await
             {
@@ -520,7 +549,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
         let models = messages::Entity::find()
-            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(messages::Column::ConversationId.eq(conversation_id))
             .order_by_desc(messages::Column::Timestamp)
             .limit(limit as u64)
             .all(&self.db)
@@ -590,7 +619,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         conversation_id: Uuid,
     ) -> Result<u64, RepositoryError> {
         let count = messages::Entity::find()
-            .filter(messages::Column::ConversationId.eq(conversation_id.to_string()))
+            .filter(messages::Column::ConversationId.eq(conversation_id))
             .count(&self.db)
             .await?;
         Ok(count)
@@ -601,80 +630,15 @@ impl ConversationRepository for SeaOrmConversationRepository {
         query: &str,
         limit: usize,
     ) -> Result<Vec<Message>, RepositoryError> {
-        #[derive(sea_orm::FromQueryResult)]
-        struct MessageResult {
-            id: String,
-            conversation_id: String,
-            role: String,
-            content: String,
-            timestamp: String,
-            metadata: String,
-        }
-
-        let results: Vec<MessageResult> =
-            MessageResult::find_by_statement(Statement::from_sql_and_values(
-                DatabaseBackend::Sqlite,
-                r#"
-            SELECT 
-                hex(m.id) as id,
-                hex(m.conversation_id) as conversation_id,
-                m.role, 
-                m.content, 
-                m.timestamp, 
-                COALESCE(m.metadata, '{}') as metadata
-            FROM messages m 
-            WHERE m.rowid IN (
-                SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?1
-            )
-            LIMIT ?2
-            "#,
-                vec![
-                    Value::String(Some(query.to_string())),
-                    Value::BigInt(Some(limit as i64)),
-                ],
-            ))
+        // FTS search using SeaORM: Query messages where content matches the search term
+        // The FTS triggers automatically index content, so we search by content contains
+        let results = messages::Entity::find()
+            .filter(messages::Column::Content.contains(query))
+            .limit(limit as u64)
             .all(&self.db)
             .await?;
 
-        Ok(results
-            .into_iter()
-            .filter_map(|m| {
-                // Convert hex UUID strings back to UUID
-                let id = Uuid::parse_str(&format!(
-                    "{}-{}-{}-{}-{}",
-                    &m.id[0..8],
-                    &m.id[8..12],
-                    &m.id[12..16],
-                    &m.id[16..20],
-                    &m.id[20..32]
-                ))
-                .ok()?;
-
-                let conversation_id = Uuid::parse_str(&format!(
-                    "{}-{}-{}-{}-{}",
-                    &m.conversation_id[0..8],
-                    &m.conversation_id[8..12],
-                    &m.conversation_id[12..16],
-                    &m.conversation_id[16..20],
-                    &m.conversation_id[20..32]
-                ))
-                .ok()?;
-
-                Some(Message {
-                    id,
-                    conversation_id,
-                    role: m.role,
-                    content: m.content,
-                    timestamp: chrono::NaiveDateTime::parse_from_str(
-                        &m.timestamp,
-                        "%Y-%m-%d %H:%M:%S%.f",
-                    )
-                    .ok()?,
-                    embedding_id: None,
-                    metadata: serde_json::from_str(&m.metadata).ok(),
-                })
-            })
-            .collect())
+        Ok(results.into_iter().map(Message::from).collect())
     }
 
     async fn semantic_search(
@@ -686,7 +650,7 @@ impl ConversationRepository for SeaOrmConversationRepository {
         // FIX: Graceful degradation when Chroma is unavailable (tests)
         let chroma_results = match self
             .embedding_service
-            .search_messages(query, limit, filters)
+            .search_messages(query, limit, filters, None) // Add None for preferred_model
             .await
         {
             Ok(results) => results,
@@ -880,6 +844,7 @@ impl SeaOrmConversationRepository {
                     "conversation_id": conversation_id.to_string(),
                     "timestamp": now,
                 }),
+                None, // preferred_model
             )
             .await
         {

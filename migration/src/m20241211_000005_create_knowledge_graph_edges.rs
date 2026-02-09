@@ -38,7 +38,6 @@ impl MigrationTrait for Migration {
                     )
                     .primary_key(
                         Index::create()
-                            .name("pk-knowledge_graph_edges")
                             .col(KnowledgeGraphEdges::SubjectId)
                             .col(KnowledgeGraphEdges::Predicate)
                             .col(KnowledgeGraphEdges::ObjectId)

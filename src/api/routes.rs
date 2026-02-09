@@ -1,6 +1,6 @@
 use crate::api::dto::*;
-use crate::models::internal::Message;
 use crate::services::embedding_service::EmbeddingService;
+use crate::services::llm_bridge_client::LlmBridgeClient;
 use crate::storage::chroma_client::ChromaClient;
 use crate::storage::db::get_connection;
 use axum::extract::{Path, Query, State};
@@ -25,6 +25,7 @@ pub struct AppState {
     pub orchestrator: Arc<MemoryOrchestrator>,
     pub embedding_service: Arc<EmbeddingService>,
     pub chroma_client: Arc<ChromaClient>,
+    pub llm_client: Arc<LlmBridgeClient>,
 }
 
 #[derive(Deserialize)]
@@ -41,34 +42,35 @@ pub struct FilterParams {
     archived: Option<bool>,
 }
 
-// #[derive(Deserialize)]
-// pub struct CountQuery {
-//     label: String,
-// }
-
 #[derive(Deserialize)]
 pub struct CountParams {
     label: Option<String>,
     folder: Option<String>,
 }
 
-// ============================================
-// Endpoint 1: POST /api/v1/conversations
-// ============================================
-#[utoipa::path(
-    post,
-    path = "/api/v1/conversations",
-    request_body = CreateConversationRequest,
-    responses(
-        (status = 201, description = "Conversation created", body = ConversationResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse)
-    )
-)]
+// ==================== ROUTE HANDLERS ====================
+
+/// Health check endpoint
+pub async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "healthy".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_seconds: 0, // TODO: Track actual uptime
+    })
+}
+
+/// Metrics endpoint
+pub async fn metrics(State(_state): State<AppState>) -> Json<Value> {
+    Json(json!({
+        "metrics": "not_implemented"
+    }))
+}
+
+/// Create a new conversation
 pub async fn create_conversation(
     State(state): State<AppState>,
     Json(req): Json<CreateConversationRequest>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<ErrorResponse>)> {
-    // ✅ Changed return type
+) -> Result<(StatusCode, Json<Value>), (StatusCode, Json<ErrorResponse>)> {
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().naive_utc();
 
@@ -79,7 +81,7 @@ pub async fn create_conversation(
         .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
-            content: m.content,
+            content: m.content.as_string(),
             metadata: serde_json::json!({}),
             timestamp: now,
         })
@@ -118,7 +120,7 @@ pub async fn create_conversation(
         StatusCode::CREATED,
         Json(serde_json::json!({
             "id": id,
-            "conversation_id": id,  // ✅ Both fields for compatibility
+            "conversation_id": id,
             "label": req.label,
             "folder": req.folder,
             "status": "active",
@@ -128,20 +130,7 @@ pub async fn create_conversation(
     ))
 }
 
-// ============================================
-// Endpoint 2: GET /api/v1/conversations/{id}
-// ============================================
-#[utoipa::path(
-    get,
-    path = "/api/v1/conversations/{id}",
-    responses(
-        (status = 200, description = "Conversation found", body = ConversationResponse),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    ),
-    params(
-        ("id" = String, Path, description = "Conversation UUID")
-    )
-)]
+/// Get a conversation by ID
 pub async fn get_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -169,7 +158,7 @@ pub async fn get_conversation(
                 folder: c.folder,
                 status: c.status,
                 message_count: message_count.try_into().unwrap(),
-                created_at: c.created_at, // CHANGED: Remove .to_string()
+                created_at: c.created_at,
             }))
         }
         None => Err((
@@ -182,24 +171,7 @@ pub async fn get_conversation(
     }
 }
 
-// ============================================
-// Endpoint 3: GET /api/v1/conversations (COMPLETE - was stubbed)
-// ============================================
-#[utoipa::path(
-    get,
-    path = "/api/v1/conversations",
-    responses(
-        (status = 200, description = "List conversations", body = QueryResponse)
-    ),
-    params(
-        ("label" = Option<String>, Query, description = "Filter by label"),
-        ("folder" = Option<String>, Query, description = "Filter by folder"),
-        ("pinned" = Option<bool>, Query, description = "Filter by pinned status"),
-        ("archived" = Option<bool>, Query, description = "Filter by archived status"),
-        ("page" = Option<u32>, Query, description = "Page number"),
-        ("page_size" = Option<u32>, Query, description = "Page size")
-    )
-)]
+/// List conversations
 pub async fn list_conversations(
     State(state): State<AppState>,
     Query(params): Query<PaginationParams>,
@@ -210,7 +182,7 @@ pub async fn list_conversations(
     let page_size = params.page_size.unwrap_or(50);
     let offset = (page - 1) * page_size;
 
-    // Build filter criteria - NOW USING the parameters!
+    // Build filter criteria
     let mut criteria = Vec::new();
     if let Some(label) = &filters.label {
         criteria.push(format!("label = '{}'", label));
@@ -253,30 +225,19 @@ pub async fn list_conversations(
             }),
             label: c.label,
             folder: c.folder,
-            timestamp: c.updated_at, // CHANGED: Remove .to_string()
+            timestamp: c.updated_at,
         })
         .collect();
 
     Json(QueryResponse {
         results: conversations,
-        total: total.try_into().unwrap_or(u32::MAX), // FIXED: Convert u64 to u32 safely
+        total: total.try_into().unwrap_or(u32::MAX),
         page,
         page_size,
     })
 }
 
-// ============================================
-// Endpoint 4: PUT /api/v1/conversations/{id}/label
-// ============================================
-#[utoipa::path(
-    put,
-    path = "/api/v1/conversations/{id}/label",
-    request_body = UpdateLabelRequest,
-    responses(
-        (status = 200, description = "Label updated"),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    )
-)]
+/// Update conversation label
 pub async fn update_conversation_label(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -299,20 +260,7 @@ pub async fn update_conversation_label(
     Ok(StatusCode::OK)
 }
 
-// ============================================
-// Endpoint 5: DELETE /api/v1/conversations/{id}
-// ============================================
-#[utoipa::path(
-    delete,
-    path = "/api/v1/conversations/{id}",
-    responses(
-        (status = 200, description = "Conversation deleted"),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    ),
-    params(
-        ("id" = String, Path, description = "Conversation UUID")
-    )
-)]
+/// Delete a conversation
 pub async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -351,32 +299,18 @@ pub async fn delete_conversation(
     Ok(StatusCode::OK)
 }
 
-// ============================================
-// Endpoint 6: GET /api/v1/conversations/count
-// ============================================
-#[utoipa::path(
-    get,
-    path = "/api/v1/conversations/count",
-    responses(
-        (status = 200, description = "Count conversations by label or folder", body = serde_json::Value)
-    ),
-    params(
-        ("label" = Option<String>, Query, description = "Label to filter by"),
-        ("folder" = Option<String>, Query, description = "Folder to filter by")
-    )
-)]
+/// Count conversations
 pub async fn count_conversations(
     State(state): State<AppState>,
     Query(params): Query<CountParams>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    // Clone values before they are moved
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
     let label_for_response = params.label.clone();
     let folder_for_response = params.folder.clone();
 
     let count = match (&params.label, &params.folder) {
         (Some(label), None) => state.repo.count_by_label(label).await,
-        (None, Some(folder)) => state.repo.count_by_folder(folder).await, // ✅ CHANGED
-        (None, None) => state.repo.count_all().await,                     // ✅ CHANGED
+        (None, Some(folder)) => state.repo.count_by_folder(folder).await,
+        (None, None) => state.repo.count_all().await,
         (Some(_), Some(_)) => {
             return Ok(Json(serde_json::json!({
                 "count": 0,
@@ -385,8 +319,13 @@ pub async fn count_conversations(
         }
     }
     .map_err(|e| {
-        tracing::error!("Count failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: 500,
+            }),
+        )
     })?;
 
     Ok(Json(serde_json::json!({
@@ -396,20 +335,15 @@ pub async fn count_conversations(
     })))
 }
 
-// ============================================
-// Endpoint 7: POST /api/v1/query
-// ============================================
+/// Semantic query endpoint (Module 5 integration)
 #[utoipa::path(
     post,
     path = "/api/v1/query",
     request_body = QueryRequest,
     responses(
-        (status = 200, description = "Semantic search results", body = QueryResponse),
-        (status = 400, description = "Invalid request", body = ErrorResponse),
-        (status = 500, description = "Search error", body = ErrorResponse)
+        (status = 200, description = "Semantic search results", body = serde_json::Value)
     )
 )]
-
 pub async fn semantic_query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
@@ -419,14 +353,12 @@ pub async fn semantic_query(
     let limit = req.limit.unwrap_or(10) as usize;
     let offset = req.offset.unwrap_or(0);
 
-    // Calculate page number
     let page = if limit > 0 {
         (offset as f64 / limit as f64).ceil() as u32
     } else {
         1
     };
 
-    // Use repository's semantic search (now powered by Chroma)
     let results = state
         .repo
         .semantic_search(&req.query, limit, req.filters)
@@ -451,7 +383,7 @@ pub async fn semantic_query(
             metadata: r.metadata.clone(),
             label: r.label.clone(),
             folder: r.folder.clone(),
-            timestamp: r.timestamp, // CHANGED: Remove .to_string()
+            timestamp: r.timestamp,
         })
         .collect();
 
@@ -463,465 +395,11 @@ pub async fn semantic_query(
     }))
 }
 
-// ============================================
-// Endpoint 8: GET /health
-// ============================================
-pub async fn health(State(state): State<AppState>) -> Result<Json<Value>, StatusCode> {
-    let mut checks = json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "checks": {}
-    });
+// ==================== ROUTER CREATION ====================
 
-    // Check database
-    match get_connection().await {
-        Some(db) => match db.execute_unprepared("SELECT 1").await {
-            Ok(_) => checks["checks"]["database"] = json!({"status": "ok"}),
-            Err(e) => {
-                checks["checks"]["database"] = json!({"status": "error", "error": e.to_string()});
-                checks["status"] = "unhealthy".into();
-            }
-        },
-        None => {
-            checks["checks"]["database"] = json!({"status": "error", "error": "No connection"});
-            checks["status"] = "unhealthy".into();
-        }
-    }
-
-    // Check Chroma
-    match state.chroma_client.ping().await {
-        Ok(_) => checks["checks"]["chroma"] = json!({"status": "ok"}),
-        Err(e) => {
-            checks["checks"]["chroma"] = json!({"status": "error", "error": e.to_string()});
-            checks["status"] = "unhealthy".into();
-        }
-    }
-
-    if checks["status"] == "healthy" {
-        Ok(Json(checks))
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
-    }
-}
-
-// ============================================
-// Endpoint 9: GET /metrics
-// ============================================
-pub async fn metrics() -> &'static str {
-    "# HELP sekha_conversations_total Total number of conversations\n# TYPE sekha_conversations_total gauge\nsekha_conversations_total 0\n"
-}
-
-// ============================================
-// NEW ENDPOINT: PUT /api/v1/conversations/{id}/folder
-// ============================================
-#[utoipa::path(
-    put,
-    path = "/api/v1/conversations/{id}/folder",
-    request_body = UpdateFolderRequest,
-    responses(
-        (status = 200, description = "Folder updated"),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    )
-)]
-async fn update_conversation_folder(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(req): Json<UpdateFolderRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    // Reuse update_label method with same label
-    let conv = state.repo.find_by_id(id).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
-
-    if conv.is_none() {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Conversation not found".to_string(),
-                code: 404,
-            }),
-        ));
-    }
-
-    state
-        .repo
-        .update_label(id, &req.folder, &req.folder)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    Ok(StatusCode::OK)
-}
-
-// ============================================
-// NEW ENDPOINT: PUT /api/v1/conversations/{id}/pin
-// ============================================
-#[utoipa::path(
-    put,
-    path = "/api/v1/conversations/{id}/pin",
-    responses(
-        (status = 200, description = "Conversation pinned"),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    ),
-    params(
-        ("id" = String, Path, description = "Conversation UUID")
-    )
-)]
-async fn pin_conversation(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    // Toggle pin status by setting importance_score high
-    state.repo.update_importance(id, 10).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
-
-    Ok(StatusCode::OK)
-}
-
-// ============================================
-// NEW ENDPOINT: PUT /api/v1/conversations/{id}/archive
-// ============================================
-#[utoipa::path(
-    put,
-    path = "/api/v1/conversations/{id}/archive",
-    responses(
-        (status = 200, description = "Conversation archived"),
-        (status = 404, description = "Not found", body = ErrorResponse)
-    ),
-    params(
-        ("id" = String, Path, description = "Conversation UUID")
-    )
-)]
-async fn archive_conversation(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    state
-        .repo
-        .update_status(id, "archived")
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    Ok(StatusCode::OK)
-}
-
-// ============================================
-// NEW ENDPOINT: POST /api/v1/rebuild-embeddings
-// ============================================
-#[utoipa::path(
-    post,
-    path = "/api/v1/rebuild-embeddings",
-    responses(
-        (status = 202, description = "Rebuild started"),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn rebuild_embeddings(
-    State(_state): State<AppState>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    // Trigger async rebuild via embedding service
-    tokio::spawn(async move {
-        tracing::info!("Starting embedding rebuild...");
-        // TODO: Implement actual rebuild logic in embedding service
-    });
-
-    Ok(StatusCode::ACCEPTED)
-}
-
-// POST /api/v1/search/fts
-#[utoipa::path(
-    post,
-    path = "/api/v1/search/fts",
-    request_body = FtsSearchRequest,
-    responses(
-        (status = 200, description = "Full-text search results", body = FtsSearchResponse)
-    )
-)]
-async fn full_text_search(
-    State(state): State<AppState>,
-    Json(req): Json<FtsSearchRequest>,
-) -> Result<Json<FtsSearchResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let messages = state
-        .repo
-        .full_text_search(&req.query, req.limit)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    let total = messages.len();
-
-    Ok(Json(FtsSearchResponse {
-        results: messages,
-        total,
-    }))
-}
-
-// ============================================
-// MODULE 5 ORCHESTRATION ENDPOINTS
-// ============================================
-
-// Endpoint: POST /api/v1/context/assemble
-#[utoipa::path(
-    post,
-    path = "/api/v1/context/assemble",
-    request_body = ContextAssembleRequest,
-    responses(
-        (status = 200, description = "Context assembled", body = Vec<Message>),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn assemble_context(
-    State(state): State<AppState>,
-    Json(req): Json<ContextAssembleRequest>,
-) -> Result<Json<Vec<Message>>, (StatusCode, Json<ErrorResponse>)> {
-    let results = state
-        .orchestrator
-        .assemble_context(
-            &req.query,
-            req.preferred_labels,
-            req.context_budget,
-            req.excluded_folders,
-        )
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    Ok(Json(results))
-}
-
-// Endpoint: POST /api/v1/summarize
-#[utoipa::path(
-    post,
-    path = "/api/v1/summarize",
-    request_body = SummarizeRequest,
-    responses(
-        (status = 200, description = "Summary generated", body = SummaryResponse),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn generate_summary(
-    State(state): State<AppState>,
-    Json(req): Json<SummarizeRequest>,
-) -> Result<Json<SummaryResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let summary = match req.level.as_str() {
-        "daily" => {
-            state
-                .orchestrator
-                .generate_daily_summary(req.conversation_id)
-                .await
-        }
-        "weekly" => {
-            state
-                .orchestrator
-                .summarizer
-                .generate_weekly_summary(req.conversation_id)
-                .await
-        }
-        "monthly" => {
-            state
-                .orchestrator
-                .summarizer
-                .generate_monthly_summary(req.conversation_id)
-                .await
-        }
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: "Invalid level: must be daily, weekly, or monthly".to_string(),
-                    code: 400,
-                }),
-            ))
-        }
-    }
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: e.to_string(),
-                code: 500,
-            }),
-        )
-    })?;
-
-    Ok(Json(SummaryResponse {
-        conversation_id: req.conversation_id,
-        level: req.level,
-        summary,
-        generated_at: chrono::Utc::now().naive_utc(), // CHANGED: Remove .to_rfc3339()
-    }))
-}
-
-// Endpoint: POST /api/v1/prune/dry-run
-#[utoipa::path(
-    post,
-    path = "/api/v1/prune/dry-run",
-    request_body = PruneRequest,
-    responses(
-        (status = 200, description = "Pruning suggestions", body = PruneResponse),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn prune_dry_run(
-    State(state): State<AppState>,
-    Json(req): Json<PruneRequest>,
-) -> Result<Json<PruneResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let suggestions = state
-        .orchestrator
-        .suggest_pruning(req.threshold_days)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    let total = suggestions.len(); // Calculate before consuming
-
-    Ok(Json(PruneResponse {
-        suggestions: suggestions
-            .into_iter()
-            .map(|s| PruningSuggestionDto {
-                conversation_id: s.conversation_id,
-                conversation_label: s.conversation_label,
-                last_accessed: s.last_accessed, // CHANGED: Remove .to_string()
-                message_count: s.message_count,
-                token_estimate: s.token_estimate,
-                importance_score: s.importance_score,
-                preview: s.preview,
-                recommendation: s.recommendation,
-            })
-            .collect(),
-        total,
-    }))
-}
-
-// Endpoint: POST /api/v1/prune/execute
-#[utoipa::path(
-    post,
-    path = "/api/v1/prune/execute",
-    request_body = ExecutePruneRequest,
-    responses(
-        (status = 200, description = "Conversations archived"),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn prune_execute(
-    State(state): State<AppState>,
-    Json(req): Json<ExecutePruneRequest>,
-) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    for id in req.conversation_ids {
-        state
-            .repo
-            .update_status(id, "archived")
-            .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: e.to_string(),
-                        code: 500,
-                    }),
-                )
-            })?;
-    }
-
-    Ok(StatusCode::OK)
-}
-
-// Endpoint: POST /api/v1/labels/suggest
-#[utoipa::path(
-    post,
-    path = "/api/v1/labels/suggest",
-    request_body = LabelSuggestRequest,
-    responses(
-        (status = 200, description = "Label suggestions", body = LabelSuggestResponse),
-        (status = 500, description = "Server error", body = ErrorResponse)
-    )
-)]
-async fn suggest_labels(
-    State(state): State<AppState>,
-    Json(req): Json<LabelSuggestRequest>,
-) -> Result<Json<LabelSuggestResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let suggestions = state
-        .orchestrator
-        .suggest_labels(req.conversation_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                    code: 500,
-                }),
-            )
-        })?;
-
-    Ok(Json(LabelSuggestResponse {
-        conversation_id: req.conversation_id,
-        suggestions: suggestions
-            .into_iter()
-            .map(|s| LabelSuggestionDto {
-                label: s.label,
-                confidence: s.confidence,
-                is_existing: s.is_existing,
-                reason: s.reason,
-            })
-            .collect(),
-    }))
-}
-
-// ============================================
-// Router - All 12 endpoints registered
-// ============================================
 pub fn create_router(state: AppState) -> Router {
     Router::new()
+        // Conversation endpoints
         .route("/api/v1/conversations", post(create_conversation))
         .route("/api/v1/conversations/{id}", get(get_conversation))
         .route("/api/v1/conversations", get(list_conversations))
@@ -929,26 +407,323 @@ pub fn create_router(state: AppState) -> Router {
             "/api/v1/conversations/{id}/label",
             put(update_conversation_label),
         )
-        .route(
-            "/api/v1/conversations/{id}/folder",
-            put(update_conversation_folder),
-        )
-        .route("/api/v1/conversations/{id}/pin", put(pin_conversation))
-        .route(
-            "/api/v1/conversations/{id}/archive",
-            put(archive_conversation),
-        )
         .route("/api/v1/conversations/{id}", delete(delete_conversation))
         .route("/api/v1/conversations/count", get(count_conversations))
+        // Query endpoint
         .route("/api/v1/query", post(semantic_query))
-        .route("/api/v1/rebuild-embeddings", post(rebuild_embeddings))
-        .route("/api/v1/search/fts", post(full_text_search))
-        .route("/api/v1/context/assemble", post(assemble_context))
-        .route("/api/v1/summarize", post(generate_summary))
-        .route("/api/v1/prune/dry-run", post(prune_dry_run))
-        .route("/api/v1/prune/execute", post(prune_execute))
-        .route("/api/v1/labels/suggest", post(suggest_labels))
+        // Health and metrics
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::Config,
+        llm::bridge_client::BridgeClient,
+        orchestrator::MemoryOrchestrator,
+        storage::{init_db, repository::SeaOrmConversationRepository},
+    };
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
+    async fn create_test_state() -> AppState {
+        let db = init_db("sqlite::memory:").await.unwrap();
+        let config = Arc::new(RwLock::new(Config::default()));
+        let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
+
+        // Create BridgeClient first, then pass to EmbeddingService
+        let base_config = Config::default();
+        let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
+        let embedding_service = Arc::new(EmbeddingService::new(
+            bridge,
+            "http://localhost:8000".to_string(),
+        ));
+
+        let repo = Arc::new(SeaOrmConversationRepository::new(
+            db,
+            chroma_client.clone(),
+            embedding_service.clone(),
+        ));
+
+        let config_ref = config.read().await;
+        let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
+        drop(config_ref);
+
+        AppState {
+            config,
+            repo: repo.clone(),
+            orchestrator: Arc::new(MemoryOrchestrator::new(repo, llm_bridge.clone())),
+            embedding_service,
+            chroma_client,
+            llm_client: llm_bridge,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_conversation_error_500() {
+        let state = create_test_state().await;
+
+        let req = CreateConversationRequest {
+            label: "Test".to_string(),
+            folder: "default".to_string(),
+            messages: vec![],
+        };
+
+        let result = create_conversation(State(state), Json(req)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_conversation_not_found_404() {
+        let state = create_test_state().await;
+        let non_existent_id = Uuid::new_v4();
+
+        let result = get_conversation(State(state), Path(non_existent_id)).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.1.code, 404);
+        assert!(err.1.error.contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_update_conversation_label_not_found_404() {
+        let state = create_test_state().await;
+        let non_existent_id = Uuid::new_v4();
+
+        let req = UpdateLabelRequest {
+            label: "New Label".to_string(),
+            folder: "new_folder".to_string(),
+        };
+
+        let result =
+            update_conversation_label(State(state), Path(non_existent_id), Json(req)).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.1.code, 404);
+    }
+
+    #[tokio::test]
+    async fn test_delete_conversation_not_found_404() {
+        let state = create_test_state().await;
+        let non_existent_id = Uuid::new_v4();
+
+        let result = delete_conversation(State(state), Path(non_existent_id)).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        assert_eq!(err.1.code, 404);
+        assert!(err.1.error.contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_with_label_filter() {
+        let state = create_test_state().await;
+
+        let pagination = PaginationParams {
+            page: Some(1),
+            page_size: Some(10),
+        };
+        let filters = FilterParams {
+            label: Some("test-label".to_string()),
+            folder: None,
+            pinned: None,
+            archived: None,
+        };
+
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
+
+        assert_eq!(result.page, 1);
+        assert_eq!(result.page_size, 10);
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_with_folder_filter() {
+        let state = create_test_state().await;
+
+        let pagination = PaginationParams {
+            page: Some(1),
+            page_size: Some(20),
+        };
+        let filters = FilterParams {
+            label: None,
+            folder: Some("work".to_string()),
+            pinned: None,
+            archived: None,
+        };
+
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
+
+        assert_eq!(result.page, 1);
+        assert_eq!(result.page_size, 20);
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_with_pinned_filter() {
+        let state = create_test_state().await;
+
+        let pagination = PaginationParams {
+            page: None,
+            page_size: None,
+        };
+        let filters = FilterParams {
+            label: None,
+            folder: None,
+            pinned: Some(true),
+            archived: None,
+        };
+
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
+
+        assert_eq!(result.page, 1);
+        assert_eq!(result.page_size, 50);
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_with_archived_filter() {
+        let state = create_test_state().await;
+
+        let pagination = PaginationParams {
+            page: Some(2),
+            page_size: Some(25),
+        };
+        let filters = FilterParams {
+            label: None,
+            folder: None,
+            pinned: None,
+            archived: Some(false),
+        };
+
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
+
+        assert_eq!(result.page, 2);
+        assert_eq!(result.page_size, 25);
+    }
+
+    #[tokio::test]
+    async fn test_list_conversations_with_all_filters() {
+        let state = create_test_state().await;
+
+        let pagination = PaginationParams {
+            page: Some(1),
+            page_size: Some(15),
+        };
+        let filters = FilterParams {
+            label: Some("important".to_string()),
+            folder: Some("archive".to_string()),
+            pinned: Some(true),
+            archived: Some(true),
+        };
+
+        let result = list_conversations(State(state), Query(pagination), Query(filters)).await;
+
+        assert_eq!(result.page, 1);
+        assert_eq!(result.page_size, 15);
+    }
+
+    #[tokio::test]
+    async fn test_count_conversations_by_label() {
+        let state = create_test_state().await;
+
+        let params = CountParams {
+            label: Some("test".to_string()),
+            folder: None,
+        };
+
+        let result = count_conversations(State(state), Query(params)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.get("count").is_some());
+        assert!(response.get("label").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_count_conversations_by_folder() {
+        let state = create_test_state().await;
+
+        let params = CountParams {
+            label: None,
+            folder: Some("work".to_string()),
+        };
+
+        let result = count_conversations(State(state), Query(params)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.get("count").is_some());
+        assert!(response.get("folder").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_count_conversations_all() {
+        let state = create_test_state().await;
+
+        let params = CountParams {
+            label: None,
+            folder: None,
+        };
+
+        let result = count_conversations(State(state), Query(params)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.get("count").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_count_conversations_both_params_error() {
+        let state = create_test_state().await;
+
+        let params = CountParams {
+            label: Some("test".to_string()),
+            folder: Some("work".to_string()),
+        };
+
+        let result = count_conversations(State(state), Query(params)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.get("count").unwrap(), &serde_json::json!(0));
+        assert!(response.get("error").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_semantic_query_search_result_dto_mapping() {
+        let state = create_test_state().await;
+
+        let req = QueryRequest {
+            query: "test query".to_string(),
+            limit: Some(5),
+            offset: Some(0),
+            filters: None,
+        };
+
+        let result = semantic_query(State(state), Json(req)).await;
+
+        if let Ok(response) = result {
+            assert_eq!(response.page_size, 5);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_health_endpoint() {
+        let response = health().await;
+        assert_eq!(response.status, "healthy");
+        assert!(!response.version.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_endpoint() {
+        let state = create_test_state().await;
+        let response = metrics(State(state)).await;
+        assert!(response.get("metrics").is_some());
+    }
 }

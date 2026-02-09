@@ -12,10 +12,110 @@ pub struct CreateConversationRequest {
     pub messages: Vec<MessageDto>,
 }
 
+/// Content part for multi-modal messages (text + images)
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ContentPart {
+    #[serde(rename = "text")]
+    Text { text: String },
+    #[serde(rename = "image_url")]
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ImageUrl {
+    /// URL to the image (http/https) or base64 data URI
+    pub url: String,
+    /// Optional detail level for vision models (low, high, auto)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// Message in a conversation
+/// Supports both simple text and multi-modal content (text + images)
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct MessageDto {
     pub role: String,
-    pub content: String,
+    /// Content can be either a simple string or an array of content parts
+    /// For text-only: content = "Hello"
+    /// For vision: content = [{"type": "text", "text": "What's in this image?"}, {"type": "image_url", "image_url": {"url": "https://..."}}]
+    pub content: MessageContent,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum MessageContent {
+    /// Simple text content (backward compatible)
+    Text(String),
+    /// Multi-modal content with text and images
+    Parts(Vec<ContentPart>),
+}
+
+impl MessageContent {
+    /// Get the length of text content (character count)
+    pub fn len(&self) -> usize {
+        match self {
+            MessageContent::Text(s) => s.len(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::Text { text } => Some(text.len()),
+                    _ => None,
+                })
+                .sum(),
+        }
+    }
+
+    /// Check if content is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Convert content to a String (extract text parts)
+    pub fn as_string(&self) -> String {
+        match self {
+            MessageContent::Text(s) => s.clone(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+        }
+    }
+}
+
+impl MessageDto {
+    /// Extract text content from the message
+    pub fn get_text(&self) -> String {
+        self.content.as_string()
+    }
+
+    /// Check if message contains images
+    pub fn has_images(&self) -> bool {
+        match &self.content {
+            MessageContent::Text(_) => false,
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .any(|part| matches!(part, ContentPart::ImageUrl { .. })),
+        }
+    }
+
+    /// Extract image URLs from the message
+    pub fn get_image_urls(&self) -> Vec<String> {
+        match &self.content {
+            MessageContent::Text(_) => vec![],
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::ImageUrl { image_url } => Some(image_url.url.clone()),
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -67,7 +167,7 @@ pub struct ConversationResponse {
     pub status: String,
     pub message_count: usize,
     #[schema(value_type = String, format = DateTime)]
-    pub created_at: NaiveDateTime, // CHANGED: String → NaiveDateTime
+    pub created_at: NaiveDateTime,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -88,7 +188,7 @@ pub struct SearchResultDto {
     pub label: String,
     pub folder: String,
     #[schema(value_type = String, format = DateTime)]
-    pub timestamp: NaiveDateTime, // CHANGED: String → NaiveDateTime
+    pub timestamp: NaiveDateTime,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -147,7 +247,7 @@ pub struct ContextAssembleRequest {
     pub query: String,
     pub preferred_labels: Vec<String>,
     pub context_budget: usize,
-    #[serde(default)] // ← Optional, defaults to empty vec
+    #[serde(default)]
     pub excluded_folders: Vec<String>,
 }
 
@@ -163,7 +263,7 @@ pub struct SummaryResponse {
     pub level: String,
     pub summary: String,
     #[schema(value_type = String, format = DateTime)]
-    pub generated_at: NaiveDateTime, // CHANGED: String → NaiveDateTime
+    pub generated_at: NaiveDateTime,
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
@@ -182,7 +282,7 @@ pub struct PruningSuggestionDto {
     pub conversation_id: Uuid,
     pub conversation_label: String,
     #[schema(value_type = String, format = DateTime)]
-    pub last_accessed: NaiveDateTime, // CHANGED: String → NaiveDateTime
+    pub last_accessed: NaiveDateTime,
     pub message_count: u64,
     pub token_estimate: u32,
     pub importance_score: f32,

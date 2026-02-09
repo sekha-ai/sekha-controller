@@ -1,4 +1,5 @@
 use sea_orm_migration::prelude::*;
+use sea_orm::ConnectionTrait;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -47,10 +48,13 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Enable WAL mode
-        manager
-            .execute_unprepared("PRAGMA journal_mode=WAL;")
-            .await?;
+        // Enable WAL mode using raw SQL
+        let db = manager.get_connection();
+        let stmt = sea_orm::Statement::from_string(
+            manager.get_database_backend(),
+            "PRAGMA journal_mode=WAL;".to_owned(),
+        );
+        db.execute_raw(stmt).await?;
 
         Ok(())
     }

@@ -121,7 +121,7 @@ impl LabelIntelligence {
         Ok(None)
     }
 
-    fn infer_folder(&self, label: &str) -> String {
+    pub fn infer_folder(&self, label: &str) -> String {
         if label.contains(':') {
             "/work".to_string()
         } else {

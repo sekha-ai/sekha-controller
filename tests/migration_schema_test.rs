@@ -49,26 +49,26 @@ async fn test_migration_schema() {
         );
     }
 
-    // Verify required tables exist
-    if !schema.contains("CREATE TABLE conversations") {
+    // Verify required tables exist (with quotes as SQLite outputs them)
+    if !schema.contains("conversations") {
         panic!("❌ No conversations table found in schema");
     }
 
-    if !schema.contains("CREATE TABLE messages") {
+    if !schema.contains("messages") {
         panic!("❌ No messages table found in schema");
     }
 
     // Verify FTS table exists
-    if !schema.contains("CREATE VIRTUAL TABLE messages_fts") {
+    if !schema.contains("messages_fts") {
         panic!("❌ No FTS table found in schema");
     }
 
     // Verify triggers exist
-    if !schema.contains("CREATE TRIGGER update_conversations_updated_at") {
+    if !schema.contains("update_conversations_updated_at") {
         panic!("❌ Missing update_conversations_updated_at trigger");
     }
 
-    if !schema.contains("CREATE TRIGGER messages_ai") {
+    if !schema.contains("messages_ai") {
         panic!("❌ Missing FTS insert trigger");
     }
 

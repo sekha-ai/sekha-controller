@@ -1,32 +1,27 @@
 use crate::api::routes::AppState;
+use crate::auth::mcp_auth_middleware; // ✅ Fixed import
 use crate::config::Config;
+use axum::middleware;
 use axum::routing::post;
-use axum::{
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use axum::{extract::State, http::StatusCode};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{
-    api::dto::*, auth::McpAuth, models::internal::Conversation,
-    storage::repository::ConversationRepository,
-};
+use crate::api::dto::*;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::bridge_client::BridgeClient;
     use crate::orchestrator::MemoryOrchestrator;
     use crate::services::embedding_service::EmbeddingService;
+    use crate::services::llm_bridge_client::LlmBridgeClient;
     use crate::storage::chroma_client::ChromaClient;
     use crate::storage::repository::MockConversationRepository;
     use crate::storage::repository::SearchResult;
-    use crate::LlmBridgeClient;
     use axum::body::Body;
     use axum::http::{header, Request as HttpRequest};
     use chrono::Utc;
@@ -56,21 +51,23 @@ mod tests {
             .expect_semantic_search()
             .returning(move |_, _, _| Ok(mock_results.clone()));
 
-        // Create AppState with both services
-        let config = Arc::new(RwLock::new(Config::default()));
+        // Create config used by both AppState and LlmBridgeClient
+        let base_config = Config::default();
+        let config = Arc::new(RwLock::new(base_config.clone()));
         let repo = Arc::new(mock_repo);
 
-        // Create EmbeddingService for AppState
+        // ✅ FIXED: Create BridgeClient first, then pass to EmbeddingService
+        let bridge = BridgeClient::new(&base_config).expect("Failed to create BridgeClient");
         let embedding_service = Arc::new(EmbeddingService::new(
-            "http://localhost:1".to_string(),
+            bridge,
             "http://localhost:1".to_string(),
         ));
 
-        // Create LlmBridgeClient for Orchestrator
-        let llm_bridge = Arc::new(LlmBridgeClient::new("http://localhost:1".to_string()));
+        // Create LlmBridgeClient for Orchestrator and AppState
+        let llm_bridge = Arc::new(LlmBridgeClient::new(&base_config).unwrap());
 
         let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
-        let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge));
+        let orchestrator = Arc::new(MemoryOrchestrator::new(repo.clone(), llm_bridge.clone()));
 
         let state = AppState {
             config,
@@ -78,6 +75,7 @@ mod tests {
             orchestrator,
             embedding_service,
             chroma_client,
+            llm_client: llm_bridge,
         };
 
         // Call memory_search (this executes the formatting code)
@@ -88,14 +86,7 @@ mod tests {
             offset: None,
         };
 
-        let result = memory_search(
-            McpAuth {
-                token: "Bearer test_key_12345678901234567890123456789012".to_string(),
-            },
-            State(state),
-            Json(args),
-        )
-        .await;
+        let result = memory_search(State(state), Json(args)).await;
 
         // Verify success
         assert!(result.is_ok());
@@ -186,7 +177,6 @@ pub struct MemoryStoreArgs {
 }
 
 pub async fn memory_store(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryStoreArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -196,13 +186,13 @@ pub async fn memory_store(
     let importance = args.importance_score.unwrap_or(5);
     let word_count: i32 = args.messages.iter().map(|m| m.content.len() as i32).sum();
 
-    // ✅ Convert MessageDto to NewMessage
+    // ✅ Convert MessageDto to NewMessage - use as_string() to convert MessageContent
     let new_messages: Vec<crate::models::internal::NewMessage> = args
         .messages
         .into_iter()
         .map(|m| crate::models::internal::NewMessage {
             role: m.role,
-            content: m.content,
+            content: m.content.as_string(),
             timestamp: now,
             metadata: serde_json::json!({}),
         })
@@ -262,7 +252,6 @@ pub fn default_limit() -> Option<u32> {
 }
 
 pub async fn memory_search(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemorySearchArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -326,7 +315,6 @@ pub struct MemoryUpdateArgs {
 }
 
 pub async fn memory_update(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryUpdateArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -406,16 +394,18 @@ pub struct PruningSuggestionDto {
 }
 
 pub async fn memory_prune(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryPruneArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
     use crate::orchestrator::pruning_engine::PruningEngine;
     use crate::services::llm_bridge_client::LlmBridgeClient;
 
-    // Create LLM bridge client from config
-    let config = state.config.read().await;
-    let llm_bridge = Arc::new(LlmBridgeClient::new(config.ollama_url.clone()));
+    // Create LLM bridge client from full Config in state
+    let config_guard = state.config.read().await;
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_guard).map_err(|e| {
+        tracing::error!("Failed to create LlmBridgeClient: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?);
 
     // Create pruning engine
     let pruning_engine = PruningEngine::new(state.repo.clone(), llm_bridge);
@@ -472,7 +462,6 @@ pub struct MemoryGetContextArgs {
 }
 
 pub async fn memory_get_context(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryGetContextArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -518,7 +507,6 @@ fn default_true() -> bool {
 }
 
 pub async fn memory_export(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryExportArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -584,7 +572,6 @@ pub struct Stats {
 }
 
 pub async fn memory_stats(
-    _auth: McpAuth,
     State(state): State<AppState>,
     Json(args): Json<MemoryStatsArgs>,
 ) -> Result<Json<McpToolResponse>, StatusCode> {
@@ -688,7 +675,7 @@ pub async fn memory_stats(
     }
 }
 
-// ==================== ROUTER & LEGACY COMPATIBILITY ====================
+// ==================== ROUTER & AUTH MIDDLEWARE ====================
 
 pub fn create_mcp_router(state: AppState) -> Router {
     Router::new()
@@ -699,5 +686,10 @@ pub fn create_mcp_router(state: AppState) -> Router {
         .route("/mcp/tools/memory_prune", post(memory_prune))
         .route("/mcp/tools/memory_export", post(memory_export))
         .route("/mcp/tools/memory_stats", post(memory_stats))
+        // Apply MCP auth middleware to all routes
+        .layer(middleware::from_fn_with_state(
+            state.config.clone(),
+            mcp_auth_middleware,
+        ))
         .with_state(state)
 }
