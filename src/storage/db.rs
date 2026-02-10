@@ -38,7 +38,8 @@ async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), 
                     version varchar NOT NULL PRIMARY KEY,
                     applied_at integer NOT NULL
                 )
-                "#.to_string(),
+                "#
+                .to_string(),
             );
             db.execute(&create_stmt).await?;
 
@@ -49,7 +50,8 @@ async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), 
                 INSERT INTO seaql_migrations_new (version, applied_at)
                 SELECT version, strftime('%s', applied_at) 
                 FROM seaql_migrations
-                "#.to_string(),
+                "#
+                .to_string(),
             );
             db.execute(&copy_stmt).await?;
 
@@ -294,7 +296,8 @@ mod tests {
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at varchar NOT NULL
             )
-            "#.to_string(),
+            "#
+            .to_string(),
         );
         db.execute(&create_stmt).await.unwrap();
 
@@ -313,7 +316,8 @@ mod tests {
         // Verify the schema was migrated to INTEGER
         let check_stmt = Statement::from_string(
             db.get_database_backend(),
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
+                .to_string(),
         );
         let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
@@ -362,7 +366,8 @@ mod tests {
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at integer NOT NULL
             )
-            "#.to_string(),
+            "#
+            .to_string(),
         );
         db.execute(&create_stmt).await.unwrap();
 
@@ -373,7 +378,8 @@ mod tests {
         // Verify schema unchanged
         let check_stmt = Statement::from_string(
             db.get_database_backend(),
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
+                .to_string(),
         );
         let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
@@ -400,7 +406,8 @@ mod tests {
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at text NOT NULL
             )
-            "#.to_string(),
+            "#
+            .to_string(),
         );
         db.execute(&create_stmt).await.unwrap();
 
@@ -411,7 +418,8 @@ mod tests {
         // Verify schema was migrated
         let check_stmt = Statement::from_string(
             db.get_database_backend(),
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
+                .to_string(),
         );
         let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
