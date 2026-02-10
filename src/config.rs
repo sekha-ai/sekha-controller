@@ -293,7 +293,9 @@ impl Config {
         // If no v2.0 providers configured but v1.x config exists, auto-migrate
         if config.llm_providers.is_empty() {
             if let Some(ollama_url) = &config.ollama_url {
-                tracing::warn!("⚠️  Detected v0.1.x configuration. Auto-migrating to v0.2.0 format...");
+                tracing::warn!(
+                    "⚠️  Detected v0.1.x configuration. Auto-migrating to v0.2.0 format..."
+                );
 
                 let embedding_model = config
                     .embedding_model
