@@ -79,6 +79,10 @@ async fn main() -> Result<()> {
     ));
     tracing::info!("✅ Orchestrator initialized");
 
+    // Get server configuration before wrapping config in Arc<RwLock>
+    let server_host = config.server_host.clone();
+    let server_port = config.server_port;
+
     // Wrap config in Arc<RwLock>
     let config = Arc::new(RwLock::new(config));
 
@@ -100,8 +104,10 @@ async fn main() -> Result<()> {
             .allow_headers(Any),
     );
 
-    // Start server
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
+    // Start server with configured host and port
+    let addr = format!("{}:{}", server_host, server_port)
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid server address: {}", e))?;
     tracing::info!("🎯 Server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
