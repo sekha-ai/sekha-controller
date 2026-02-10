@@ -6,7 +6,7 @@ use sekha_controller::{
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
-        chroma_client::ChromaClient, db::get_connection, repository::SeaOrmConversationRepository,
+        chroma_client::ChromaClient, db::init_db, repository::SeaOrmConversationRepository,
     },
 };
 use std::sync::Arc;
@@ -29,11 +29,13 @@ async fn main() -> Result<()> {
     let config = Config::load()?;
     tracing::info!("✅ Configuration loaded");
 
-    // Initialize database connection
-    let db = get_connection()
+    // Initialize database connection with init_db() which creates DB and runs migrations
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| config.database_url.clone());
+    let db = init_db(&database_url)
         .await
-        .ok_or_else(|| anyhow::anyhow!("Failed to connect to database"))?;
-    tracing::info!("✅ Database connected");
+        .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
+    tracing::info!("✅ Database initialized and connected");
 
     // Initialize Chroma client
     let chroma_url =
