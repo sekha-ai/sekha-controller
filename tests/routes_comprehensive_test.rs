@@ -15,14 +15,33 @@ use sekha_controller::{
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
     storage::{
         chroma_client::ChromaClient,
-        repository::{MockConversationRepository, SearchResult},
+        repository::{MockConversationRepository, SeaOrmConversationRepository, SearchResult},
     },
 };
+use sea_orm::DatabaseConnection;
 use serde_json::json;
 use std::sync::Arc;
+use tempfile::TempDir;
 use tokio::sync::RwLock;
 use tower::ServiceExt;
 use uuid::Uuid;
+
+/// Create test database for orchestrator tests
+async fn create_test_db() -> (TempDir, DatabaseConnection) {
+    use std::fs;
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir_path = temp_dir.path();
+    fs::create_dir_all(dir_path).expect("Failed to create parent directories");
+
+    let db_path = dir_path.join("test.db");
+    let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+    let db = sekha_controller::init_db(&db_url)
+        .await
+        .expect("Failed to initialize database");
+
+    (temp_dir, db)
+}
 
 /// Create test AppState with mock repository
 async fn create_test_state() -> AppState {
@@ -50,11 +69,6 @@ async fn create_test_state() -> AppState {
         .expect_semantic_search()
         .returning(|_, _, _| Ok(vec![]));
 
-    // Mock get_db to return a fake connection (tests don't use it directly)
-    // This needs special handling since it returns a reference
-    // For now, we'll use expect_get_db with a static lifetime hack for tests
-    // In real tests, you'd use a test database connection
-
     let mock_repo = Arc::new(mock_repo);
 
     let config_ref = config.read().await;
@@ -76,6 +90,39 @@ async fn create_test_state() -> AppState {
         chroma_client,
         llm_client: llm_bridge,
     }
+}
+
+/// Create test AppState with REAL database for orchestrator tests
+async fn create_test_state_with_db() -> (AppState, TempDir) {
+    let config = Arc::new(RwLock::new(Config::default()));
+    let (_temp_dir, db) = create_test_db().await;
+
+    let config_ref = config.read().await;
+    let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
+    let embedding_service = Arc::new(EmbeddingService::new(
+        bridge,
+        "http://localhost:1".to_string(), // Use invalid URL so embedding fails gracefully
+    ));
+    let chroma_client = Arc::new(ChromaClient::new("http://localhost:1".to_string()));
+    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
+    drop(config_ref);
+
+    let real_repo = Arc::new(SeaOrmConversationRepository::new(
+        db,
+        chroma_client.clone(),
+        embedding_service.clone(),
+    ));
+
+    let state = routes::AppState {
+        config,
+        repo: real_repo.clone(),
+        orchestrator: Arc::new(MemoryOrchestrator::new(real_repo, llm_bridge.clone())),
+        embedding_service,
+        chroma_client,
+        llm_client: llm_bridge,
+    };
+
+    (state, _temp_dir)
 }
 
 // ==================== HEALTH & METRICS ====================
@@ -311,14 +358,9 @@ async fn test_rebuild_embeddings() {
 
 // ==================== ORCHESTRATION ENDPOINTS ====================
 
-// NOTE: These tests require get_db() which cannot be easily mocked.
-// They need real database integration tests or refactoring to avoid get_db().
-// Use --ignored flag to run them with a test database.
-
 #[tokio::test]
-#[ignore]
 async fn test_assemble_context() {
-    let state = create_test_state().await;
+    let (state, _temp_dir) = create_test_state_with_db().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -344,9 +386,8 @@ async fn test_assemble_context() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_prune_dry_run() {
-    let state = create_test_state().await;
+    let (state, _temp_dir) = create_test_state_with_db().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -409,6 +450,5 @@ async fn test_semantic_query_missing_fields() {
         .await
         .unwrap();
 
-    // Fix: Expect 422 UNPROCESSABLE_ENTITY for validation errors, not 400
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
