@@ -6,6 +6,7 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use mockall::predicate::*;
+use sea_orm::DatabaseConnection;
 use sekha_controller::{
     api::routes::{self, AppState},
     config::Config,
@@ -18,7 +19,6 @@ use sekha_controller::{
         repository::{MockConversationRepository, SeaOrmConversationRepository, SearchResult},
     },
 };
-use sea_orm::DatabaseConnection;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::TempDir;
