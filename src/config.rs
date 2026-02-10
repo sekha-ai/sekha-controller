@@ -141,23 +141,23 @@ pub struct Config {
     #[serde(default = "default_cors_enabled")]
     pub cors_enabled: bool,
 
-    // ==== V2.0 CONFIGURATION ====
-    /// Configuration version ("2.0")
+    // ==== V0.2.0 CONFIGURATION ====
+    /// Configuration version ("v0.2.0")
     #[serde(default)]
     pub config_version: Option<String>,
 
-    /// Provider registry (v2.0)
+    /// Provider registry (v0.2.0)
     #[serde(default)]
     pub llm_providers: Vec<LlmProviderConfig>,
 
-    /// Default model selections (v2.0)
+    /// Default model selections (v0.2.0)
     pub default_models: Option<DefaultModels>,
 
-    /// Routing configuration (v2.0)
+    /// Routing configuration (v0.2.0)
     #[serde(default)]
     pub routing: RoutingConfig,
 
-    // ==== DEPRECATED (v1.x) - Keep for backward compatibility ====
+    // ==== DEPRECATED (v0.1.x) - Keep for backward compatibility ====
     /// @deprecated Use llm_providers instead
     pub ollama_url: Option<String>,
 
@@ -240,7 +240,7 @@ impl Default for Config {
             additional_api_keys: vec![],
             rate_limit_per_minute: 1000,
             cors_enabled: true,
-            config_version: Some("2.0".to_string()),
+            config_version: Some("v0.2.0".to_string()),
             llm_providers: vec![],
             default_models: None,
             routing: RoutingConfig::default(),
@@ -266,7 +266,7 @@ impl Config {
             .set_default("rate_limit_per_minute", 1000)?
             .set_default("cors_enabled", true)?
             .set_default("mcp_api_key", "dev_default_key_change_me_1234567890")?
-            // V1.x defaults (for backward compatibility)
+            // V0.1.x defaults (for backward compatibility)
             .set_default("ollama_url", "http://localhost:11434")?
             .set_default("embedding_model", "nomic-embed-text")?
             .set_default("summarization_model", "llama3.1:8b")?
@@ -290,7 +290,7 @@ impl Config {
         let mut config: Config = settings.try_deserialize()?;
 
         // ==== AUTO-MIGRATION LOGIC ====
-        // If no v2.0 providers configured but v1.x config exists, auto-migrate
+        // If no v0.2.0 providers configured but v0.1.x config exists, auto-migrate
         if config.llm_providers.is_empty() {
             if let Some(ollama_url) = &config.ollama_url {
                 tracing::warn!(
@@ -306,7 +306,7 @@ impl Config {
                     .clone()
                     .unwrap_or_else(|| "llama3.1:8b".to_string());
 
-                // Create default Ollama provider from v1.x config
+                // Create default Ollama provider from v0.1.x config
                 let migrated_provider = LlmProviderConfig {
                     id: "ollama_migrated".to_string(),
                     provider_type: ProviderType::Ollama,
@@ -349,10 +349,10 @@ impl Config {
                     chat_smart: summarization_model,
                     chat_vision: None,
                 });
-                config.config_version = Some("2.0".to_string());
+                config.config_version = Some("v0.2.0".to_string());
 
                 tracing::info!(
-                    "✅ Auto-migration complete. Please update config file to v2.0 format."
+                    "✅ Auto-migration complete. Please update config file to v0.2.0 format."
                 );
             }
         }
@@ -365,7 +365,7 @@ impl Config {
 
     /// Validate provider configuration
     pub fn validate_providers(&self) -> Result<(), config::ConfigError> {
-        // If v2.0 config is present, validate it
+        // If v0.2.0 config is present, validate it
         if !self.llm_providers.is_empty() {
             // Ensure default models are specified
             if self.default_models.is_none() {
