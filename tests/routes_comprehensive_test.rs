@@ -5,6 +5,7 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
 };
+use mockall::predicate::*;
 use sekha_controller::{
     api::routes::{self, AppState},
     config::Config,
@@ -12,9 +13,11 @@ use sekha_controller::{
     models::internal::Conversation,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
-    storage::{chroma_client::ChromaClient, repository::{MockConversationRepository, SearchResult}},
+    storage::{
+        chroma_client::ChromaClient,
+        repository::{MockConversationRepository, SearchResult},
+    },
 };
-use mockall::predicate::*;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -35,13 +38,9 @@ async fn create_test_state() -> AppState {
         .expect_find_with_filters()
         .returning(|_, _, _| Ok((vec![], 0)));
 
-    mock_repo
-        .expect_count_all()
-        .returning(|| Ok(0));
+    mock_repo.expect_count_all().returning(|| Ok(0));
 
-    mock_repo
-        .expect_count_by_label()
-        .returning(|_| Ok(0));
+    mock_repo.expect_count_by_label().returning(|_| Ok(0));
 
     mock_repo
         .expect_full_text_search()
@@ -389,7 +388,10 @@ async fn test_prune_dry_run() {
         .unwrap();
 
     // Pruning might fail due to mock limitations, so we allow 500 or 200
-    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(
+        response.status() == StatusCode::OK
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR
+    );
 }
 
 // ==================== ERROR CASES ====================
