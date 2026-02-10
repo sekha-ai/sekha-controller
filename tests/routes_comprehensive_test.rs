@@ -19,12 +19,11 @@ use tokio::sync::RwLock;
 use tower::ServiceExt;
 
 /// Create test AppState with mock repository
-fn create_test_state() -> AppState {
+async fn create_test_state() -> AppState {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
 
-    let config_ref =
-        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(config.read()));
+    let config_ref = config.read().await;
 
     let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
@@ -49,7 +48,7 @@ fn create_test_state() -> AppState {
 
 #[tokio::test]
 async fn test_health_endpoint() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -67,7 +66,7 @@ async fn test_health_endpoint() {
 
 #[tokio::test]
 async fn test_metrics_endpoint() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -87,7 +86,7 @@ async fn test_metrics_endpoint() {
 
 #[tokio::test]
 async fn test_create_conversation() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -116,7 +115,7 @@ async fn test_create_conversation() {
 
 #[tokio::test]
 async fn test_list_conversations() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -134,7 +133,7 @@ async fn test_list_conversations() {
 
 #[tokio::test]
 async fn test_list_conversations_with_pagination() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -152,7 +151,7 @@ async fn test_list_conversations_with_pagination() {
 
 #[tokio::test]
 async fn test_list_conversations_with_filters() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -170,7 +169,7 @@ async fn test_list_conversations_with_filters() {
 
 #[tokio::test]
 async fn test_count_conversations() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -188,7 +187,7 @@ async fn test_count_conversations() {
 
 #[tokio::test]
 async fn test_count_conversations_by_label() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -208,7 +207,7 @@ async fn test_count_conversations_by_label() {
 
 #[tokio::test]
 async fn test_semantic_query() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -234,7 +233,7 @@ async fn test_semantic_query() {
 
 #[tokio::test]
 async fn test_full_text_search() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -259,7 +258,7 @@ async fn test_full_text_search() {
 
 #[tokio::test]
 async fn test_rebuild_embeddings() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -280,7 +279,7 @@ async fn test_rebuild_embeddings() {
 
 #[tokio::test]
 async fn test_assemble_context() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -307,7 +306,7 @@ async fn test_assemble_context() {
 
 #[tokio::test]
 async fn test_prune_dry_run() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -333,7 +332,7 @@ async fn test_prune_dry_run() {
 
 #[tokio::test]
 async fn test_create_conversation_invalid_json() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let response = app
@@ -353,7 +352,7 @@ async fn test_create_conversation_invalid_json() {
 
 #[tokio::test]
 async fn test_semantic_query_missing_fields() {
-    let state = create_test_state();
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({});
