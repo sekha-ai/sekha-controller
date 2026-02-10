@@ -26,7 +26,7 @@ async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), 
         let schema: String = row.try_get("", "sql")?;
         
         // Check if applied_at is TEXT (v0.1.x) instead of INTEGER (v0.2.0)
-        if schema.contains("applied_at" varchar") || schema.contains("applied_at" text") {
+        if schema.contains("applied_at\" varchar") || schema.contains("applied_at\" text") {
             tracing::warn!("⚠️  Detected v0.1.x migration table schema. Migrating to v0.2.0...");
             
             // Create new table with correct schema
