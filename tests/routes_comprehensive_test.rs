@@ -23,10 +23,9 @@ fn create_test_state() -> AppState {
     let config = Arc::new(RwLock::new(Config::default()));
     let mock_repo = Arc::new(MockConversationRepository::new());
 
-    let config_ref = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(config.read())
-    });
-    
+    let config_ref =
+        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(config.read()));
+
     let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
     let embedding_service = Arc::new(EmbeddingService::new(
         bridge,
