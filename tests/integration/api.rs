@@ -507,9 +507,7 @@ async fn test_api_assemble_context() {
                 .method("POST")
                 .uri("/api/v1/context/assemble")
                 .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{ "query": "test", "context_budget": 1000 }"#,
-                ))
+                .body(Body::from(r#"{ "query": "test", "context_budget": 1000 }"#))
                 .unwrap(),
         )
         .await
