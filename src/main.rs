@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
     );
 
     // Start server with configured host and port
-    let addr = format!("{}:{}", server_host, server_port)
+    let addr: std::net::SocketAddr = format!("{}:{}", server_host, server_port)
         .parse()
         .map_err(|e| anyhow::anyhow!("Invalid server address: {}", e))?;
     tracing::info!("🎯 Server listening on {}", addr);
