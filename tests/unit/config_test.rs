@@ -142,7 +142,7 @@ fn test_config_load_with_v1_auto_migration() {
     assert_eq!(defaults.chat_vision, None);
 
     // Check version
-    assert_eq!(config.config_version, Some("0.2.0".to_string()));
+    assert_eq!(config.config_version, Some("v0.2.0".to_string()));
 
     // Cleanup
     clear_sekha_env_vars();

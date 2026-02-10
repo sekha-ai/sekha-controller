@@ -209,7 +209,7 @@ fn test_config_default() {
     assert_eq!(config.additional_api_keys.len(), 0);
     assert_eq!(config.rate_limit_per_minute, 1000);
     assert_eq!(config.cors_enabled, true);
-    assert_eq!(config.config_version, Some("0.2.0".to_string()));
+    assert_eq!(config.config_version, Some("v0.2.0".to_string()));
     assert_eq!(config.llm_providers.len(), 0);
     assert!(config.default_models.is_none());
     assert_eq!(
