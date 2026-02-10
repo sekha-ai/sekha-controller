@@ -94,7 +94,10 @@ mod routes_tests {
         let (status, json) = result.unwrap();
         assert_eq!(status, StatusCode::CREATED);
         assert!(json.0.get("id").is_some());
-        assert_eq!(json.0.get("label").unwrap().as_str().unwrap(), "Test Conversation");
+        assert_eq!(
+            json.0.get("label").unwrap().as_str().unwrap(),
+            "Test Conversation"
+        );
         assert_eq!(json.0.get("message_count").unwrap().as_i64().unwrap(), 2);
     }
 
@@ -261,8 +264,8 @@ mod routes_tests {
             folder: "/updated".to_string(),
         };
 
-        let result = update_conversation_label(State(state.clone()), Path(uuid), Json(update_req))
-            .await;
+        let result =
+            update_conversation_label(State(state.clone()), Path(uuid), Json(update_req)).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), StatusCode::OK);
 
@@ -297,8 +300,8 @@ mod routes_tests {
             folder: "/new".to_string(),
         };
 
-        let result = update_conversation_folder(State(state.clone()), Path(uuid), Json(update_req))
-            .await;
+        let result =
+            update_conversation_folder(State(state.clone()), Path(uuid), Json(update_req)).await;
         assert!(result.is_ok());
 
         // Verify update
@@ -315,8 +318,8 @@ mod routes_tests {
             folder: "/new".to_string(),
         };
 
-        let result = update_conversation_folder(State(state), Path(non_existent_id), Json(update_req))
-            .await;
+        let result =
+            update_conversation_folder(State(state), Path(non_existent_id), Json(update_req)).await;
         assert!(result.is_err());
 
         let (status, _) = result.unwrap_err();
@@ -638,9 +641,7 @@ mod routes_tests {
     async fn test_prune_dry_run() {
         let state = create_test_state().await;
 
-        let req = PruneRequest {
-            threshold_days: 90,
-        };
+        let req = PruneRequest { threshold_days: 90 };
 
         let result = prune_dry_run(State(state), Json(req)).await;
         assert!(result.is_ok());
