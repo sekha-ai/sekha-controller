@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbErr, Statement};
 use sea_orm_migration::MigratorTrait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,6 +9,69 @@ use migration::Migrator;
 
 static DB_CONN: Lazy<Arc<Mutex<Option<DatabaseConnection>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
+
+/// Migrate v0.1.x seaql_migrations table schema to v0.2.0 format
+/// 
+/// v0.1.x used TEXT for applied_at, v0.2.0 uses INTEGER
+async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
+    tracing::info!("Checking seaql_migrations table schema...");
+    
+    // Check if table exists and get its schema
+    let result = db.query_one(Statement::from_string(
+        db.get_database_backend(),
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string()
+    )).await?;
+    
+    if let Some(row) = result {
+        let schema: String = row.try_get("", "sql")?;
+        
+        // Check if applied_at is TEXT (v0.1.x) instead of INTEGER (v0.2.0)
+        if schema.contains("applied_at" varchar") || schema.contains("applied_at" text") {
+            tracing::warn!("⚠️  Detected v0.1.x migration table schema. Migrating to v0.2.0...");
+            
+            // Create new table with correct schema
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                r#"
+                CREATE TABLE IF NOT EXISTS seaql_migrations_new (
+                    version varchar NOT NULL PRIMARY KEY,
+                    applied_at integer NOT NULL
+                )
+                "#.to_string()
+            )).await?;
+            
+            // Copy data, converting TEXT timestamps to INTEGER (Unix epoch)
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                r#"
+                INSERT INTO seaql_migrations_new (version, applied_at)
+                SELECT version, strftime('%s', applied_at) 
+                FROM seaql_migrations
+                "#.to_string()
+            )).await?;
+            
+            // Drop old table
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                "DROP TABLE seaql_migrations".to_string()
+            )).await?;
+            
+            // Rename new table
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                "ALTER TABLE seaql_migrations_new RENAME TO seaql_migrations".to_string()
+            )).await?;
+            
+            tracing::info!("✅ Migration table schema updated to v0.2.0");
+        } else {
+            tracing::info!("Migration table already has v0.2.0 schema");
+        }
+    } else {
+        tracing::info!("No existing migration table found (fresh install)");
+    }
+    
+    Ok(())
+}
 
 pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     tracing::info!("Connecting to database: {}", database_url);
@@ -41,6 +104,9 @@ pub async fn init_db(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     } else {
         return Err(DbErr::Custom("Invalid SQLite URL format".to_string()));
     };
+
+    // Migrate seaql_migrations schema if needed (v0.1.x -> v0.2.0)
+    migrate_seaql_migrations_schema(&db).await?;
 
     // Run SeaORM migrations with idempotency check
     tracing::info!("Running SeaORM migrations...");
@@ -204,5 +270,133 @@ mod tests {
             .insert(&db2)
             .await
             .expect("Should be able to insert into conversations table");
+    }
+
+    #[tokio::test]
+    async fn test_migrate_v01x_schema_to_v02() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_v01x_migration.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        // Create a v0.1.x style database with TEXT applied_at
+        let db = Database::connect(&url).await.unwrap();
+        
+        // Create old-style migration table with TEXT applied_at
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            r#"
+            CREATE TABLE seaql_migrations (
+                version varchar NOT NULL PRIMARY KEY,
+                applied_at varchar NOT NULL
+            )
+            "#.to_string()
+        )).await.unwrap();
+        
+        // Insert some old-style migration records
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            "INSERT INTO seaql_migrations (version, applied_at) VALUES ('m001', '2024-01-01 00:00:00')".to_string()
+        )).await.unwrap();
+        
+        drop(db);
+
+        // Now run init_db which should migrate the schema
+        let db = init_db(&url).await.expect("Migration should succeed");
+        
+        // Verify the schema was migrated to INTEGER
+        let result = db.query_one(Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string()
+        )).await.unwrap().unwrap();
+        
+        let schema: String = result.try_get("", "sql").unwrap();
+        assert!(schema.contains("applied_at integer"), "Schema should have INTEGER applied_at");
+        
+        // Verify data was migrated
+        let result = db.query_one(Statement::from_string(
+            db.get_database_backend(),
+            "SELECT version, applied_at FROM seaql_migrations WHERE version='m001'".to_string()
+        )).await.unwrap();
+        
+        assert!(result.is_some(), "Migration record should still exist");
+    }
+
+    #[tokio::test]
+    async fn test_migrate_seaql_migrations_schema_no_table() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_no_migration_table.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        let db = Database::connect(&url).await.unwrap();
+        
+        // Should not error when no migration table exists
+        let result = migrate_seaql_migrations_schema(&db).await;
+        assert!(result.is_ok(), "Should handle missing table gracefully");
+    }
+
+    #[tokio::test]
+    async fn test_migrate_seaql_migrations_schema_already_v02() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_already_v02.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        let db = Database::connect(&url).await.unwrap();
+        
+        // Create new-style migration table with INTEGER applied_at
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            r#"
+            CREATE TABLE seaql_migrations (
+                version varchar NOT NULL PRIMARY KEY,
+                applied_at integer NOT NULL
+            )
+            "#.to_string()
+        )).await.unwrap();
+        
+        // Should not modify already-correct schema
+        let result = migrate_seaql_migrations_schema(&db).await;
+        assert!(result.is_ok(), "Should handle v0.2.0 schema gracefully");
+        
+        // Verify schema unchanged
+        let result = db.query_one(Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string()
+        )).await.unwrap().unwrap();
+        
+        let schema: String = result.try_get("", "sql").unwrap();
+        assert!(schema.contains("applied_at integer"), "Schema should remain INTEGER");
+    }
+
+    #[tokio::test]
+    async fn test_migrate_seaql_migrations_schema_with_text_variant() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_text_variant.db");
+        let url = format!("sqlite://{}", db_path.display());
+
+        let db = Database::connect(&url).await.unwrap();
+        
+        // Create table with 'text' instead of 'varchar'
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            r#"
+            CREATE TABLE seaql_migrations (
+                version varchar NOT NULL PRIMARY KEY,
+                applied_at text NOT NULL
+            )
+            "#.to_string()
+        )).await.unwrap();
+        
+        // Should detect and migrate TEXT variant
+        let result = migrate_seaql_migrations_schema(&db).await;
+        assert!(result.is_ok(), "Should migrate TEXT variant");
+        
+        // Verify schema was migrated
+        let result = db.query_one(Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string()
+        )).await.unwrap().unwrap();
+        
+        let schema: String = result.try_get("", "sql").unwrap();
+        assert!(schema.contains("applied_at integer"), "Schema should be migrated to INTEGER");
     }
 }
