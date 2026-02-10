@@ -5,9 +5,7 @@ use sekha_controller::{
     llm::bridge_client::BridgeClient,
     orchestrator::MemoryOrchestrator,
     services::{embedding_service::EmbeddingService, llm_bridge_client::LlmBridgeClient},
-    storage::{
-        chroma_client::ChromaClient, db::init_db, repository::SeaOrmConversationRepository,
-    },
+    storage::{chroma_client::ChromaClient, db::init_db, repository::SeaOrmConversationRepository},
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -30,8 +28,8 @@ async fn main() -> Result<()> {
     tracing::info!("✅ Configuration loaded");
 
     // Initialize database connection with init_db() which creates DB and runs migrations
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| config.database_url.clone());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| config.database_url.clone());
     let db = init_db(&database_url)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to initialize database: {}", e))?;
