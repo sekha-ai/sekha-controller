@@ -100,7 +100,7 @@ fn test_config_load_with_v1_auto_migration() {
 
     let config = Config::load().expect("Failed to load config");
 
-    // Should have auto-migrated to v2.0 (config.toml also has ollama_url so always migrates)
+    // Should have auto-migrated to v0.2.0 (config.toml also has ollama_url so always migrates)
     assert!(
         !config.llm_providers.is_empty(),
         "Should have migrated providers"
@@ -142,7 +142,7 @@ fn test_config_load_with_v1_auto_migration() {
     assert_eq!(defaults.chat_vision, None);
 
     // Check version
-    assert_eq!(config.config_version, Some("2.0".to_string()));
+    assert_eq!(config.config_version, Some("0.2.0".to_string()));
 
     // Cleanup
     clear_sekha_env_vars();
