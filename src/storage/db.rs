@@ -17,13 +17,11 @@ async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), 
     tracing::info!("Checking seaql_migrations table schema...");
 
     // Check if table exists and get its schema
-    let result = db
-        .query_one(Statement::from_string(
-            db.get_database_backend(),
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
-                .to_string(),
-        ))
-        .await?;
+    let check_stmt = Statement::from_string(
+        db.get_database_backend(),
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+    );
+    let result = db.query_one(&check_stmt).await?;
 
     if let Some(row) = result {
         let schema: String = row.try_get("", "sql")?;
@@ -33,43 +31,41 @@ async fn migrate_seaql_migrations_schema(db: &DatabaseConnection) -> Result<(), 
             tracing::warn!("⚠️  Detected v0.1.x migration table schema. Migrating to v0.2.0...");
 
             // Create new table with correct schema
-            db.execute(Statement::from_string(
+            let create_stmt = Statement::from_string(
                 db.get_database_backend(),
                 r#"
                 CREATE TABLE IF NOT EXISTS seaql_migrations_new (
                     version varchar NOT NULL PRIMARY KEY,
                     applied_at integer NOT NULL
                 )
-                "#
-                .to_string(),
-            ))
-            .await?;
+                "#.to_string(),
+            );
+            db.execute(&create_stmt).await?;
 
             // Copy data, converting TEXT timestamps to INTEGER (Unix epoch)
-            db.execute(Statement::from_string(
+            let copy_stmt = Statement::from_string(
                 db.get_database_backend(),
                 r#"
                 INSERT INTO seaql_migrations_new (version, applied_at)
                 SELECT version, strftime('%s', applied_at) 
                 FROM seaql_migrations
-                "#
-                .to_string(),
-            ))
-            .await?;
+                "#.to_string(),
+            );
+            db.execute(&copy_stmt).await?;
 
             // Drop old table
-            db.execute(Statement::from_string(
+            let drop_stmt = Statement::from_string(
                 db.get_database_backend(),
                 "DROP TABLE seaql_migrations".to_string(),
-            ))
-            .await?;
+            );
+            db.execute(&drop_stmt).await?;
 
             // Rename new table
-            db.execute(Statement::from_string(
+            let rename_stmt = Statement::from_string(
                 db.get_database_backend(),
                 "ALTER TABLE seaql_migrations_new RENAME TO seaql_migrations".to_string(),
-            ))
-            .await?;
+            );
+            db.execute(&rename_stmt).await?;
 
             tracing::info!("✅ Migration table schema updated to v0.2.0");
         } else {
@@ -291,24 +287,23 @@ mod tests {
         let db = Database::connect(&url).await.unwrap();
 
         // Create old-style migration table with TEXT applied_at
-        db.execute(Statement::from_string(
+        let create_stmt = Statement::from_string(
             db.get_database_backend(),
             r#"
             CREATE TABLE seaql_migrations (
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at varchar NOT NULL
             )
-            "#
-            .to_string(),
-        ))
-        .await
-        .unwrap();
+            "#.to_string(),
+        );
+        db.execute(&create_stmt).await.unwrap();
 
         // Insert some old-style migration records
-        db.execute(Statement::from_string(
+        let insert_stmt = Statement::from_string(
             db.get_database_backend(),
-            "INSERT INTO seaql_migrations (version, applied_at) VALUES ('m001', '2024-01-01 00:00:00')".to_string()
-        )).await.unwrap();
+            "INSERT INTO seaql_migrations (version, applied_at) VALUES ('m001', '2024-01-01 00:00:00')".to_string(),
+        );
+        db.execute(&insert_stmt).await.unwrap();
 
         drop(db);
 
@@ -316,15 +311,11 @@ mod tests {
         let db = init_db(&url).await.expect("Migration should succeed");
 
         // Verify the schema was migrated to INTEGER
-        let result = db
-            .query_one(Statement::from_string(
-                db.get_database_backend(),
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
-                    .to_string(),
-            ))
-            .await
-            .unwrap()
-            .unwrap();
+        let check_stmt = Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+        );
+        let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
         let schema: String = result.try_get("", "sql").unwrap();
         assert!(
@@ -333,13 +324,11 @@ mod tests {
         );
 
         // Verify data was migrated
-        let result = db
-            .query_one(Statement::from_string(
-                db.get_database_backend(),
-                "SELECT version, applied_at FROM seaql_migrations WHERE version='m001'".to_string(),
-            ))
-            .await
-            .unwrap();
+        let query_stmt = Statement::from_string(
+            db.get_database_backend(),
+            "SELECT version, applied_at FROM seaql_migrations WHERE version='m001'".to_string(),
+        );
+        let result = db.query_one(&query_stmt).await.unwrap();
 
         assert!(result.is_some(), "Migration record should still exist");
     }
@@ -366,33 +355,27 @@ mod tests {
         let db = Database::connect(&url).await.unwrap();
 
         // Create new-style migration table with INTEGER applied_at
-        db.execute(Statement::from_string(
+        let create_stmt = Statement::from_string(
             db.get_database_backend(),
             r#"
             CREATE TABLE seaql_migrations (
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at integer NOT NULL
             )
-            "#
-            .to_string(),
-        ))
-        .await
-        .unwrap();
+            "#.to_string(),
+        );
+        db.execute(&create_stmt).await.unwrap();
 
         // Should not modify already-correct schema
         let result = migrate_seaql_migrations_schema(&db).await;
         assert!(result.is_ok(), "Should handle v0.2.0 schema gracefully");
 
         // Verify schema unchanged
-        let result = db
-            .query_one(Statement::from_string(
-                db.get_database_backend(),
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
-                    .to_string(),
-            ))
-            .await
-            .unwrap()
-            .unwrap();
+        let check_stmt = Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+        );
+        let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
         let schema: String = result.try_get("", "sql").unwrap();
         assert!(
@@ -410,33 +393,27 @@ mod tests {
         let db = Database::connect(&url).await.unwrap();
 
         // Create table with 'text' instead of 'varchar'
-        db.execute(Statement::from_string(
+        let create_stmt = Statement::from_string(
             db.get_database_backend(),
             r#"
             CREATE TABLE seaql_migrations (
                 version varchar NOT NULL PRIMARY KEY,
                 applied_at text NOT NULL
             )
-            "#
-            .to_string(),
-        ))
-        .await
-        .unwrap();
+            "#.to_string(),
+        );
+        db.execute(&create_stmt).await.unwrap();
 
         // Should detect and migrate TEXT variant
         let result = migrate_seaql_migrations_schema(&db).await;
         assert!(result.is_ok(), "Should migrate TEXT variant");
 
         // Verify schema was migrated
-        let result = db
-            .query_one(Statement::from_string(
-                db.get_database_backend(),
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'"
-                    .to_string(),
-            ))
-            .await
-            .unwrap()
-            .unwrap();
+        let check_stmt = Statement::from_string(
+            db.get_database_backend(),
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='seaql_migrations'".to_string(),
+        );
+        let result = db.query_one(&check_stmt).await.unwrap().unwrap();
 
         let schema: String = result.try_get("", "sql").unwrap();
         assert!(
