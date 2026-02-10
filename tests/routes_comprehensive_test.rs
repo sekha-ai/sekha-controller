@@ -311,7 +311,12 @@ async fn test_rebuild_embeddings() {
 
 // ==================== ORCHESTRATION ENDPOINTS ====================
 
+// NOTE: These tests require get_db() which cannot be easily mocked.
+// They need real database integration tests or refactoring to avoid get_db().
+// Use --ignored flag to run them with a test database.
+
 #[tokio::test]
+#[ignore]
 async fn test_assemble_context() {
     let state = create_test_state().await;
     let app = routes::create_router(state);
@@ -335,47 +340,13 @@ async fn test_assemble_context() {
         .await
         .unwrap();
 
-    // assemble_context uses get_db() which can't be mocked easily
-    // Allow either success or error due to mock limitations
-    assert!(
-        response.status() == StatusCode::OK
-            || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-        "Expected OK or INTERNAL_SERVER_ERROR, got {:?}",
-        response.status()
-    );
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_prune_dry_run() {
-    // Create a mock with get_db expectation for pruning
-    let config = Arc::new(RwLock::new(Config::default()));
-    let mut mock_repo = MockConversationRepository::new();
-
-    // Pruning needs access to database for queries
-    // For now, we'll skip get_db mock and just expect the endpoint to work
-    // In production, pruning would use other repository methods
-
-    let mock_repo = Arc::new(mock_repo);
-
-    let config_ref = config.read().await;
-    let bridge = BridgeClient::new(&*config_ref).expect("Failed to create BridgeClient");
-    let embedding_service = Arc::new(EmbeddingService::new(
-        bridge,
-        "http://localhost:8000".to_string(),
-    ));
-    let chroma_client = Arc::new(ChromaClient::new("http://localhost:8000".to_string()));
-    let llm_bridge = Arc::new(LlmBridgeClient::new(&*config_ref).unwrap());
-    drop(config_ref);
-
-    let state = routes::AppState {
-        config,
-        repo: mock_repo.clone(),
-        orchestrator: Arc::new(MemoryOrchestrator::new(mock_repo, llm_bridge.clone())),
-        embedding_service,
-        chroma_client,
-        llm_client: llm_bridge,
-    };
-
+    let state = create_test_state().await;
     let app = routes::create_router(state);
 
     let payload = json!({
@@ -394,13 +365,7 @@ async fn test_prune_dry_run() {
         .await
         .unwrap();
 
-    // Pruning uses get_db() which can't be mocked, so allow 500 or 200
-    assert!(
-        response.status() == StatusCode::OK
-            || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-        "Expected OK or INTERNAL_SERVER_ERROR, got {:?}",
-        response.status()
-    );
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 // ==================== ERROR CASES ====================
