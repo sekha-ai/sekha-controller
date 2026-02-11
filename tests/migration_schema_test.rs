@@ -72,5 +72,44 @@ async fn test_migration_schema() {
         panic!("❌ Missing FTS insert trigger");
     }
 
+    // Verify seaql_migrations table has correct schema
+    if !schema.contains("seaql_migrations") {
+        panic!("❌ No seaql_migrations table found in schema");
+    }
+
+    // Verify seaql_migrations.applied_at is INTEGER (not TEXT from v0.1.x)
+    // The schema should look like: applied_at INTEGER NOT NULL
+    let mut found_seaql_migrations_block = false;
+    let mut found_applied_at_integer = false;
+    
+    for line in &lines {
+        let trimmed = line.trim();
+        
+        // Check if we're in seaql_migrations table definition
+        if trimmed.contains("CREATE TABLE") && trimmed.contains("seaql_migrations") {
+            found_seaql_migrations_block = true;
+        }
+        
+        // If in the block, check for applied_at with INTEGER
+        if found_seaql_migrations_block {
+            if trimmed.contains("applied_at") && trimmed.contains("INTEGER") {
+                found_applied_at_integer = true;
+                eprintln!("✅ Found correct seaql_migrations.applied_at type: {}", trimmed);
+                break;
+            }
+            // Exit block when we hit the closing parenthesis
+            if trimmed == ");" {
+                found_seaql_migrations_block = false;
+            }
+        }
+    }
+
+    if !found_applied_at_integer {
+        panic!(
+            "❌ seaql_migrations.applied_at is not INTEGER type!\n\nThis means the migration fix didn't work.\nExpected: applied_at INTEGER NOT NULL\n\n{}",
+            schema
+        );
+    }
+
     eprintln!("✅ All schema validations passed!");
 }
