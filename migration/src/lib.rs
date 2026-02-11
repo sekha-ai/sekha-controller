@@ -1,6 +1,5 @@
 pub use sea_orm_migration::prelude::*;
 
-mod m20241210_000000_fix_seaql_migrations;
 mod m20241211_000001_create_conversations;
 mod m20241211_000002_create_messages;
 mod m20241211_000003_create_semantic_tags;
@@ -15,7 +14,6 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
-            Box::new(m20241210_000000_fix_seaql_migrations::Migration),
             Box::new(m20241211_000001_create_conversations::Migration),
             Box::new(m20241211_000002_create_messages::Migration),
             Box::new(m20241211_000003_create_semantic_tags::Migration),
