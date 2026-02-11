@@ -17,7 +17,9 @@ jobs:
   publish:
     name: Build and Publish Docker Image
     runs-on: ubuntu-latest
-    permissions: write-all  # Required for initial package creation
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - name: Checkout code
