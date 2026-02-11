@@ -90,7 +90,7 @@ impl LlmBridgeClient {
             .await?;
 
         info!(
-            "Embedding generated via {}/{} - ${:.4}",
+            "Routed to provider={}, model={}, cost=${:.4}",
             routing.provider_id, routing.model_id, routing.estimated_cost
         );
 
@@ -141,7 +141,7 @@ impl LlmBridgeClient {
             .bridge
             .chat_completion_routed(
                 chat_messages,
-                "chat_small", // Use small model for summaries
+                "chat_smart", // Changed from chat_small - use smart model for summaries
                 preferred_model.map(|s| s.to_string()),
                 Some(0.7),
                 max_cost,
@@ -204,7 +204,7 @@ impl LlmBridgeClient {
             .bridge
             .chat_completion_routed(
                 chat_messages,
-                "chat_small",
+                "chat_smart", // Changed from chat_small
                 preferred_model.map(|s| s.to_string()),
                 Some(0.3), // Low temperature for consistent scoring
                 max_cost,
