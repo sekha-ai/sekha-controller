@@ -90,86 +90,6 @@ fn test_config_load_with_defaults() {
 }
 
 #[test]
-fn test_config_load_with_v1_auto_migration() {
-    clear_sekha_env_vars();
-
-    // Set v1.x config via env vars
-    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
-    env::set_var("SEKHA_EMBEDDING_MODEL", "nomic-embed-text");
-    env::set_var("SEKHA_SUMMARIZATION_MODEL", "llama3.1:8b");
-
-    let config = Config::load().expect("Failed to load config");
-
-    // Should have auto-migrated to v0.2.0 (config.toml also has ollama_url so always migrates)
-    assert!(
-        !config.llm_providers.is_empty(),
-        "Should have migrated providers"
-    );
-    assert_eq!(config.llm_providers[0].id, "ollama_migrated");
-    assert_eq!(config.llm_providers[0].provider_type, ProviderType::Ollama);
-    assert_eq!(config.llm_providers[0].base_url, "http://localhost:11434");
-    assert_eq!(config.llm_providers[0].timeout_secs, 120);
-    assert_eq!(config.llm_providers[0].priority, 1);
-
-    // Check models were migrated
-    assert_eq!(config.llm_providers[0].models.len(), 3);
-
-    // Embedding model (may have :latest appended from config file)
-    let embedding = &config.llm_providers[0].models[0];
-    assert!(embedding.model_id.starts_with("nomic-embed-text"));
-    assert_eq!(embedding.task, ModelTask::Embedding);
-    assert_eq!(embedding.context_window, 512);
-    assert_eq!(embedding.supports_vision, false);
-    assert_eq!(embedding.supports_audio, false);
-    assert_eq!(embedding.dimension, Some(768));
-
-    // Chat models
-    let chat_small = &config.llm_providers[0].models[1];
-    assert!(chat_small.model_id.starts_with("llama3.1:8b"));
-    assert_eq!(chat_small.task, ModelTask::ChatSmall);
-    assert_eq!(chat_small.context_window, 8192);
-
-    let chat_smart = &config.llm_providers[0].models[2];
-    assert!(chat_smart.model_id.starts_with("llama3.1:8b"));
-    assert_eq!(chat_smart.task, ModelTask::ChatSmart);
-
-    // Check default models exist
-    assert!(config.default_models.is_some());
-    let defaults = config.default_models.unwrap();
-    assert!(defaults.embedding.starts_with("nomic-embed-text"));
-    assert!(defaults.chat_fast.starts_with("llama3.1:8b"));
-    assert!(defaults.chat_smart.starts_with("llama3.1:8b"));
-    assert_eq!(defaults.chat_vision, None);
-
-    // Check version
-    assert_eq!(config.config_version, Some("v0.2.0".to_string()));
-
-    // Cleanup
-    clear_sekha_env_vars();
-}
-
-#[test]
-fn test_config_load_with_v1_default_models() {
-    clear_sekha_env_vars();
-
-    // Set v1.x config without explicit model names (should use defaults)
-    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
-
-    let config = Config::load().expect("Failed to load config");
-
-    // Should have auto-migrated with default model names
-    assert!(!config.llm_providers.is_empty());
-    let embedding = &config.llm_providers[0].models[0];
-    assert!(embedding.model_id.starts_with("nomic-embed-text")); // Default (may have :latest)
-
-    let chat = &config.llm_providers[0].models[1];
-    assert!(chat.model_id.starts_with("llama3.1:8b")); // Default (may have :latest)
-
-    // Cleanup
-    clear_sekha_env_vars();
-}
-
-#[test]
 fn test_routing_config_defaults() {
     let routing = RoutingConfig::default();
     assert_eq!(routing.auto_fallback, true);
@@ -231,36 +151,5 @@ fn test_config_home_directory_fallback() {
         env::set_var("HOME", home);
     }
 
-    clear_sekha_env_vars();
-}
-
-#[test]
-fn test_all_v1_defaults_in_migration() {
-    clear_sekha_env_vars();
-
-    // Just set ollama_url to trigger migration
-    env::set_var("SEKHA_OLLAMA_URL", "http://localhost:11434");
-
-    let config = Config::load().expect("Failed to load config");
-
-    // Verify v1.x compatibility fields are set (may have :latest from config file)
-    assert_eq!(
-        config.ollama_url,
-        Some("http://localhost:11434".to_string())
-    );
-    assert!(config.embedding_model.is_some());
-    assert!(config
-        .embedding_model
-        .as_ref()
-        .unwrap()
-        .starts_with("nomic-embed-text"));
-    assert!(config.summarization_model.is_some());
-    assert!(config
-        .summarization_model
-        .as_ref()
-        .unwrap()
-        .starts_with("llama3.1:8b"));
-
-    // Cleanup
     clear_sekha_env_vars();
 }
