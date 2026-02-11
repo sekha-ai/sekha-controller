@@ -81,20 +81,23 @@ async fn test_migration_schema() {
     // The schema should look like: applied_at INTEGER NOT NULL
     let mut found_seaql_migrations_block = false;
     let mut found_applied_at_integer = false;
-    
+
     for line in &lines {
         let trimmed = line.trim();
-        
+
         // Check if we're in seaql_migrations table definition
         if trimmed.contains("CREATE TABLE") && trimmed.contains("seaql_migrations") {
             found_seaql_migrations_block = true;
         }
-        
+
         // If in the block, check for applied_at with INTEGER
         if found_seaql_migrations_block {
             if trimmed.contains("applied_at") && trimmed.contains("INTEGER") {
                 found_applied_at_integer = true;
-                eprintln!("✅ Found correct seaql_migrations.applied_at type: {}", trimmed);
+                eprintln!(
+                    "✅ Found correct seaql_migrations.applied_at type: {}",
+                    trimmed
+                );
                 break;
             }
             // Exit block when we hit the closing parenthesis
