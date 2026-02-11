@@ -78,21 +78,23 @@ async fn test_migration_schema() {
     }
 
     // Verify seaql_migrations.applied_at is INTEGER (not TEXT from v0.1.x)
-    // The schema should look like: applied_at INTEGER NOT NULL
+    // The schema should look like: applied_at INTEGER NOT NULL or applied_at integer NOT NULL
+    // SQLite may output in lowercase
     let mut found_seaql_migrations_block = false;
     let mut found_applied_at_integer = false;
 
     for line in &lines {
         let trimmed = line.trim();
+        let lower_trimmed = trimmed.to_lowercase();
 
         // Check if we're in seaql_migrations table definition
         if trimmed.contains("CREATE TABLE") && trimmed.contains("seaql_migrations") {
             found_seaql_migrations_block = true;
         }
 
-        // If in the block, check for applied_at with INTEGER
+        // If in the block, check for applied_at with INTEGER (case-insensitive)
         if found_seaql_migrations_block {
-            if trimmed.contains("applied_at") && trimmed.contains("INTEGER") {
+            if lower_trimmed.contains("applied_at") && lower_trimmed.contains("integer") {
                 found_applied_at_integer = true;
                 eprintln!(
                     "✅ Found correct seaql_migrations.applied_at type: {}",
