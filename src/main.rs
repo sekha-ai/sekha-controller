@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
 
     // Initialize Chroma client
     let chroma_url =
-        std::env::var("CHROMA_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+        std::env::var("CHROMA_URL").unwrap_or_else(|_| config.chroma_url.clone());
     let chroma_client = Arc::new(ChromaClient::new(chroma_url.clone()));
     tracing::info!("✅ Chroma client initialized: {}", chroma_url);
 
