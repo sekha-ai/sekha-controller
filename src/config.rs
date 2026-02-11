@@ -253,7 +253,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self, config::ConfigError> {
-        let mut settings = config::Config::builder()
+        let settings = config::Config::builder()
             .set_default("server_host", "0.0.0.0")?
             .set_default("server_port", 8080)?
             .set_default("max_connections", 10)?
@@ -287,75 +287,7 @@ impl Config {
             )
             .build()?;
 
-        let mut config: Config = settings.try_deserialize()?;
-
-        // ==== AUTO-MIGRATION LOGIC ====
-        // If no v0.2.0 providers configured but v0.1.x config exists, auto-migrate
-        if config.llm_providers.is_empty() {
-            if let Some(ollama_url) = &config.ollama_url {
-                tracing::warn!(
-                    "⚠️  Detected v0.1.x configuration. Auto-migrating to v0.2.0 format..."
-                );
-
-                let embedding_model = config
-                    .embedding_model
-                    .clone()
-                    .unwrap_or_else(|| "nomic-embed-text".to_string());
-                let summarization_model = config
-                    .summarization_model
-                    .clone()
-                    .unwrap_or_else(|| "llama3.1:8b".to_string());
-
-                // Create default Ollama provider from v0.1.x config
-                let migrated_provider = LlmProviderConfig {
-                    id: "ollama_migrated".to_string(),
-                    provider_type: ProviderType::Ollama,
-                    base_url: ollama_url.clone(),
-                    api_key: None,
-                    timeout_secs: 120,
-                    priority: 1,
-                    models: vec![
-                        ModelCapability {
-                            model_id: embedding_model.clone(),
-                            task: ModelTask::Embedding,
-                            context_window: 512,
-                            supports_vision: false,
-                            supports_audio: false,
-                            dimension: Some(768), // Assume nomic-embed-text default
-                        },
-                        ModelCapability {
-                            model_id: summarization_model.clone(),
-                            task: ModelTask::ChatSmall,
-                            context_window: 8192,
-                            supports_vision: false,
-                            supports_audio: false,
-                            dimension: None,
-                        },
-                        ModelCapability {
-                            model_id: summarization_model.clone(),
-                            task: ModelTask::ChatSmart,
-                            context_window: 8192,
-                            supports_vision: false,
-                            supports_audio: false,
-                            dimension: None,
-                        },
-                    ],
-                };
-
-                config.llm_providers.push(migrated_provider);
-                config.default_models = Some(DefaultModels {
-                    embedding: embedding_model,
-                    chat_fast: summarization_model.clone(),
-                    chat_smart: summarization_model,
-                    chat_vision: None,
-                });
-                config.config_version = Some("v0.2.0".to_string());
-
-                tracing::info!(
-                    "✅ Auto-migration complete. Please update config file to v0.2.0 format."
-                );
-            }
-        }
+        let config: Config = settings.try_deserialize()?;
 
         // Validate the configuration
         config.validate_providers()?;
