@@ -23,6 +23,11 @@ RUN cargo build --release --bin sekha-controller
 # Stage 2: Runtime
 FROM debian:bookworm-slim
 
+# OCI labels for GitHub Container Registry
+LABEL org.opencontainers.image.source=https://github.com/sekha-ai/sekha-controller
+LABEL org.opencontainers.image.description="Universal AI Memory Controller - Persistent, Sovereign, Open"
+LABEL org.opencontainers.image.licenses=AGPL-3.0
+
 WORKDIR /app
 
 # Install runtime dependencies
