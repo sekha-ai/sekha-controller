@@ -17,7 +17,6 @@ server.log
 
 # Add to .gitignore
 docker-compose*.yml
-Dockerfile
 tarpaulin-report.html
 lcov.info
 .coverage
