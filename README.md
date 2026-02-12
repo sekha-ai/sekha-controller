@@ -351,7 +351,7 @@ sekha-controller/
 ### Community & Support
 
 - **Documentation**: [docs.sekha.dev](https://docs.sekha.dev) - Complete guides and API reference
-- **Discord**: [discord.gg/sekha](https://discord.gg/sekha) - Real-time chat and support
+- **Discord**: [discord.gg/sekha](https://discord.gg/gZb7U9deKH) - Real-time chat and support
 - **Discussions**: [GitHub Discussions](https://github.com/sekha-ai/sekha-controller/discussions) - Q&A and ideas
 - **Issues**: [GitHub Issues](https://github.com/sekha-ai/sekha-controller/issues) - Bug reports and features
 - **Twitter/X**: [@sekha_ai](https://twitter.com/sekha_ai) - Updates and announcements
@@ -394,8 +394,8 @@ Sekha Controller is built on exceptional open source projects:
 
 <div align="center">
 
-**[Website](https://sekha.dev)** • **[Documentation](https://docs.sekha.dev)** • **[Discord](https://discord.gg/sekha)** • **[Twitter](https://twitter.com/sekha_ai)**
+**[Website](https://sekha.dev)** • **[Documentation](https://docs.sekha.dev)** • **[Discord](https://discord.gg/gZb7U9deKH)** • **[Twitter](https://twitter.com/sekha_ai)**
 
-*Persistent memory for AI systems • 2025-2026*
+*Persistent memory for AI systems • 2026*
 
 </div>
