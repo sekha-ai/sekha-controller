@@ -147,7 +147,7 @@ features = ["test-utils"]
 sea-query = { git = "https://github.com/sekha-ai/sea-query", branch = "sekha-controller-compat" }
 
 [dev-dependencies]
-tempfile = "3.23.0"
+tempfile = "3.25.0"
 toml = "0.9.11"
 tower-test = "0.4"
 wiremock = "0.6.5"
