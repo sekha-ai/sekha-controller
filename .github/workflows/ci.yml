@@ -109,7 +109,7 @@ jobs:
           cargo tarpaulin --out Xml --output-dir ./coverage --all-features
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: sekha-ai/sekha-controller
@@ -183,7 +183,7 @@ jobs:
           poetry run pytest tests/ -v --cov=llm_bridge --cov-report=xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           flags: llm-bridge-tests
